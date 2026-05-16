@@ -1,63 +1,67 @@
 import React, { useState, useEffect, ChangeEvent } from 'react';
 import {
-  Typography,
-  Container,
-  Box,
-  Button,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  MenuItem,
-  Select,
-  FormControl,
-  InputLabel,
-  Alert,
-  IconButton,
-  SelectChangeEvent
+  Typography, Container, Box, Button, Table, TableBody, TableCell,
+  TableContainer, TableHead, TableRow, Paper, Dialog, DialogTitle,
+  DialogContent, DialogActions, TextField, MenuItem, Select, FormControl,
+  InputLabel, Alert, IconButton, Chip, Stack, FormControlLabel,
+  RadioGroup, Radio, Tooltip, SelectChangeEvent
 } from '@mui/material';
-import { Delete as DeleteIcon, Edit as EditIcon } from '@mui/icons-material';
+import {
+  Delete as DeleteIcon,
+  Edit as EditIcon,
+  Add as AddIcon,
+  Key as KeyIcon,
+  Email as EmailIcon
+} from '@mui/icons-material';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '../services/firebaseConfig';
-import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import {
+  collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, where, Query, DocumentData
+} from 'firebase/firestore';
+import { createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 
-// ✅ Type pour les rôles possibles
 type UserRole = 'admin' | 'ouvreur' | 'moniteur' | 'client';
 
-// ✅ Interface pour un utilisateur
 interface User {
   id: string;
+  uid: string;
   email: string;
   role: UserRole;
   first_name?: string;
   last_name?: string;
 }
 
-const roles = [
-  { value: 'admin' as UserRole, label: 'Administrateur' },
-  { value: 'ouvreur' as UserRole, label: 'Ouvreur' },
-  { value: 'moniteur' as UserRole, label: 'Moniteur' },
-  { value: 'client' as UserRole, label: 'Client' },
+type FormEvent = ChangeEvent<HTMLInputElement | HTMLTextAreaElement> | SelectChangeEvent;
+
+const roles: { value: UserRole; label: string }[] = [
+  { value: 'admin', label: 'Administrateur' },
+  { value: 'ouvreur', label: 'Ouvreur' },
+  { value: 'moniteur', label: 'Moniteur' },
+  { value: 'client', label: 'Client' },
 ];
 
-// ✅ Type unifié pour gérer TextField, TextArea et Select
-type FormEvent = ChangeEvent<HTMLInputElement | HTMLTextAreaElement> | SelectChangeEvent<string>;
+function createUserFromDoc(doc: { id: string; data: () => any }): User {
+  const data = doc.data();
+  return {
+    id: doc.id,
+    uid: data.uid || doc.id,
+    email: data.email || '',
+    role: data.role || 'client',
+    first_name: data.first_name,
+    last_name: data.last_name,
+  };
+}
 
-export default function AdminUsers() {
+const AdminUsers: React.FC = () => {
   const [user, loadingAuth] = useAuthState(auth);
   const [users, setUsers] = useState<User[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [openDialog, setOpenDialog] = useState(false);
+  const [openResetDialog, setOpenResetDialog] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [filterRole, setFilterRole] = useState<UserRole | 'all'>('all');
+  const [resetEmail, setResetEmail] = useState<string>('');
   const [formData, setFormData] = useState<{
     email: string;
     role: UserRole;
@@ -70,54 +74,46 @@ export default function AdminUsers() {
     last_name: '',
   });
 
-  useEffect(() => {
-    if (!user) return;
-    fetchUsers();
-  }, [user]);
-
   const fetchUsers = async () => {
     try {
-      const querySnapshot = await getDocs(collection(db, 'users'));
-      const usersData = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as User[];
+      const usersCollection = collection(db, 'users');
+      let q: Query<DocumentData> = usersCollection;
+      if (filterRole !== 'all') {
+        q = query(usersCollection, where('role', '==', filterRole));
+      }
+      const querySnapshot = await getDocs(q);
+      const usersData: User[] = querySnapshot.docs.map(createUserFromDoc);
       setUsers(usersData);
     } catch (err: any) {
-      setError(`Erreur lors du chargement des utilisateurs : ${err.message}`);
+      setError(`Erreur : ${err.message}`);
       console.error(err);
     }
   };
 
+  useEffect(() => {
+    if (user) fetchUsers();
+  }, [user, filterRole]);
+
   const handleOpenDialog = (userToEdit: User | null = null) => {
-    if (userToEdit) {
-      setCurrentUser(userToEdit);
-      setFormData({
-        email: userToEdit.email || '',
-        role: userToEdit.role,
-        first_name: userToEdit.first_name || '',
-        last_name: userToEdit.last_name || '',
-      });
-    } else {
-      setCurrentUser(null);
-      setFormData({
-        email: '',
-        role: 'client',
-        first_name: '',
-        last_name: '',
-      });
-    }
+    setCurrentUser(userToEdit);
+    setFormData({
+      email: userToEdit?.email || '',
+      role: userToEdit?.role || 'client',
+      first_name: userToEdit?.first_name || '',
+      last_name: userToEdit?.last_name || '',
+    });
     setOpenDialog(true);
   };
 
-  // ✅ Gestion unifiée des événements pour TextField, TextArea et Select
+  const handleOpenResetDialog = (user: User) => {
+    setCurrentUser(user);
+    setResetEmail(user.email);
+    setOpenResetDialog(true);
+  };
+
   const handleFormChange = (e: FormEvent) => {
-    const name = e.target.name;
-    const value = e.target.value;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value,
-    }));
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -132,14 +128,21 @@ export default function AdminUsers() {
         });
         setSuccess('Utilisateur modifié avec succès !');
       } else {
+        const userCredential = await createUserWithEmailAndPassword(
+          auth,
+          formData.email,
+          Math.random().toString(36).slice(-10)
+        );
         await addDoc(collection(db, 'users'), {
+          uid: userCredential.user.uid,
           email: formData.email,
           role: formData.role,
           first_name: formData.first_name,
           last_name: formData.last_name,
           created_at: new Date().toISOString(),
         });
-        setSuccess('Utilisateur ajouté avec succès !');
+        await sendPasswordResetEmail(auth, formData.email);
+        setSuccess(`Utilisateur ${formData.role} créé ! Email envoyé à ${formData.email}.`);
       }
       setOpenDialog(false);
       fetchUsers();
@@ -149,16 +152,35 @@ export default function AdminUsers() {
     }
   };
 
-  const handleDeleteUser = async (userId: string) => {
-    if (window.confirm('Êtes-vous sûr de vouloir supprimer cet utilisateur ?')) {
-      try {
-        await deleteDoc(doc(db, 'users', userId));
-        setSuccess('Utilisateur supprimé avec succès !');
-        fetchUsers();
-      } catch (err: any) {
-        setError(`Erreur lors de la suppression : ${err.message}`);
-        console.error(err);
-      }
+  const handleResetPassword = async () => {
+    if (!resetEmail) {
+      setError('Email invalide.');
+      return;
+    }
+    try {
+      await sendPasswordResetEmail(auth, resetEmail);
+      setSuccess(`Email envoyé à ${resetEmail} !`);
+      setOpenResetDialog(false);
+    } catch (err: any) {
+      setError(`Erreur : ${err.message}`);
+      console.error(err);
+    }
+  };
+
+  // ✅ Solution client-side : suppression du document Firestore uniquement
+  const handleDeleteUser = (userToDelete: User) => {
+    if (window.confirm(`Supprimer ${userToDelete.email} (${userToDelete.role}) de Firestore ?`)) {
+      deleteDoc(doc(db, 'users', userToDelete.id))
+        .then(() => {
+          setSuccess(
+            `Utilisateur ${userToDelete.role} supprimé de Firestore. ⚠️ Pour supprimer son compte Auth, utilisez la console Firebase ou une Cloud Function.`
+          );
+          fetchUsers();
+        })
+        .catch((err: any) => {
+          setError(`Erreur : ${err.message}`);
+          console.error(err);
+        });
     }
   };
 
@@ -173,20 +195,47 @@ export default function AdminUsers() {
   return (
     <Container maxWidth="lg">
       <Box sx={{ mt: 4 }}>
-        <Typography variant="h4" sx={{ mb: 2 }}>
-          Gestion des Utilisateurs
-        </Typography>
+        <Typography variant="h4" sx={{ mb: 2 }}>Gestion des Utilisateurs</Typography>
 
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
         {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
 
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+        <Stack direction="row" spacing={2} sx={{ mb: 2, alignItems: 'center' }}>
+          <FormControl>
+            <RadioGroup
+              row
+              value={filterRole}
+              onChange={(e, value) => setFilterRole(value as UserRole | 'all')}
+            >
+              <FormControlLabel value="all" control={<Radio />} label="Tous" />
+              {roles.map((role) => (
+                <FormControlLabel
+                  key={role.value}
+                  value={role.value}
+                  control={<Radio />}
+                  label={role.label}
+                />
+              ))}
+            </RadioGroup>
+          </FormControl>
           <Button
             variant="contained"
             color="primary"
+            startIcon={<AddIcon />}
             onClick={() => handleOpenDialog()}
           >
             Ajouter un Utilisateur
+          </Button>
+        </Stack>
+
+        <Box sx={{ mb: 2 }}>
+          <Button
+            variant="outlined"
+            color="secondary"
+            startIcon={<AddIcon />}
+            onClick={() => handleOpenDialog(null)}
+          >
+            Ajouter un Client
           </Button>
         </Box>
 
@@ -194,7 +243,7 @@ export default function AdminUsers() {
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell>ID</TableCell>
+                <TableCell>UID</TableCell>
                 <TableCell>Email</TableCell>
                 <TableCell>Rôle</TableCell>
                 <TableCell>Prénom</TableCell>
@@ -210,28 +259,50 @@ export default function AdminUsers() {
                   </TableCell>
                 </TableRow>
               ) : (
-                users.map((userItem) => (
-                  <TableRow key={userItem.id}>
-                    <TableCell>{userItem.id}</TableCell>
-                    <TableCell>{userItem.email}</TableCell>
-                    <TableCell>{roles.find(r => r.value === userItem.role)?.label || userItem.role}</TableCell>
-                    <TableCell>{userItem.first_name || 'Non renseigné'}</TableCell>
-                    <TableCell>{userItem.last_name || 'Non renseigné'}</TableCell>
+                users.map((user: User) => (
+                  <TableRow key={user.id}>
+                    <TableCell>{user.uid}</TableCell>
+                    <TableCell>{user.email}</TableCell>
                     <TableCell>
-                      <IconButton
-                        aria-label="Modifier"
-                        onClick={() => handleOpenDialog(userItem)}
-                        color="primary"
-                      >
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton
-                        aria-label="Supprimer"
-                        onClick={() => handleDeleteUser(userItem.id)}
-                        color="error"
-                      >
-                        <DeleteIcon />
-                      </IconButton>
+                      <Chip
+                        label={roles.find((r) => r.value === user.role)?.label || user.role}
+                        color={
+                          user.role === 'admin' ? 'error' :
+                          user.role === 'moniteur' ? 'primary' :
+                          user.role === 'ouvreur' ? 'secondary' : 'default'
+                        }
+                      />
+                    </TableCell>
+                    <TableCell>{user.first_name || 'Non renseigné'}</TableCell>
+                    <TableCell>{user.last_name || 'Non renseigné'}</TableCell>
+                    <TableCell>
+                      <Tooltip title="Modifier">
+                        <IconButton
+                          aria-label="Modifier"
+                          onClick={() => handleOpenDialog(user)}
+                          color="primary"
+                        >
+                          <EditIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Réinitialiser le mot de passe">
+                        <IconButton
+                          aria-label="Réinitialiser"
+                          onClick={() => handleOpenResetDialog(user)}
+                          color="warning"
+                        >
+                          <KeyIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Supprimer">
+                        <IconButton
+                          aria-label="Supprimer"
+                          onClick={() => handleDeleteUser(user)}
+                          color="error"
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </Tooltip>
                     </TableCell>
                   </TableRow>
                 ))
@@ -242,7 +313,7 @@ export default function AdminUsers() {
 
         <Dialog open={openDialog} onClose={() => setOpenDialog(false)}>
           <DialogTitle>
-            {currentUser ? 'Modifier l\'utilisateur' : 'Ajouter un utilisateur'}
+            {currentUser ? `Modifier ${currentUser.email}` : 'Ajouter un utilisateur'}
           </DialogTitle>
           <DialogContent>
             <TextField
@@ -294,7 +365,29 @@ export default function AdminUsers() {
             </Button>
           </DialogActions>
         </Dialog>
+
+        <Dialog open={openResetDialog} onClose={() => setOpenResetDialog(false)}>
+          <DialogTitle>Réinitialiser le mot de passe</DialogTitle>
+          <DialogContent>
+            <Alert severity="info" sx={{ mb: 2 }}>
+              Un email sera envoyé à <strong>{resetEmail}</strong>.
+            </Alert>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setOpenResetDialog(false)}>Annuler</Button>
+            <Button
+              onClick={handleResetPassword}
+              variant="contained"
+              color="primary"
+              startIcon={<EmailIcon />}
+            >
+              Envoyer l'email
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Box>
     </Container>
   );
-}
+};
+
+export default AdminUsers;
