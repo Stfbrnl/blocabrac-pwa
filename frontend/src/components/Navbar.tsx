@@ -1,120 +1,120 @@
 import React, { useState, useEffect } from 'react';
-import { AppBar, Toolbar, Typography, Button, Box, Alert } from '@mui/material'; // ✅ Correction : Ajout de Alert à l'import
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '../services/firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
-import { useNavigate } from 'react-router-dom';
+import {
+  Button,
+  AppBar,
+  Typography,
+  Box,
+  Toolbar
+} from '@mui/material';
+import { Link } from 'react-router-dom';
 
-const logo = '/src/assets/logo-blocabrac.png';
+type UserRole = 'admin' | 'ouvreur' | 'moniteur' | 'client';
 
-export default function Navbar() {
-  const [user, loading] = useAuthState(auth);
-  const [userRole, setUserRole] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const navigate = useNavigate();
+const Navbar: React.FC = () => {
+  const [user, loadingAuth] = useAuthState(auth);
+  const [userRole, setUserRole] = useState<UserRole | null>(null);
+  const [loadingRole, setLoadingRole] = useState(true);
 
   useEffect(() => {
-  if (user) {
-    console.log("VOTRE UID :", user.uid); // ✅ Affiche votre UID dans la console
-  }
-}, [user]);
-
-  useEffect(() => {
-    const fetchUserRole = async () => {
-      if (!user) {
-        setUserRole(null);
-        return;
-      }
-
-      try {
-        const userDocRef = doc(db, 'users', user.uid);
-        const userDocSnap = await getDoc(userDocRef);
-
-        if (userDocSnap.exists()) {
-          const role = userDocSnap.data().role;
-          console.log('Rôle récupéré :', role);
-          setUserRole(role || null);
-        } else {
-          console.error('Aucun document utilisateur trouvé pour l\'UID:', user.uid);
-          setError('Votre compte n\'a pas de rôle défini. Contactez l\'administrateur.');
-          setUserRole(null);
+    if (user) {
+      const fetchUserRole = async () => {
+        try {
+          const userDoc = await getDoc(doc(db, 'users', user.uid));
+          if (userDoc.exists()) {
+            setUserRole(userDoc.data().role);
+          }
+        } catch (error) {
+          console.error("Erreur :", error);
+        } finally {
+          setLoadingRole(false);
         }
-      } catch (err: any) {
-        console.error('Erreur lors de la récupération du rôle:', err);
-        setError(`Erreur: ${err.message}`);
-        setUserRole(null);
-      }
-    };
-
-    fetchUserRole();
+      };
+      fetchUserRole();
+    } else {
+      setUserRole(null);
+      setLoadingRole(false);
+    }
   }, [user]);
 
-  const handleLogout = async () => {
-    await auth.signOut();
-    navigate('/login');
-  };
-
   const renderRoleButtons = () => {
-    if (!user) return null;
-
-    console.log('Rôle actuel dans renderRoleButtons:', userRole);
+    if (loadingAuth || loadingRole) {
+      return null;
+    }
 
     switch (userRole) {
       case 'admin':
         return (
           <>
-            <Button color="inherit" onClick={() => navigate('/admin')}>Admin</Button>
-            <Button color="inherit" onClick={() => navigate('/admin/users')}>Gérer les Utilisateurs</Button>
-            <Button color="inherit" onClick={() => navigate('/admin/home-content')}>Modifier Page Accueil</Button>
+            <Button color="inherit" component={Link} to="/admin">
+              ADMIN
+            </Button>
+            <Button color="inherit" component={Link} to="/admin/users">
+              GÉRER LES UTILISATEURS
+            </Button>
+            <Button color="inherit" component={Link} to="/admin/competitions/create">
+              CRÉER/GÉRER LES COMPÉTITIONS
+            </Button>
+            <Button color="inherit" component={Link} to="/admin/competitions/list">
+              GÉRER LES INSCRIPTIONS
+            </Button>
+            <Button color="inherit" component={Link} to="/admin/competitions/stats">
+              STATISTIQUES DES COMPÉTITIONS
+            </Button>
           </>
         );
       case 'ouvreur':
-        return <Button color="inherit" onClick={() => navigate('/ouvreur')}>Ouvreur</Button>;
+        return (
+          <Button color="inherit" component={Link} to="/ouvreur">
+            OUVREUR
+          </Button>
+        );
       case 'moniteur':
-        return <Button color="inherit" onClick={() => navigate('/moniteur')}>Moniteur</Button>;
+        return (
+          <Button color="inherit" component={Link} to="/moniteur">
+            MONITEUR
+          </Button>
+        );
       case 'client':
-        return <Button color="inherit" onClick={() => navigate('/client')}>Client</Button>;
+        return (
+          <Button color="inherit" component={Link} to="/client">
+            MON ESPACE
+          </Button>
+        );
       default:
-        console.warn('Rôle non reconnu:', userRole);
-        return <Button color="inherit" onClick={() => navigate('/')}>Accueil</Button>;
+        return null;
     }
   };
 
-  if (loading) {
-    return <AppBar position="static"><Toolbar>Chargement...</Toolbar></AppBar>;
-  }
-
   return (
-    <>
-      <AppBar position="static">
-        <Toolbar>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexGrow: 1 }}>
-            <img src={logo} alt="Logo BLOCABRAC" style={{ height: '40px' }} />
-            <Typography variant="h6" component="div">
-              BLOCABRAC
-            </Typography>
-          </Box>
-          <Box sx={{ display: 'flex', gap: 2 }}>
-            {renderRoleButtons()}
-            {user && (
-              <Button color="inherit" onClick={handleLogout}>
-                Déconnexion
+    <AppBar position="static">
+      <Toolbar>
+        <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+          BLOCABRAC
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          {!loadingAuth && user && renderRoleButtons()}
+          {!loadingAuth && !user && (
+            <>
+              <Button color="inherit" component={Link} to="/login">
+                CONNEXION
               </Button>
-            )}
-            {!user && (
-              <>
-                <Button color="inherit" onClick={() => navigate('/login')}>Connexion</Button>
-                <Button color="inherit" onClick={() => navigate('/register')}>Inscription</Button>
-              </>
-            )}
-          </Box>
-        </Toolbar>
-      </AppBar>
-      {error && (
-        <Alert severity="error" sx={{ position: 'fixed', top: 64, width: '100%', zIndex: 1000 }}>
-          {error}
-        </Alert>
-      )}
-    </>
+              <Button color="inherit" component={Link} to="/register">
+                INSCRIPTION
+              </Button>
+            </>
+          )}
+          {!loadingAuth && user && (
+            <Button color="inherit" onClick={() => auth.signOut()}>
+              DÉCONNEXION
+            </Button>
+          )}
+        </Box>
+      </Toolbar>
+    </AppBar>
   );
-}
+};
+
+export default Navbar;

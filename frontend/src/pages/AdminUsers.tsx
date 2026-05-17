@@ -1,391 +1,424 @@
-import React, { useState, useEffect, ChangeEvent } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  Typography, Container, Box, Button, Table, TableBody, TableCell,
-  TableContainer, TableHead, TableRow, Paper, Dialog, DialogTitle,
-  DialogContent, DialogActions, TextField, MenuItem, Select, FormControl,
-  InputLabel, Alert, IconButton, Chip, Stack, FormControlLabel,
-  RadioGroup, Radio, Tooltip, SelectChangeEvent
+  Typography, Paper, Container, Table, TableBody, TableCell,
+  TableContainer, TableHead, TableRow, Button, Dialog,
+  DialogTitle, DialogContent, DialogActions, TextField,
+  MenuItem, Select, FormControl, InputLabel, Box, IconButton,
+  Snackbar, Alert
 } from '@mui/material';
+import { Delete as DeleteIcon, Edit as EditIcon, Add as AddIcon } from '@mui/icons-material';
+import { db, auth } from '../services/firebaseConfig';
 import {
-  Delete as DeleteIcon,
-  Edit as EditIcon,
-  Add as AddIcon,
-  Key as KeyIcon,
-  Email as EmailIcon
-} from '@mui/icons-material';
-import { useAuthState } from 'react-firebase-hooks/auth';
-import { auth, db } from '../services/firebaseConfig';
-import {
-  collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, where, Query, DocumentData
+  collection, getDocs, doc, updateDoc, deleteDoc,
+  addDoc
 } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 
-type UserRole = 'admin' | 'ouvreur' | 'moniteur' | 'client';
-
+// ✅ Interface alignée sur votre structure Firestore
 interface User {
-  id: string;
-  uid: string;
+  uid: string; // ID du document Firestore
   email: string;
-  role: UserRole;
-  first_name?: string;
-  last_name?: string;
-}
-
-type FormEvent = ChangeEvent<HTMLInputElement | HTMLTextAreaElement> | SelectChangeEvent;
-
-const roles: { value: UserRole; label: string }[] = [
-  { value: 'admin', label: 'Administrateur' },
-  { value: 'ouvreur', label: 'Ouvreur' },
-  { value: 'moniteur', label: 'Moniteur' },
-  { value: 'client', label: 'Client' },
-];
-
-function createUserFromDoc(doc: { id: string; data: () => any }): User {
-  const data = doc.data();
-  return {
-    id: doc.id,
-    uid: data.uid || doc.id,
-    email: data.email || '',
-    role: data.role || 'client',
-    first_name: data.first_name,
-    last_name: data.last_name,
-  };
+  first_name: string;
+  last_name: string;
+  role: 'admin' | 'ouvreur' | 'moniteur' | 'client';
+  age?: number;
+  gender?: string;
+  level?: string;
+  created_at?: string;
 }
 
 const AdminUsers: React.FC = () => {
-  const [user, loadingAuth] = useAuthState(auth);
   const [users, setUsers] = useState<User[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-  const [openDialog, setOpenDialog] = useState(false);
-  const [openResetDialog, setOpenResetDialog] = useState(false);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [filterRole, setFilterRole] = useState<UserRole | 'all'>('all');
-  const [resetEmail, setResetEmail] = useState<string>('');
-  const [formData, setFormData] = useState<{
-    email: string;
-    role: UserRole;
-    first_name: string;
-    last_name: string;
-  }>({
+  const [loading, setLoading] = useState(true);
+  const [openEditDialog, setOpenEditDialog] = useState(false);
+  const [openCreateDialog, setOpenCreateDialog] = useState(false);
+  const [openSnackbar, setOpenSnackbar] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [editForm, setEditForm] = useState<Omit<User, 'uid' | 'created_at'>>({
     email: '',
-    role: 'client',
     first_name: '',
     last_name: '',
+    role: 'client',
+    age: undefined,
+    gender: undefined,
+    level: undefined
+  });
+  const [createForm, setCreateForm] = useState<Omit<User, 'uid' | 'created_at'>>({
+    email: '',
+    first_name: '',
+    last_name: '',
+    role: 'client',
+    age: undefined,
+    gender: undefined,
+    level: undefined
   });
 
-  const fetchUsers = async () => {
-    try {
-      const usersCollection = collection(db, 'users');
-      let q: Query<DocumentData> = usersCollection;
-      if (filterRole !== 'all') {
-        q = query(usersCollection, where('role', '==', filterRole));
-      }
-      const querySnapshot = await getDocs(q);
-      const usersData: User[] = querySnapshot.docs.map(createUserFromDoc);
-      setUsers(usersData);
-    } catch (err: any) {
-      setError(`Erreur : ${err.message}`);
-      console.error(err);
-    }
-  };
-
+  // ✅ Récupérer les utilisateurs depuis Firestore (collection 'users')
   useEffect(() => {
-    if (user) fetchUsers();
-  }, [user, filterRole]);
-
-  const handleOpenDialog = (userToEdit: User | null = null) => {
-    setCurrentUser(userToEdit);
-    setFormData({
-      email: userToEdit?.email || '',
-      role: userToEdit?.role || 'client',
-      first_name: userToEdit?.first_name || '',
-      last_name: userToEdit?.last_name || '',
-    });
-    setOpenDialog(true);
-  };
-
-  const handleOpenResetDialog = (user: User) => {
-    setCurrentUser(user);
-    setResetEmail(user.email);
-    setOpenResetDialog(true);
-  };
-
-  const handleFormChange = (e: FormEvent) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      if (currentUser) {
-        await updateDoc(doc(db, 'users', currentUser.id), {
-          email: formData.email,
-          role: formData.role,
-          first_name: formData.first_name,
-          last_name: formData.last_name,
-        });
-        setSuccess('Utilisateur modifié avec succès !');
-      } else {
-        const userCredential = await createUserWithEmailAndPassword(
-          auth,
-          formData.email,
-          Math.random().toString(36).slice(-10)
-        );
-        await addDoc(collection(db, 'users'), {
-          uid: userCredential.user.uid,
-          email: formData.email,
-          role: formData.role,
-          first_name: formData.first_name,
-          last_name: formData.last_name,
-          created_at: new Date().toISOString(),
-        });
-        await sendPasswordResetEmail(auth, formData.email);
-        setSuccess(`Utilisateur ${formData.role} créé ! Email envoyé à ${formData.email}.`);
+    const fetchUsers = async () => {
+      try {
+        setLoading(true);
+        const querySnapshot = await getDocs(collection(db, 'users'));
+        const usersData: User[] = querySnapshot.docs.map(doc => ({
+          uid: doc.id, // ✅ L'ID du document = uid
+          ...doc.data()
+        })) as User[];
+        setUsers(usersData);
+      } catch (error) {
+        console.error("Erreur :", error);
+        setSnackbarMessage("Erreur lors du chargement des utilisateurs.");
+        setOpenSnackbar(true);
+      } finally {
+        setLoading(false);
       }
-      setOpenDialog(false);
-      fetchUsers();
-    } catch (err: any) {
-      setError(`Erreur : ${err.message}`);
-      console.error(err);
+    };
+    fetchUsers();
+  }, []);
+
+  // ✅ Ouvrir le dialogue de modification
+  const handleOpenEditDialog = (user: User) => {
+    setSelectedUser(user);
+    setEditForm({
+      email: user.email,
+      first_name: user.first_name,
+      last_name: user.last_name,
+      role: user.role,
+      age: user.age,
+      gender: user.gender,
+      level: user.level
+    });
+    setOpenEditDialog(true);
+  };
+
+  // ✅ Mettre à jour un utilisateur dans Firestore
+  const handleUpdateUser = async () => {
+    if (!selectedUser) return;
+    try {
+      await updateDoc(doc(db, 'users', selectedUser.uid), {
+        email: editForm.email,
+        first_name: editForm.first_name,
+        last_name: editForm.last_name,
+        role: editForm.role,
+        age: editForm.age,
+        gender: editForm.gender,
+        level: editForm.level
+      });
+      // ✅ Rafraîchir la liste
+      const querySnapshot = await getDocs(collection(db, 'users'));
+      setUsers(querySnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as User)));
+      setOpenEditDialog(false);
+      setSnackbarMessage("Utilisateur mis à jour avec succès !");
+      setOpenSnackbar(true);
+    } catch (error) {
+      console.error("Erreur :", error);
+      setSnackbarMessage("Erreur lors de la mise à jour de l'utilisateur.");
+      setOpenSnackbar(true);
     }
   };
 
-  const handleResetPassword = async () => {
-    if (!resetEmail) {
-      setError('Email invalide.');
+  // ✅ Ouvrir le dialogue de création
+  const handleOpenCreateDialog = () => {
+    setCreateForm({
+      email: '',
+      first_name: '',
+      last_name: '',
+      role: 'client',
+      age: undefined,
+      gender: undefined,
+      level: undefined
+    });
+    setOpenCreateDialog(true);
+  };
+
+  // ✅ Créer un nouvel utilisateur (Firebase Auth + Firestore)
+  const handleCreateUser = async () => {
+    if (!createForm.email || !createForm.first_name || !createForm.last_name) {
+      setSnackbarMessage("Veuillez remplir les champs obligatoires.");
+      setOpenSnackbar(true);
       return;
     }
+
     try {
-      await sendPasswordResetEmail(auth, resetEmail);
-      setSuccess(`Email envoyé à ${resetEmail} !`);
-      setOpenResetDialog(false);
-    } catch (err: any) {
-      setError(`Erreur : ${err.message}`);
-      console.error(err);
+      // 1. Créer le compte Firebase Auth
+      const tempPassword = Math.random().toString(36).slice(-12);
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        createForm.email,
+        tempPassword
+      );
+      const user = userCredential.user;
+
+      // 2. Ajouter l'utilisateur dans Firestore (collection 'users')
+      await addDoc(collection(db, 'users'), {
+        uid: user.uid, // ✅ Stocker l'UID Firebase comme champ
+        email: createForm.email,
+        first_name: createForm.first_name,
+        last_name: createForm.last_name,
+        role: createForm.role,
+        age: createForm.age,
+        gender: createForm.gender,
+        level: createForm.level,
+        created_at: new Date().toISOString()
+      });
+
+      // 3. Envoyer un email de réinitialisation
+      await sendPasswordResetEmail(auth, createForm.email);
+
+      // ✅ Rafraîchir la liste
+      const querySnapshot = await getDocs(collection(db, 'users'));
+      setUsers(querySnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as User)));
+
+      setOpenCreateDialog(false);
+      setSnackbarMessage("Utilisateur créé avec succès ! Un email de réinitialisation a été envoyé.");
+      setOpenSnackbar(true);
+    } catch (error: any) {
+      console.error("Erreur :", error);
+      let message = "Erreur lors de la création de l'utilisateur.";
+      if (error.code === 'auth/email-already-in-use') {
+        message = "Cet email est déjà utilisé.";
+      }
+      setSnackbarMessage(message);
+      setOpenSnackbar(true);
     }
   };
 
-  // ✅ Solution client-side : suppression du document Firestore uniquement
-  const handleDeleteUser = (userToDelete: User) => {
-    if (window.confirm(`Supprimer ${userToDelete.email} (${userToDelete.role}) de Firestore ?`)) {
-      deleteDoc(doc(db, 'users', userToDelete.id))
-        .then(() => {
-          setSuccess(
-            `Utilisateur ${userToDelete.role} supprimé de Firestore. ⚠️ Pour supprimer son compte Auth, utilisez la console Firebase ou une Cloud Function.`
-          );
-          fetchUsers();
-        })
-        .catch((err: any) => {
-          setError(`Erreur : ${err.message}`);
-          console.error(err);
-        });
+  // ✅ Supprimer un utilisateur (Firestore uniquement)
+  const handleDeleteUser = async (userId: string) => {
+    try {
+      await deleteDoc(doc(db, 'users', userId));
+      // ✅ Rafraîchir la liste
+      const querySnapshot = await getDocs(collection(db, 'users'));
+      setUsers(querySnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as User)));
+      setSnackbarMessage("Utilisateur supprimé de la base de données !");
+      setOpenSnackbar(true);
+    } catch (error) {
+      console.error("Erreur :", error);
+      setSnackbarMessage("Erreur lors de la suppression de l'utilisateur.");
+      setOpenSnackbar(true);
     }
   };
 
-  if (loadingAuth) {
-    return (
-      <Container maxWidth="lg">
-        <Typography sx={{ mt: 4, textAlign: 'center' }}>Chargement...</Typography>
-      </Container>
-    );
+  if (loading) {
+    return <Typography>Chargement des utilisateurs...</Typography>;
   }
 
   return (
     <Container maxWidth="lg">
-      <Box sx={{ mt: 4 }}>
-        <Typography variant="h4" sx={{ mb: 2 }}>Gestion des Utilisateurs</Typography>
-
-        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-        {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
-
-        <Stack direction="row" spacing={2} sx={{ mb: 2, alignItems: 'center' }}>
-          <FormControl>
-            <RadioGroup
-              row
-              value={filterRole}
-              onChange={(e, value) => setFilterRole(value as UserRole | 'all')}
-            >
-              <FormControlLabel value="all" control={<Radio />} label="Tous" />
-              {roles.map((role) => (
-                <FormControlLabel
-                  key={role.value}
-                  value={role.value}
-                  control={<Radio />}
-                  label={role.label}
-                />
-              ))}
-            </RadioGroup>
-          </FormControl>
+      <Paper sx={{ p: 3, mt: 3 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Typography variant="h4" gutterBottom>
+            Gestion des Utilisateurs
+          </Typography>
           <Button
             variant="contained"
-            color="primary"
             startIcon={<AddIcon />}
-            onClick={() => handleOpenDialog()}
+            onClick={handleOpenCreateDialog}
           >
-            Ajouter un Utilisateur
-          </Button>
-        </Stack>
-
-        <Box sx={{ mb: 2 }}>
-          <Button
-            variant="outlined"
-            color="secondary"
-            startIcon={<AddIcon />}
-            onClick={() => handleOpenDialog(null)}
-          >
-            Ajouter un Client
+            Créer un utilisateur
           </Button>
         </Box>
 
-        <TableContainer component={Paper}>
+        <TableContainer>
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell>UID</TableCell>
                 <TableCell>Email</TableCell>
-                <TableCell>Rôle</TableCell>
                 <TableCell>Prénom</TableCell>
                 <TableCell>Nom</TableCell>
+                <TableCell>Rôle</TableCell>
+                <TableCell>Niveau</TableCell>
+                <TableCell>Âge</TableCell>
+                <TableCell>Genre</TableCell>
                 <TableCell>Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {users.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} sx={{ textAlign: 'center' }}>
-                    Aucun utilisateur trouvé.
+              {users.map(user => (
+                <TableRow key={user.uid}>
+                  <TableCell>{user.email}</TableCell>
+                  <TableCell>{user.first_name}</TableCell>
+                  <TableCell>{user.last_name}</TableCell>
+                  <TableCell>{user.role}</TableCell>
+                  <TableCell>{user.level || 'N/A'}</TableCell>
+                  <TableCell>{user.age || 'N/A'}</TableCell>
+                  <TableCell>{user.gender || 'N/A'}</TableCell>
+                  <TableCell>
+                    <IconButton
+                      color="primary"
+                      onClick={() => handleOpenEditDialog(user)}
+                    >
+                      <EditIcon />
+                    </IconButton>
+                    <IconButton
+                      color="error"
+                      onClick={() => handleDeleteUser(user.uid)}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
                   </TableCell>
                 </TableRow>
-              ) : (
-                users.map((user: User) => (
-                  <TableRow key={user.id}>
-                    <TableCell>{user.uid}</TableCell>
-                    <TableCell>{user.email}</TableCell>
-                    <TableCell>
-                      <Chip
-                        label={roles.find((r) => r.value === user.role)?.label || user.role}
-                        color={
-                          user.role === 'admin' ? 'error' :
-                          user.role === 'moniteur' ? 'primary' :
-                          user.role === 'ouvreur' ? 'secondary' : 'default'
-                        }
-                      />
-                    </TableCell>
-                    <TableCell>{user.first_name || 'Non renseigné'}</TableCell>
-                    <TableCell>{user.last_name || 'Non renseigné'}</TableCell>
-                    <TableCell>
-                      <Tooltip title="Modifier">
-                        <IconButton
-                          aria-label="Modifier"
-                          onClick={() => handleOpenDialog(user)}
-                          color="primary"
-                        >
-                          <EditIcon />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Réinitialiser le mot de passe">
-                        <IconButton
-                          aria-label="Réinitialiser"
-                          onClick={() => handleOpenResetDialog(user)}
-                          color="warning"
-                        >
-                          <KeyIcon />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Supprimer">
-                        <IconButton
-                          aria-label="Supprimer"
-                          onClick={() => handleDeleteUser(user)}
-                          color="error"
-                        >
-                          <DeleteIcon />
-                        </IconButton>
-                      </Tooltip>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
+              ))}
             </TableBody>
           </Table>
         </TableContainer>
 
-        <Dialog open={openDialog} onClose={() => setOpenDialog(false)}>
-          <DialogTitle>
-            {currentUser ? `Modifier ${currentUser.email}` : 'Ajouter un utilisateur'}
-          </DialogTitle>
+        {/* Dialogue de modification */}
+        <Dialog open={openEditDialog} onClose={() => setOpenEditDialog(false)}>
+          <DialogTitle>Modifier l'utilisateur</DialogTitle>
           <DialogContent>
-            <TextField
-              label="Email"
-              name="email"
-              value={formData.email}
-              onChange={handleFormChange}
-              fullWidth
-              margin="normal"
-              required
-              type="email"
-            />
-            <FormControl fullWidth margin="normal">
-              <InputLabel>Rôle</InputLabel>
-              <Select
-                name="role"
-                value={formData.role}
-                onChange={handleFormChange}
-                label="Rôle"
-              >
-                {roles.map((role) => (
-                  <MenuItem key={role.value} value={role.value}>
-                    {role.label}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <TextField
-              label="Prénom"
-              name="first_name"
-              value={formData.first_name}
-              onChange={handleFormChange}
-              fullWidth
-              margin="normal"
-            />
-            <TextField
-              label="Nom"
-              name="last_name"
-              value={formData.last_name}
-              onChange={handleFormChange}
-              fullWidth
-              margin="normal"
-            />
+            <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <TextField
+                label="Email"
+                value={editForm.email}
+                onChange={(e) => setEditForm({...editForm, email: e.target.value})}
+                fullWidth
+              />
+              <TextField
+                label="Prénom"
+                value={editForm.first_name}
+                onChange={(e) => setEditForm({...editForm, first_name: e.target.value})}
+                fullWidth
+              />
+              <TextField
+                label="Nom"
+                value={editForm.last_name}
+                onChange={(e) => setEditForm({...editForm, last_name: e.target.value})}
+                fullWidth
+              />
+              <FormControl fullWidth>
+                <InputLabel>Rôle</InputLabel>
+                <Select
+                  value={editForm.role}
+                  onChange={(e) => setEditForm({...editForm, role: e.target.value as 'admin' | 'ouvreur' | 'moniteur' | 'client'})}
+                  label="Rôle"
+                >
+                  <MenuItem value="admin">Admin</MenuItem>
+                  <MenuItem value="ouvreur">Ouvreur</MenuItem>
+                  <MenuItem value="moniteur">Moniteur</MenuItem>
+                  <MenuItem value="client">Client</MenuItem>
+                </Select>
+              </FormControl>
+              <TextField
+                label="Niveau"
+                value={editForm.level || ''}
+                onChange={(e) => setEditForm({...editForm, level: e.target.value})}
+                fullWidth
+              />
+              <TextField
+                label="Âge"
+                type="number"
+                value={editForm.age || ''}
+                onChange={(e) => setEditForm({...editForm, age: e.target.value ? parseInt(e.target.value) : undefined})}
+                fullWidth
+              />
+              <FormControl fullWidth>
+                <InputLabel>Genre</InputLabel>
+                <Select
+                  value={editForm.gender || ''}
+                  onChange={(e) => setEditForm({...editForm, gender: e.target.value})}
+                  label="Genre"
+                >
+                  <MenuItem value="homme">Homme</MenuItem>
+                  <MenuItem value="femme">Femme</MenuItem>
+                  <MenuItem value="autre">Autre</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => setOpenDialog(false)}>Annuler</Button>
-            <Button onClick={handleSubmit} variant="contained" color="primary">
-              {currentUser ? 'Modifier' : 'Ajouter'}
+            <Button onClick={() => setOpenEditDialog(false)}>Annuler</Button>
+            <Button onClick={handleUpdateUser} color="primary">
+              Enregistrer
             </Button>
           </DialogActions>
         </Dialog>
 
-        <Dialog open={openResetDialog} onClose={() => setOpenResetDialog(false)}>
-          <DialogTitle>Réinitialiser le mot de passe</DialogTitle>
+        {/* Dialogue de création */}
+        <Dialog open={openCreateDialog} onClose={() => setOpenCreateDialog(false)}>
+          <DialogTitle>Créer un nouvel utilisateur</DialogTitle>
           <DialogContent>
-            <Alert severity="info" sx={{ mb: 2 }}>
-              Un email sera envoyé à <strong>{resetEmail}</strong>.
-            </Alert>
+            <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <TextField
+                label="Email"
+                value={createForm.email}
+                onChange={(e) => setCreateForm({...createForm, email: e.target.value})}
+                fullWidth
+              />
+              <TextField
+                label="Prénom"
+                value={createForm.first_name}
+                onChange={(e) => setCreateForm({...createForm, first_name: e.target.value})}
+                fullWidth
+              />
+              <TextField
+                label="Nom"
+                value={createForm.last_name}
+                onChange={(e) => setCreateForm({...createForm, last_name: e.target.value})}
+                fullWidth
+              />
+              <FormControl fullWidth>
+                <InputLabel>Rôle</InputLabel>
+                <Select
+                  value={createForm.role}
+                  onChange={(e) => setCreateForm({...createForm, role: e.target.value as 'admin' | 'ouvreur' | 'moniteur' | 'client'})}
+                  label="Rôle"
+                >
+                  <MenuItem value="admin">Admin</MenuItem>
+                  <MenuItem value="ouvreur">Ouvreur</MenuItem>
+                  <MenuItem value="moniteur">Moniteur</MenuItem>
+                  <MenuItem value="client">Client</MenuItem>
+                </Select>
+              </FormControl>
+              <TextField
+                label="Niveau"
+                value={createForm.level || ''}
+                onChange={(e) => setCreateForm({...createForm, level: e.target.value})}
+                fullWidth
+              />
+              <TextField
+                label="Âge"
+                type="number"
+                value={createForm.age || ''}
+                onChange={(e) => setCreateForm({...createForm, age: e.target.value ? parseInt(e.target.value) : undefined})}
+                fullWidth
+              />
+              <FormControl fullWidth>
+                <InputLabel>Genre</InputLabel>
+                <Select
+                  value={createForm.gender || ''}
+                  onChange={(e) => setCreateForm({...createForm, gender: e.target.value})}
+                  label="Genre"
+                >
+                  <MenuItem value="homme">Homme</MenuItem>
+                  <MenuItem value="femme">Femme</MenuItem>
+                  <MenuItem value="autre">Autre</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => setOpenResetDialog(false)}>Annuler</Button>
-            <Button
-              onClick={handleResetPassword}
-              variant="contained"
-              color="primary"
-              startIcon={<EmailIcon />}
-            >
-              Envoyer l'email
+            <Button onClick={() => setOpenCreateDialog(false)}>Annuler</Button>
+            <Button onClick={handleCreateUser} color="primary">
+              Créer
             </Button>
           </DialogActions>
         </Dialog>
-      </Box>
+
+        {/* Snackbar pour les notifications */}
+        <Snackbar
+          open={openSnackbar}
+          autoHideDuration={6000}
+          onClose={() => setOpenSnackbar(false)}
+        >
+          <Alert
+            severity={snackbarMessage.includes("succès") ? "success" : "error"}
+            onClose={() => setOpenSnackbar(false)}
+          >
+            {snackbarMessage}
+          </Alert>
+        </Snackbar>
+      </Paper>
     </Container>
   );
 };

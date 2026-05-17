@@ -12,6 +12,10 @@ import Moniteur from './pages/Moniteur';
 import Admin from './pages/Admin';
 import AdminUsers from './pages/AdminUsers';
 import AdminHomeContent from './pages/AdminHomeContent';
+import AdminCompetitionManagement from './pages/AdminCompetitionManagement';
+import AdminCompetitionList from './pages/AdminCompetitionList';
+import AdminCompetitionRegistration from './pages/AdminCompetitionRegistration';
+import AdminCompetitionStats from './pages/AdminCompetitionStats';
 import ProtectedRoute from './components/ProtectedRoute';
 import Navbar from './components/Navbar';
 
@@ -24,22 +28,19 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <AuthProvider>
           <Navbar />
           <Routes>
-            {/* Page d'accueil */}
             <Route path="/" element={<Home />} />
-
-            {/* Authentification */}
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
-
-            {/* Pages protégées par rôle */}
             <Route path="/client" element={<ProtectedRoute role="client"><Client /></ProtectedRoute>} />
             <Route path="/ouvreur" element={<ProtectedRoute role="ouvreur"><Ouvreur /></ProtectedRoute>} />
             <Route path="/moniteur" element={<ProtectedRoute role="moniteur"><Moniteur /></ProtectedRoute>} />
             <Route path="/admin" element={<ProtectedRoute role="admin"><Admin /></ProtectedRoute>} />
-
-            {/* Pages admin spécifiques */}
             <Route path="/admin/users" element={<ProtectedRoute role="admin"><AdminUsers /></ProtectedRoute>} />
             <Route path="/admin/home-content" element={<ProtectedRoute role="admin"><AdminHomeContent /></ProtectedRoute>} />
+            <Route path="/admin/competitions/create" element={<ProtectedRoute role="admin"><AdminCompetitionManagement /></ProtectedRoute>} />
+            <Route path="/admin/competitions/list" element={<ProtectedRoute role="admin"><AdminCompetitionList /></ProtectedRoute>} />
+            <Route path="/admin/competitions/register" element={<ProtectedRoute role="admin"><AdminCompetitionRegistration /></ProtectedRoute>} />
+            <Route path="/admin/competitions/stats" element={<ProtectedRoute role="admin"><AdminCompetitionStats /></ProtectedRoute>} />
           </Routes>
         </AuthProvider>
       </BrowserRouter>

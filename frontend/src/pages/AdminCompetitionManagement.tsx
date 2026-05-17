@@ -1,413 +1,357 @@
-import React, { useState, useEffect, ChangeEvent } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  Typography,
-  Box,
-  Paper,
-  TextField,
-  Button,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Checkbox,
-  ListItemText,
-  Autocomplete,
-  CircularProgress,
-  Alert,
-  Chip,
-  IconButton,
-  Tooltip
+  Typography, Paper, Container, Button, TextField, Box,
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
+  IconButton, Dialog, DialogTitle, DialogContent, DialogActions,
+  Snackbar, Alert, FormControl, InputLabel, Select, MenuItem
 } from '@mui/material';
-import { Delete as DeleteIcon, Edit as EditIcon } from '@mui/icons-material';
-import { db, auth } from '../services/firebaseConfig'; // ✅ Ajustez le chemin si nécessaire
-import {
-  collection,
-  getDocs,
-  addDoc,
-  doc,
-  updateDoc,
-  deleteDoc,
-  query,
-  where
-} from 'firebase/firestore';
-import { useAuthState } from 'react-firebase-hooks/auth';
+import { Delete as DeleteIcon, Edit as EditIcon, Add as AddIcon } from '@mui/icons-material';
+import { db } from '../services/firebaseConfig';
+import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { useNavigate } from 'react-router-dom';
 
-// ✅ Type étendu pour inclure 'supprimée'
-type CompetitionStatus = 'en cours' | 'terminée' | 'à venir' | 'supprimée';
-
-interface Boulder {
-  id: string;
-  name: string;
-  level: string;
-  type: 'classic' | 'competition';
-  competition_id?: string | null;
-}
+type CompetitionStatus = 'à venir' | 'en cours' | 'terminée' | 'annulée';
 
 interface Competition {
-  id?: string;
+  id: string;
   name: string;
   date: string;
   status: CompetitionStatus;
+  access_code: string;
   max_participants: number;
   registered_count: number;
-  boulders: string[];
-  access_code?: string;
 }
 
 const AdminCompetitionManagement: React.FC = () => {
-  const [user, loadingAuth] = useAuthState(auth);
-  const [boulders, setBoulders] = useState<Boulder[]>([]);
   const [competitions, setCompetitions] = useState<Competition[]>([]);
-  const [currentCompetition, setCurrentCompetition] = useState<Competition | null>(null);
-  const [openDialog, setOpenDialog] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [openCreateDialog, setOpenCreateDialog] = useState(false);
+  const [openEditDialog, setOpenEditDialog] = useState(false);
+  const [openSnackbar, setOpenSnackbar] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [selectedCompetition, setSelectedCompetition] = useState<Competition | null>(null);
+  const [createForm, setCreateForm] = useState<Omit<Competition, 'id' | 'registered_count'>>({
+    name: '',
+    date: new Date().toISOString().split('T')[0],
+    status: 'à venir',
+    access_code: '',
+    max_participants: 50
+  });
+  const [editForm, setEditForm] = useState<Omit<Competition, 'id' | 'registered_count'>>({
+    name: '',
+    date: '',
+    status: 'à venir',
+    access_code: '',
+    max_participants: 50
+  });
+  const navigate = useNavigate();
 
-  // Récupérer les blocs de compétition
-  const fetchBoulders = async () => {
-    try {
-      const q = query(
-        collection(db, 'boulders'),
-        where('type', '==', 'competition')
-      );
-      const querySnapshot = await getDocs(q);
-      const bouldersData = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as Boulder[];
-      setBoulders(bouldersData);
-    } catch (err) {
-      console.error('Erreur : ', err);
-      setError('Erreur lors de la récupération des blocs de compétition.');
-    }
-  };
+  useEffect(() => {
+    const fetchCompetitions = async () => {
+      try {
+        setLoading(true);
+        const querySnapshot = await getDocs(collection(db, 'competitions'));
+        const competitionsData: Competition[] = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          name: doc.data().name || '',
+          date: doc.data().date || '',
+          status: doc.data().status || 'à venir',
+          access_code: doc.data().access_code || '',
+          max_participants: doc.data().max_participants || 50,
+          registered_count: doc.data().registered_count || 0
+        }));
+        setCompetitions(competitionsData);
+      } catch (error) {
+        console.error("Erreur :", error);
+        setSnackbarMessage("Erreur lors du chargement des compétitions.");
+        setOpenSnackbar(true);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchCompetitions();
+  }, []);
 
-  // Récupérer les compétitions
-  const fetchCompetitions = async () => {
-    try {
-      const querySnapshot = await getDocs(collection(db, 'competitions'));
-      const competitionsData = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as Competition[];
-      setCompetitions(competitionsData.filter(comp => comp.status !== 'supprimée'));
-    } catch (err) {
-      console.error('Erreur : ', err);
-      setError('Erreur lors de la récupération des compétitions.');
-    }
-  };
-
-  // Ouvrir la boîte de dialogue pour créer/éditer
-  const handleOpenDialog = (competition: Competition | null = null) => {
-    setCurrentCompetition(competition || {
-      name: '',
-      date: new Date().toISOString().split('T')[0],
-      status: 'à venir',
-      max_participants: 50,
-      registered_count: 0,
-      boulders: [],
-      access_code: generateAccessCode(),
-    });
-    setOpenDialog(true);
-  };
-
-  // Générer un code d'accès aléatoire
-  const generateAccessCode = () => {
-    return Math.random().toString(36).substring(2, 8).toUpperCase();
-  };
-
-  // Sauvegarder la compétition
-  const handleSave = async () => {
-    if (!currentCompetition) return;
-    if (!currentCompetition.name || !currentCompetition.date || currentCompetition.boulders.length === 0) {
-      setError('Veuillez remplir tous les champs obligatoires (nom, date, blocs).');
+  const handleCreateCompetition = async () => {
+    if (!createForm.name || !createForm.access_code) {
+      setSnackbarMessage("Le nom et le code d'accès sont obligatoires.");
+      setOpenSnackbar(true);
       return;
     }
 
     try {
-      setLoading(true);
-      if (currentCompetition.id) {
-        // Mise à jour
-        await updateDoc(doc(db, 'competitions', currentCompetition.id), {
-          name: currentCompetition.name,
-          date: currentCompetition.date,
-          status: currentCompetition.status,
-          max_participants: currentCompetition.max_participants,
-          boulders: currentCompetition.boulders,
-          access_code: currentCompetition.access_code,
-        });
-        setSuccess('Compétition modifiée avec succès !');
-      } else {
-        // Création
-        const docRef = await addDoc(collection(db, 'competitions'), {
-          name: currentCompetition.name,
-          date: currentCompetition.date,
-          status: currentCompetition.status,
-          max_participants: currentCompetition.max_participants,
-          registered_count: 0,
-          boulders: currentCompetition.boulders,
-          access_code: currentCompetition.access_code,
-        });
-        setSuccess(`Compétition créée avec succès ! Code d'accès : ${currentCompetition.access_code}`);
-        setCurrentCompetition({ ...currentCompetition, id: docRef.id });
-      }
-      fetchCompetitions();
-      setOpenDialog(false);
-    } catch (err: any) {
-      setError(`Erreur : ${err.message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Supprimer une compétition
-  const handleDelete = async (competitionId: string) => {
-    if (!window.confirm('Êtes-vous sûr de vouloir supprimer cette compétition ? Cette action est irréversible.')) return;
-    try {
-      await updateDoc(doc(db, 'competitions', competitionId), {
-        status: 'supprimée',
+      await addDoc(collection(db, 'competitions'), {
+        name: createForm.name,
+        date: createForm.date,
+        status: createForm.status,
+        access_code: createForm.access_code,
+        max_participants: createForm.max_participants,
+        registered_count: 0
       });
-      setSuccess('Compétition supprimée avec succès !');
-      fetchCompetitions();
-    } catch (err: any) {
-      setError(`Erreur : ${err.message}`);
+      const querySnapshot = await getDocs(collection(db, 'competitions'));
+      setCompetitions(querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        name: doc.data().name,
+        date: doc.data().date,
+        status: doc.data().status,
+        access_code: doc.data().access_code,
+        max_participants: doc.data().max_participants,
+        registered_count: doc.data().registered_count || 0
+      })));
+      setOpenCreateDialog(false);
+      setSnackbarMessage("Compétition créée avec succès !");
+      setOpenSnackbar(true);
+    } catch (error) {
+      console.error("Erreur :", error);
+      setSnackbarMessage("Erreur lors de la création de la compétition.");
+      setOpenSnackbar(true);
     }
   };
 
-  // Gestion des changements pour les champs de type TextField
-  const handleTextFieldChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setCurrentCompetition({
-      ...currentCompetition!,
-      [name]: value,
+  const handleOpenEditDialog = (competition: Competition) => {
+    setSelectedCompetition(competition);
+    setEditForm({
+      name: competition.name,
+      date: competition.date,
+      status: competition.status,
+      access_code: competition.access_code,
+      max_participants: competition.max_participants
     });
+    setOpenEditDialog(true);
   };
 
-  useEffect(() => {
-    if (user) {
-      fetchBoulders();
-      fetchCompetitions();
+  const handleUpdateCompetition = async () => {
+    if (!selectedCompetition) return;
+    try {
+      await updateDoc(doc(db, 'competitions', selectedCompetition.id), {
+        name: editForm.name,
+        date: editForm.date,
+        status: editForm.status,
+        access_code: editForm.access_code,
+        max_participants: editForm.max_participants
+      });
+      const querySnapshot = await getDocs(collection(db, 'competitions'));
+      setCompetitions(querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        name: doc.data().name,
+        date: doc.data().date,
+        status: doc.data().status,
+        access_code: doc.data().access_code,
+        max_participants: doc.data().max_participants,
+        registered_count: doc.data().registered_count || 0
+      })));
+      setOpenEditDialog(false);
+      setSnackbarMessage("Compétition mise à jour avec succès !");
+      setOpenSnackbar(true);
+    } catch (error) {
+      console.error("Erreur :", error);
+      setSnackbarMessage("Erreur lors de la mise à jour de la compétition.");
+      setOpenSnackbar(true);
     }
-  }, [user]);
+  };
 
-  if (loadingAuth) {
-    return <CircularProgress />;
+  const handleDeleteCompetition = async (competitionId: string) => {
+    try {
+      await deleteDoc(doc(db, 'competitions', competitionId));
+      setCompetitions(competitions.filter(comp => comp.id !== competitionId));
+      setSnackbarMessage("Compétition supprimée avec succès !");
+      setOpenSnackbar(true);
+    } catch (error) {
+      console.error("Erreur :", error);
+      setSnackbarMessage("Erreur lors de la suppression de la compétition.");
+      setOpenSnackbar(true);
+    }
+  };
+
+  if (loading) {
+    return <Typography>Chargement des compétitions...</Typography>;
   }
 
   return (
-    <Box sx={{ mt: 2, p: 2 }}>
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-      {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
+    <Container maxWidth="lg">
+      <Paper sx={{ p: 3, mt: 3 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Typography variant="h4" gutterBottom>
+            Gestion des Compétitions
+          </Typography>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => setOpenCreateDialog(true)}
+          >
+            Créer une compétition
+          </Button>
+        </Box>
 
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h5">Gestion des Compétitions</Typography>
-        <Button
-          variant="contained"
-          color="primary"
-          onClick={() => handleOpenDialog()}
-          startIcon={<EditIcon />}
-        >
-          Créer une compétition
-        </Button>
-      </Box>
-
-      <Paper sx={{ p: 2 }}>
-        <Typography variant="h6" sx={{ mb: 2 }}>
-          Liste des compétitions
-        </Typography>
-        {competitions.length === 0 ? (
-          <Typography>Aucune compétition trouvée. Créez-en une pour commencer.</Typography>
-        ) : (
-          <Box>
-            {competitions.map((competition) => (
-              <Paper
-                key={competition.id}
-                sx={{
-                  p: 2,
-                  mb: 2,
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  borderLeft: `4px solid ${
-                    competition.status === 'terminée' ? '#4caf50' :
-                    competition.status === 'en cours' ? '#2196f3' : '#9e9e9e'
-                  }`
-                }}
-              >
-                <Box>
-                  <Typography variant="subtitle1">{competition.name}</Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {competition.date} | Statut: {competition.status} | Inscrits: {competition.registered_count}/{competition.max_participants}
-                  </Typography>
-                  <Box sx={{ mt: 1 }}>
-                    {competition.boulders.map(boulderId => {
-                      const boulder = boulders.find(b => b.id === boulderId);
-                      return boulder ? (
-                        <Chip
-                          key={boulderId}
-                          label={`${boulder.name} (${boulder.level})`}
-                          sx={{ mr: 0.5, mb: 0.5 }}
-                          color={
-                            boulder.level === 'jaune' ? 'warning' :
-                            boulder.level === 'vert' ? 'success' :
-                            boulder.level === 'bleu' ? 'primary' :
-                            boulder.level === 'violet' ? 'secondary' :
-                            boulder.level === 'rouge' ? 'error' :
-                            boulder.level === 'noir' ? 'default' :
-                            boulder.level === 'blanc' ? 'info' : 'default'
-                          }
-                        />
-                      ) : (
-                        <Chip key={boulderId} label={boulderId} sx={{ mr: 0.5, mb: 0.5 }} />
-                      );
-                    })}
-                  </Box>
-                  <Typography variant="caption" sx={{ mt: 1, display: 'block' }}>
-                    Code d'accès: <strong>{competition.access_code}</strong>
-                  </Typography>
-                </Box>
-                <Box sx={{ display: 'flex', gap: 1 }}>
-                  <Tooltip title="Modifier">
+        <TableContainer>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>Nom</TableCell>
+                <TableCell>Date</TableCell>
+                <TableCell>Statut</TableCell>
+                <TableCell>Code d'accès</TableCell>
+                <TableCell>Participants</TableCell>
+                <TableCell>Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {competitions.map(competition => (
+                <TableRow key={competition.id}>
+                  <TableCell>{competition.name}</TableCell>
+                  <TableCell>{new Date(competition.date).toLocaleDateString()}</TableCell>
+                  <TableCell>{competition.status}</TableCell>
+                  <TableCell>{competition.access_code}</TableCell>
+                  <TableCell>{competition.registered_count} / {competition.max_participants}</TableCell>
+                  <TableCell>
                     <IconButton
                       color="primary"
-                      onClick={() => handleOpenDialog(competition)}
+                      onClick={() => handleOpenEditDialog(competition)}
                     >
                       <EditIcon />
                     </IconButton>
-                  </Tooltip>
-                  <Tooltip title="Supprimer">
                     <IconButton
                       color="error"
-                      onClick={() => handleDelete(competition.id!)}
+                      onClick={() => handleDeleteCompetition(competition.id)}
                     >
                       <DeleteIcon />
                     </IconButton>
-                  </Tooltip>
-                </Box>
-              </Paper>
-            ))}
-          </Box>
-        )}
-      </Paper>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={() => navigate(`/admin/competitions/register?competitionId=${competition.id}`)}
+                    >
+                      Gérer les inscriptions
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
 
-      {/* Dialogue de création/édition */}
-      <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="md" fullWidth>
-        <DialogTitle>
-          {currentCompetition?.id ? 'Modifier la compétition' : 'Créer une compétition'}
-        </DialogTitle>
-        <DialogContent>
-          <TextField
-            label="Nom de la compétition"
-            name="name"
-            value={currentCompetition?.name || ''}
-            onChange={handleTextFieldChange}
-            fullWidth
-            margin="normal"
-            required
-            error={!currentCompetition?.name}
-            helperText={!currentCompetition?.name ? 'Ce champ est obligatoire' : ''}
-          />
-          {/* ✅ CORRECTION POUR MUI v9.0.1 : Utilisation de slotProps */}
-          <TextField
-            label="Date"
-            name="date"
-            type="date"
-            value={currentCompetition?.date || ''}
-            onChange={handleTextFieldChange}
-            fullWidth
-            margin="normal"
-            slotProps={{
-              inputLabel: { shrink: true } // ✅ Solution officielle pour MUI v9
-            }}
-            required
-            error={!currentCompetition?.date}
-            helperText={!currentCompetition?.date ? 'Ce champ est obligatoire' : ''}
-          />
-          <FormControl fullWidth margin="normal">
-            <InputLabel>Statut</InputLabel>
-            <Select
-              name="status"
-              value={currentCompetition?.status || 'à venir'}
-              onChange={(e) => setCurrentCompetition({
-                ...currentCompetition!,
-                status: e.target.value as CompetitionStatus
-              })}
-              label="Statut"
-            >
-              <MenuItem value="à venir">À venir</MenuItem>
-              <MenuItem value="en cours">En cours</MenuItem>
-              <MenuItem value="terminée">Terminée</MenuItem>
-            </Select>
-          </FormControl>
-          <TextField
-            label="Nombre maximum de participants"
-            name="max_participants"
-            type="number"
-            value={currentCompetition?.max_participants || 50}
-            onChange={handleTextFieldChange}
-            fullWidth
-            margin="normal"
-            required
-            error={!currentCompetition?.max_participants}
-            helperText={!currentCompetition?.max_participants ? 'Ce champ est obligatoire' : ''}
-          />
-          <FormControl fullWidth margin="normal">
-            <Autocomplete
-              multiple
-              options={boulders}
-              getOptionLabel={(option) => `${option.name} (${option.level})`}
-              value={boulders.filter(b => currentCompetition?.boulders.includes(b.id))}
-              onChange={(e, newValue) => {
-                setCurrentCompetition({
-                  ...currentCompetition!,
-                  boulders: newValue.map(b => b.id),
-                });
-              }}
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  label="Blocs de compétition"
-                  name="boulders"
-                  placeholder="Sélectionnez les blocs"
-                  error={!currentCompetition?.boulders || currentCompetition.boulders.length === 0}
-                  helperText={
-                    !currentCompetition?.boulders || currentCompetition.boulders.length === 0
-                      ? 'Sélectionnez au moins un bloc'
-                      : ''
-                  }
-                />
-              )}
-              renderOption={(props, option) => (
-                <li {...props}>
-                  <Checkbox checked={currentCompetition?.boulders.includes(option.id)} />
-                  <ListItemText primary={option.name} secondary={`Niveau: ${option.level}`} />
-                </li>
-              )}
-            />
-          </FormControl>
-          <TextField
-            label="Code d'accès"
-            name="access_code"
-            value={currentCompetition?.access_code || ''}
-            onChange={handleTextFieldChange}
-            fullWidth
-            margin="normal"
-            helperText="Code pour les participants non-clients. Laissez vide pour en générer un automatiquement."
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenDialog(false)}>Annuler</Button>
-          <Button onClick={handleSave} variant="contained" color="primary" disabled={loading}>
-            {loading ? <CircularProgress size={24} /> : 'Enregistrer'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </Box>
+        <Dialog open={openCreateDialog} onClose={() => setOpenCreateDialog(false)}>
+          <DialogTitle>Créer une compétition</DialogTitle>
+          <DialogContent>
+            <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <TextField
+                label="Nom de la compétition"
+                value={createForm.name}
+                onChange={(e) => setCreateForm({...createForm, name: e.target.value})}
+                fullWidth
+              />
+              <TextField
+                label="Date"
+                type="date"
+                value={createForm.date}
+                onChange={(e) => setCreateForm({...createForm, date: e.target.value})}
+                slotProps={{ inputLabel: { shrink: true } }}
+                fullWidth
+              />
+              <TextField
+                label="Code d'accès"
+                value={createForm.access_code}
+                onChange={(e) => setCreateForm({...createForm, access_code: e.target.value})}
+                fullWidth
+              />
+              <TextField
+                label="Nombre maximum de participants"
+                type="number"
+                value={createForm.max_participants}
+                onChange={(e) => setCreateForm({...createForm, max_participants: parseInt(e.target.value) || 0})}
+                fullWidth
+              />
+              <FormControl fullWidth>
+                <InputLabel>Statut</InputLabel>
+                <Select
+                  value={createForm.status}
+                  onChange={(e) => setCreateForm({...createForm, status: e.target.value as CompetitionStatus})}
+                  label="Statut"
+                >
+                  <MenuItem value="à venir">À venir</MenuItem>
+                  <MenuItem value="en cours">En cours</MenuItem>
+                  <MenuItem value="terminée">Terminée</MenuItem>
+                  <MenuItem value="annulée">Annulée</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setOpenCreateDialog(false)}>Annuler</Button>
+            <Button onClick={handleCreateCompetition} color="primary">
+              Créer
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        <Dialog open={openEditDialog} onClose={() => setOpenEditDialog(false)}>
+          <DialogTitle>Modifier la compétition</DialogTitle>
+          <DialogContent>
+            <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <TextField
+                label="Nom de la compétition"
+                value={editForm.name}
+                onChange={(e) => setEditForm({...editForm, name: e.target.value})}
+                fullWidth
+              />
+              <TextField
+                label="Date"
+                type="date"
+                value={editForm.date}
+                onChange={(e) => setEditForm({...editForm, date: e.target.value})}
+                slotProps={{ inputLabel: { shrink: true } }}
+                fullWidth
+              />
+              <TextField
+                label="Code d'accès"
+                value={editForm.access_code}
+                onChange={(e) => setEditForm({...editForm, access_code: e.target.value})}
+                fullWidth
+              />
+              <TextField
+                label="Nombre maximum de participants"
+                type="number"
+                value={editForm.max_participants}
+                onChange={(e) => setEditForm({...editForm, max_participants: parseInt(e.target.value) || 0})}
+                fullWidth
+              />
+              <FormControl fullWidth>
+                <InputLabel>Statut</InputLabel>
+                <Select
+                  value={editForm.status}
+                  onChange={(e) => setEditForm({...editForm, status: e.target.value as CompetitionStatus})}
+                  label="Statut"
+                >
+                  <MenuItem value="à venir">À venir</MenuItem>
+                  <MenuItem value="en cours">En cours</MenuItem>
+                  <MenuItem value="terminée">Terminée</MenuItem>
+                  <MenuItem value="annulée">Annulée</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setOpenEditDialog(false)}>Annuler</Button>
+            <Button onClick={handleUpdateCompetition} color="primary">
+              Enregistrer
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        <Snackbar
+          open={openSnackbar}
+          autoHideDuration={6000}
+          onClose={() => setOpenSnackbar(false)}
+        >
+          <Alert
+            severity={snackbarMessage.includes("succès") ? "success" : "error"}
+            onClose={() => setOpenSnackbar(false)}
+          >
+            {snackbarMessage}
+          </Alert>
+        </Snackbar>
+      </Paper>
+    </Container>
   );
 };
 
