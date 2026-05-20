@@ -1,27 +1,57 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../services/firebaseConfig';
-import { supabase } from '../services/supabaseClient';
+import { auth, db } from '../services/firebaseConfig';
+import { doc, setDoc } from 'firebase/firestore';
 import {
   TextField,
   Button,
   Box,
   Typography,
   Container,
-  Alert
+  Alert,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem
 } from '@mui/material';
 
+// ✅ Tableau de correspondance code-couleur/cotations internationales
+const levelOptions = [
+  { value: 'jaune', label: 'Jaune (3A-3C) - Débutant' },
+  { value: 'vert', label: 'Vert (4A-4B+) - Débutant' },
+  { value: 'bleu', label: 'Bleu (4C-5A+) - En formation de grimpeur' },
+  { value: 'violet', label: 'Violet (5B-5C+) - En formation de grimpeur' },
+  { value: 'rouge', label: 'Rouge (6A-6B) - Grimpeur confirmé' },
+  { value: 'noire', label: 'Noire (6B+-6C+) - Grimpeur confirmé' },
+  { value: 'blanc', label: 'Blanc (7A-7B) - Grimpeur expert' },
+  { value: 'rose', label: 'Rose (7B+-8A) - Grimpeur mutant' }
+];
+
 export default function Register() {
+  // États pour tous les champs obligatoires
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [age, setAge] = useState<number | ''>('');
+  const [gender, setGender] = useState<string>('');
+  const [level, setLevel] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // ✅ Validation de tous les champs obligatoires
+    if (!firstName || !lastName || !email || !password || !age || !gender || !level) {
+      setError('Tous les champs sont obligatoires, y compris le niveau en salle.');
+      return;
+    }
+
     try {
+      // 1. Créer le compte Firebase Auth
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         email,
@@ -33,15 +63,21 @@ export default function Register() {
         throw new Error("La création de l'utilisateur a échoué.");
       }
 
-      const { error: supabaseError } = await supabase
-        .from('users')
-        .insert([{ email: user.email, role: 'client' }]);
+      // 2. Créer le document dans Firestore avec tous les champs
+      await setDoc(doc(db, 'users', user.uid), {
+        uid: user.uid,
+        email: user.email,
+        first_name: firstName,
+        last_name: lastName,
+        age: age,
+        gender: gender,
+        level: level,
+        role: 'client',
+        roles: ['client'],
+        created_at: new Date().toISOString()
+      });
 
-      if (supabaseError) {
-        throw supabaseError;
-      }
-
-      setSuccess('Compte client créé avec succès ! Vous pouvez maintenant vous connecter.');
+      setSuccess('Compte créé avec succès ! Vous pouvez maintenant vous connecter.');
       setError(null);
       setTimeout(() => {
         navigate('/login');
@@ -73,9 +109,8 @@ export default function Register() {
         flexDirection: 'column',
         alignItems: 'center'
       }}>
-        {/* ✅ Correction : Utilisation de sx pour textAlign */}
         <Typography component="h1" variant="h5" sx={{ textAlign: 'center' }}>
-          Inscription Client
+          Inscription
         </Typography>
 
         {error && (
@@ -95,6 +130,78 @@ export default function Register() {
           onSubmit={handleRegister}
           sx={{ mt: 1, width: '100%' }}
         >
+          {/* Prénom (obligatoire) */}
+          <TextField
+            margin="normal"
+            required
+            fullWidth
+            id="firstName"
+            label="Prénom"
+            name="firstName"
+            autoComplete="given-name"
+            value={firstName}
+            onChange={(e) => setFirstName(e.target.value)}
+            autoFocus
+          />
+
+          {/* Nom (obligatoire) */}
+          <TextField
+            margin="normal"
+            required
+            fullWidth
+            id="lastName"
+            label="Nom"
+            name="lastName"
+            autoComplete="family-name"
+            value={lastName}
+            onChange={(e) => setLastName(e.target.value)}
+          />
+
+          {/* Âge (obligatoire) - ✅ Correction MUI v9 : slotProps au lieu de InputLabelProps */}
+          <TextField
+            margin="normal"
+            required
+            fullWidth
+            id="age"
+            label="Âge"
+            name="age"
+            type="number"
+            slotProps={{ inputLabel: { shrink: true } }}  // ✅ Syntaxe MUI v9
+            value={age}
+            onChange={(e) => setAge(e.target.value ? parseInt(e.target.value) : '')}
+          />
+
+          {/* Genre (obligatoire) */}
+          <FormControl fullWidth margin="normal" required>
+            <InputLabel>Genre</InputLabel>
+            <Select
+              value={gender}
+              onChange={(e) => setGender(e.target.value)}
+              label="Genre"
+            >
+              <MenuItem value="homme">Homme</MenuItem>
+              <MenuItem value="femme">Femme</MenuItem>
+              <MenuItem value="autre">Autre</MenuItem>
+            </Select>
+          </FormControl>
+
+          {/* Niveau en salle (obligatoire) */}
+          <FormControl fullWidth margin="normal" required>
+            <InputLabel>Niveau en salle</InputLabel>
+            <Select
+              value={level}
+              onChange={(e) => setLevel(e.target.value)}
+              label="Niveau en salle"
+            >
+              {levelOptions.map(option => (
+                <MenuItem key={option.value} value={option.value}>
+                  {option.label}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          {/* Email (obligatoire) */}
           <TextField
             margin="normal"
             required
@@ -106,9 +213,9 @@ export default function Register() {
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            autoFocus
           />
 
+          {/* Mot de passe (obligatoire) */}
           <TextField
             margin="normal"
             required
@@ -128,7 +235,7 @@ export default function Register() {
             variant="contained"
             sx={{ mt: 3, mb: 2 }}
           >
-            S'inscrire comme Client
+            S'inscrire
           </Button>
 
           <Typography sx={{ textAlign: 'center' }}>

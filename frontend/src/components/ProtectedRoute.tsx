@@ -13,17 +13,19 @@ interface ProtectedRouteProps {
 
 const ProtectedRoute = ({ children, role }: ProtectedRouteProps) => {
   const [user, loadingAuth] = useAuthState(auth);
-  const [userRole, setUserRole] = useState<UserRole | null>(null);
+  const [userRoles, setUserRoles] = useState<UserRole[]>([]); // ✅ Tableau de rôles
   const [loadingRole, setLoadingRole] = useState(true);
   const location = useLocation();
 
   useEffect(() => {
     if (user) {
-      const fetchUserRole = async () => {
+      const fetchUserRoles = async () => {
         try {
           const userDoc = await getDoc(doc(db, 'users', user.uid));
           if (userDoc.exists()) {
-            setUserRole(userDoc.data().role);
+            // ✅ Récupérer le tableau de rôles (ou convertir l'ancien rôle en tableau)
+            const roles = userDoc.data().roles || (userDoc.data().role ? [userDoc.data().role] : []);
+            setUserRoles(roles);
           }
         } catch (error) {
           console.error("Erreur :", error);
@@ -31,7 +33,7 @@ const ProtectedRoute = ({ children, role }: ProtectedRouteProps) => {
           setLoadingRole(false);
         }
       };
-      fetchUserRole();
+      fetchUserRoles();
     } else {
       setLoadingRole(false);
     }
@@ -45,7 +47,8 @@ const ProtectedRoute = ({ children, role }: ProtectedRouteProps) => {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (role && userRole !== role) {
+  // ✅ Vérifier si le rôle requis est dans le tableau des rôles de l'utilisateur
+  if (role && !userRoles.includes(role)) {
     return <Navigate to="/" replace />;
   }
 

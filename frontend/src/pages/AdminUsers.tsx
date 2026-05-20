@@ -4,7 +4,7 @@ import {
   TableContainer, TableHead, TableRow, Button, Dialog,
   DialogTitle, DialogContent, DialogActions, TextField,
   MenuItem, Select, FormControl, InputLabel, Box, IconButton,
-  Snackbar, Alert
+  Snackbar, Alert, Chip
 } from '@mui/material';
 import { Delete as DeleteIcon, Edit as EditIcon, Add as AddIcon } from '@mui/icons-material';
 import { db, auth } from '../services/firebaseConfig';
@@ -14,16 +14,18 @@ import {
 } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 
-// ✅ Interface alignée sur votre structure Firestore
+type UserRole = 'admin' | 'ouvreur' | 'moniteur' | 'client';
+type Level = 'jaune' | 'vert' | 'bleu' | 'violet' | 'rouge' | 'noire' | 'blanc' | 'rose';
+
 interface User {
-  uid: string; // ID du document Firestore
+  uid: string;
   email: string;
   first_name: string;
   last_name: string;
-  role: 'admin' | 'ouvreur' | 'moniteur' | 'client';
+  roles: UserRole[];
   age?: number;
   gender?: string;
-  level?: string;
+  level?: Level;
   created_at?: string;
 }
 
@@ -39,7 +41,7 @@ const AdminUsers: React.FC = () => {
     email: '',
     first_name: '',
     last_name: '',
-    role: 'client',
+    roles: [],
     age: undefined,
     gender: undefined,
     level: undefined
@@ -48,20 +50,19 @@ const AdminUsers: React.FC = () => {
     email: '',
     first_name: '',
     last_name: '',
-    role: 'client',
+    roles: [],
     age: undefined,
     gender: undefined,
     level: undefined
   });
 
-  // ✅ Récupérer les utilisateurs depuis Firestore (collection 'users')
   useEffect(() => {
     const fetchUsers = async () => {
       try {
         setLoading(true);
         const querySnapshot = await getDocs(collection(db, 'users'));
         const usersData: User[] = querySnapshot.docs.map(doc => ({
-          uid: doc.id, // ✅ L'ID du document = uid
+          uid: doc.id,
           ...doc.data()
         })) as User[];
         setUsers(usersData);
@@ -76,22 +77,7 @@ const AdminUsers: React.FC = () => {
     fetchUsers();
   }, []);
 
-  // ✅ Ouvrir le dialogue de modification
-  const handleOpenEditDialog = (user: User) => {
-    setSelectedUser(user);
-    setEditForm({
-      email: user.email,
-      first_name: user.first_name,
-      last_name: user.last_name,
-      role: user.role,
-      age: user.age,
-      gender: user.gender,
-      level: user.level
-    });
-    setOpenEditDialog(true);
-  };
-
-  // ✅ Mettre à jour un utilisateur dans Firestore
+  // ✅ Fonction pour mettre à jour un utilisateur
   const handleUpdateUser = async () => {
     if (!selectedUser) return;
     try {
@@ -99,12 +85,11 @@ const AdminUsers: React.FC = () => {
         email: editForm.email,
         first_name: editForm.first_name,
         last_name: editForm.last_name,
-        role: editForm.role,
+        roles: editForm.roles as UserRole[], // ✅ Casting explicite
         age: editForm.age,
         gender: editForm.gender,
         level: editForm.level
       });
-      // ✅ Rafraîchir la liste
       const querySnapshot = await getDocs(collection(db, 'users'));
       setUsers(querySnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as User)));
       setOpenEditDialog(false);
@@ -117,24 +102,10 @@ const AdminUsers: React.FC = () => {
     }
   };
 
-  // ✅ Ouvrir le dialogue de création
-  const handleOpenCreateDialog = () => {
-    setCreateForm({
-      email: '',
-      first_name: '',
-      last_name: '',
-      role: 'client',
-      age: undefined,
-      gender: undefined,
-      level: undefined
-    });
-    setOpenCreateDialog(true);
-  };
-
-  // ✅ Créer un nouvel utilisateur (Firebase Auth + Firestore)
+  // ✅ Fonction pour créer un utilisateur (NOUVELLE)
   const handleCreateUser = async () => {
-    if (!createForm.email || !createForm.first_name || !createForm.last_name) {
-      setSnackbarMessage("Veuillez remplir les champs obligatoires.");
+    if (!createForm.email || !createForm.first_name || !createForm.last_name || createForm.roles.length === 0) {
+      setSnackbarMessage("Veuillez remplir tous les champs obligatoires et sélectionner au moins un rôle.");
       setOpenSnackbar(true);
       return;
     }
@@ -149,13 +120,13 @@ const AdminUsers: React.FC = () => {
       );
       const user = userCredential.user;
 
-      // 2. Ajouter l'utilisateur dans Firestore (collection 'users')
+      // 2. Créer le document dans Firestore
       await addDoc(collection(db, 'users'), {
-        uid: user.uid, // ✅ Stocker l'UID Firebase comme champ
+        uid: user.uid,
         email: createForm.email,
         first_name: createForm.first_name,
         last_name: createForm.last_name,
-        role: createForm.role,
+        roles: createForm.roles as UserRole[], // ✅ Casting explicite
         age: createForm.age,
         gender: createForm.gender,
         level: createForm.level,
@@ -165,7 +136,7 @@ const AdminUsers: React.FC = () => {
       // 3. Envoyer un email de réinitialisation
       await sendPasswordResetEmail(auth, createForm.email);
 
-      // ✅ Rafraîchir la liste
+      // 4. Rafraîchir la liste des utilisateurs
       const querySnapshot = await getDocs(collection(db, 'users'));
       setUsers(querySnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as User)));
 
@@ -183,14 +154,26 @@ const AdminUsers: React.FC = () => {
     }
   };
 
-  // ✅ Supprimer un utilisateur (Firestore uniquement)
+  const handleOpenEditDialog = (user: User) => {
+    setSelectedUser(user);
+    setEditForm({
+      email: user.email,
+      first_name: user.first_name,
+      last_name: user.last_name,
+      roles: user.roles || [],
+      age: user.age,
+      gender: user.gender,
+      level: user.level
+    });
+    setOpenEditDialog(true);
+  };
+
   const handleDeleteUser = async (userId: string) => {
     try {
       await deleteDoc(doc(db, 'users', userId));
-      // ✅ Rafraîchir la liste
       const querySnapshot = await getDocs(collection(db, 'users'));
       setUsers(querySnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as User)));
-      setSnackbarMessage("Utilisateur supprimé de la base de données !");
+      setSnackbarMessage("Utilisateur supprimé avec succès !");
       setOpenSnackbar(true);
     } catch (error) {
       console.error("Erreur :", error);
@@ -213,7 +196,7 @@ const AdminUsers: React.FC = () => {
           <Button
             variant="contained"
             startIcon={<AddIcon />}
-            onClick={handleOpenCreateDialog}
+            onClick={() => setOpenCreateDialog(true)}
           >
             Créer un utilisateur
           </Button>
@@ -226,7 +209,7 @@ const AdminUsers: React.FC = () => {
                 <TableCell>Email</TableCell>
                 <TableCell>Prénom</TableCell>
                 <TableCell>Nom</TableCell>
-                <TableCell>Rôle</TableCell>
+                <TableCell>Rôles</TableCell>
                 <TableCell>Niveau</TableCell>
                 <TableCell>Âge</TableCell>
                 <TableCell>Genre</TableCell>
@@ -239,7 +222,11 @@ const AdminUsers: React.FC = () => {
                   <TableCell>{user.email}</TableCell>
                   <TableCell>{user.first_name}</TableCell>
                   <TableCell>{user.last_name}</TableCell>
-                  <TableCell>{user.role}</TableCell>
+                  <TableCell>
+                    {user.roles.map(role => (
+                      <Chip key={role} label={role} sx={{ mr: 1, mb: 1 }} />
+                    ))}
+                  </TableCell>
                   <TableCell>{user.level || 'N/A'}</TableCell>
                   <TableCell>{user.age || 'N/A'}</TableCell>
                   <TableCell>{user.gender || 'N/A'}</TableCell>
@@ -287,11 +274,25 @@ const AdminUsers: React.FC = () => {
                 fullWidth
               />
               <FormControl fullWidth>
-                <InputLabel>Rôle</InputLabel>
+                <InputLabel>Rôles (multiple possible)</InputLabel>
                 <Select
-                  value={editForm.role}
-                  onChange={(e) => setEditForm({...editForm, role: e.target.value as 'admin' | 'ouvreur' | 'moniteur' | 'client'})}
-                  label="Rôle"
+                  multiple
+                  value={editForm.roles || []}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setEditForm({
+                      ...editForm,
+                      roles: typeof value === 'string' ? [value as UserRole] : (value as UserRole[])
+                    });
+                  }}
+                  label="Rôles"
+                  renderValue={(selected) => (
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                      {(selected as UserRole[]).map(role => (
+                        <Chip key={role} label={role} />
+                      ))}
+                    </Box>
+                  )}
                 >
                   <MenuItem value="admin">Admin</MenuItem>
                   <MenuItem value="ouvreur">Ouvreur</MenuItem>
@@ -302,7 +303,7 @@ const AdminUsers: React.FC = () => {
               <TextField
                 label="Niveau"
                 value={editForm.level || ''}
-                onChange={(e) => setEditForm({...editForm, level: e.target.value})}
+                onChange={(e) => setEditForm({...editForm, level: e.target.value as Level})}
                 fullWidth
               />
               <TextField
@@ -358,11 +359,25 @@ const AdminUsers: React.FC = () => {
                 fullWidth
               />
               <FormControl fullWidth>
-                <InputLabel>Rôle</InputLabel>
+                <InputLabel>Rôles (multiple possible)</InputLabel>
                 <Select
-                  value={createForm.role}
-                  onChange={(e) => setCreateForm({...createForm, role: e.target.value as 'admin' | 'ouvreur' | 'moniteur' | 'client'})}
-                  label="Rôle"
+                  multiple
+                  value={createForm.roles || []}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setCreateForm({
+                      ...createForm,
+                      roles: typeof value === 'string' ? [value as UserRole] : (value as UserRole[])
+                    });
+                  }}
+                  label="Rôles"
+                  renderValue={(selected) => (
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                      {(selected as UserRole[]).map(role => (
+                        <Chip key={role} label={role} />
+                      ))}
+                    </Box>
+                  )}
                 >
                   <MenuItem value="admin">Admin</MenuItem>
                   <MenuItem value="ouvreur">Ouvreur</MenuItem>
@@ -373,7 +388,7 @@ const AdminUsers: React.FC = () => {
               <TextField
                 label="Niveau"
                 value={createForm.level || ''}
-                onChange={(e) => setCreateForm({...createForm, level: e.target.value})}
+                onChange={(e) => setCreateForm({...createForm, level: e.target.value as Level})}
                 fullWidth
               />
               <TextField
@@ -399,13 +414,12 @@ const AdminUsers: React.FC = () => {
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setOpenCreateDialog(false)}>Annuler</Button>
-            <Button onClick={handleCreateUser} color="primary">
+            <Button onClick={handleCreateUser} color="primary">  {/* ✅ Appel à handleCreateUser */}
               Créer
             </Button>
           </DialogActions>
         </Dialog>
 
-        {/* Snackbar pour les notifications */}
         <Snackbar
           open={openSnackbar}
           autoHideDuration={6000}

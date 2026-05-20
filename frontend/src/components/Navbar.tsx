@@ -15,16 +15,18 @@ type UserRole = 'admin' | 'ouvreur' | 'moniteur' | 'client';
 
 const Navbar: React.FC = () => {
   const [user, loadingAuth] = useAuthState(auth);
-  const [userRole, setUserRole] = useState<UserRole | null>(null);
+  const [userRoles, setUserRoles] = useState<UserRole[]>([]); // ✅ Tableau de rôles
   const [loadingRole, setLoadingRole] = useState(true);
 
   useEffect(() => {
     if (user) {
-      const fetchUserRole = async () => {
+      const fetchUserRoles = async () => {
         try {
           const userDoc = await getDoc(doc(db, 'users', user.uid));
           if (userDoc.exists()) {
-            setUserRole(userDoc.data().role);
+            // ✅ Récupérer le tableau de rôles (ou convertir l'ancien rôle en tableau)
+            const roles = userDoc.data().roles || (userDoc.data().role ? [userDoc.data().role] : []);
+            setUserRoles(roles);
           }
         } catch (error) {
           console.error("Erreur :", error);
@@ -32,61 +34,16 @@ const Navbar: React.FC = () => {
           setLoadingRole(false);
         }
       };
-      fetchUserRole();
+      fetchUserRoles();
     } else {
-      setUserRole(null);
+      setUserRoles([]);
       setLoadingRole(false);
     }
   }, [user]);
 
-  const renderRoleButtons = () => {
-    if (loadingAuth || loadingRole) {
-      return null;
-    }
-
-    switch (userRole) {
-      case 'admin':
-        return (
-          <>
-            <Button color="inherit" component={Link} to="/admin">
-              ADMIN
-            </Button>
-            <Button color="inherit" component={Link} to="/admin/users">
-              GÉRER LES UTILISATEURS
-            </Button>
-            <Button color="inherit" component={Link} to="/admin/competitions/create">
-              CRÉER/GÉRER LES COMPÉTITIONS
-            </Button>
-            <Button color="inherit" component={Link} to="/admin/competitions/list">
-              GÉRER LES INSCRIPTIONS
-            </Button>
-            <Button color="inherit" component={Link} to="/admin/competitions/stats">
-              STATISTIQUES DES COMPÉTITIONS
-            </Button>
-          </>
-        );
-      case 'ouvreur':
-        return (
-          <Button color="inherit" component={Link} to="/ouvreur">
-            OUVREUR
-          </Button>
-        );
-      case 'moniteur':
-        return (
-          <Button color="inherit" component={Link} to="/moniteur">
-            MONITEUR
-          </Button>
-        );
-      case 'client':
-        return (
-          <Button color="inherit" component={Link} to="/client">
-            MON ESPACE
-          </Button>
-        );
-      default:
-        return null;
-    }
-  };
+  if (loadingAuth || loadingRole) {
+    return null;
+  }
 
   return (
     <AppBar position="static">
@@ -95,7 +52,48 @@ const Navbar: React.FC = () => {
           BLOCABRAC
         </Typography>
         <Box sx={{ display: 'flex', gap: 2 }}>
-          {!loadingAuth && user && renderRoleButtons()}
+          {!loadingAuth && user && (
+            <>
+              {/* ✅ Boutons pour chaque rôle de l'utilisateur */}
+              {userRoles.includes('admin') && (
+                <>
+                  <Button color="inherit" component={Link} to="/admin">
+                    ADMIN
+                  </Button>
+                  <Button color="inherit" component={Link} to="/admin/users">
+                    GÉRER LES UTILISATEURS
+                  </Button>
+                  <Button color="inherit" component={Link} to="/admin/competitions/create">
+                    CRÉER/GÉRER LES COMPÉTITIONS
+                  </Button>
+                  <Button color="inherit" component={Link} to="/admin/competitions/list">
+                    GÉRER LES INSCRIPTIONS
+                  </Button>
+                  <Button color="inherit" component={Link} to="/admin/competitions/stats">
+                    STATISTIQUES
+                  </Button>
+                </>
+              )}
+              {userRoles.includes('ouvreur') && (
+                <Button color="inherit" component={Link} to="/ouvreur">
+                  OUVREUR
+                </Button>
+              )}
+              {userRoles.includes('moniteur') && (
+                <Button color="inherit" component={Link} to="/moniteur">
+                  MONITEUR
+                </Button>
+              )}
+              {userRoles.includes('client') && (
+                <Button color="inherit" component={Link} to="/client">
+                  MON ESPACE
+                </Button>
+              )}
+              <Button color="inherit" onClick={() => auth.signOut()}>
+                DÉCONNEXION
+              </Button>
+            </>
+          )}
           {!loadingAuth && !user && (
             <>
               <Button color="inherit" component={Link} to="/login">
@@ -105,11 +103,6 @@ const Navbar: React.FC = () => {
                 INSCRIPTION
               </Button>
             </>
-          )}
-          {!loadingAuth && user && (
-            <Button color="inherit" onClick={() => auth.signOut()}>
-              DÉCONNEXION
-            </Button>
           )}
         </Box>
       </Toolbar>

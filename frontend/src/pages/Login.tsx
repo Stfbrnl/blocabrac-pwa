@@ -1,8 +1,15 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../services/firebaseConfig';
-import { TextField, Button, Box, Typography, Container, Alert } from '@mui/material';
+import { signInWithEmailAndPassword } from 'firebase/auth'; // ✅ Utiliser signInWithEmailAndPassword
+import { auth } from '../services/firebaseConfig'; // ✅ Importer auth depuis firebaseConfig
+import {
+  TextField,
+  Button,
+  Box,
+  Typography,
+  Container,
+  Alert
+} from '@mui/material';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -13,52 +20,86 @@ export default function Login() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      // ✅ Utiliser signInWithEmailAndPassword (Firebase Auth)
       await signInWithEmailAndPassword(auth, email, password);
+
+      // Redirection vers la page d'accueil après connexion réussie
       navigate('/');
     } catch (err: any) {
-      setError(err.message);
+      let errorMessage = 'Email ou mot de passe incorrect.';
+
+      // ✅ Gestion des erreurs spécifiques Firebase Auth
+      if (err.code === 'auth/user-not-found') {
+        errorMessage = 'Aucun compte trouvé avec cet email.';
+      } else if (err.code === 'auth/wrong-password') {
+        errorMessage = 'Mot de passe incorrect.';
+      } else if (err.code === 'auth/invalid-credential') {
+        errorMessage = 'Email ou mot de passe incorrect.';
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+
+      setError(errorMessage);
     }
   };
 
   return (
     <Container maxWidth="sm">
-      <Box sx={{ mt: 8, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        {/* Correction ici : ajout de component="h1" et sx pour textAlign */}
-        <Typography component="h1" variant="h5" sx={{ mb: 4, textAlign: 'center' }}>
-          Connexion à BLOCABRAC
+      <Box sx={{
+        mt: 8,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center'
+      }}>
+        <Typography component="h1" variant="h5">
+          Connexion
         </Typography>
-        {error && <Alert severity="error" sx={{ mb: 2, width: '100%' }}>{error}</Alert>}
-        <Box component="form" onSubmit={handleLogin} sx={{ mt: 1, width: '100%' }}>
+
+        {error && (
+          <Alert severity="error" sx={{ mt: 2, width: '100%' }}>
+            {error}
+          </Alert>
+        )}
+
+        <Box
+          component="form"
+          onSubmit={handleLogin}
+          sx={{ mt: 1, width: '100%' }}
+        >
           <TextField
             margin="normal"
             required
             fullWidth
-            label="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            id="email"
+            label="Adresse Email"
+            name="email"
             autoComplete="email"
             autoFocus
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
           />
+
           <TextField
             margin="normal"
             required
             fullWidth
+            name="password"
             label="Mot de passe"
             type="password"
+            id="password"
+            autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            autoComplete="current-password"
           />
-          <Button type="submit" fullWidth variant="contained" sx={{ mt: 3, mb: 2 }}>
+
+          <Button
+            type="submit"
+            fullWidth
+            variant="contained"
+            sx={{ mt: 3, mb: 2 }}
+          >
             Se connecter
           </Button>
-          {/* Correction ici : sx pour textAlign */}
-          <Typography sx={{ textAlign: 'center' }}>
-            Pas encore de compte ?{' '}
-            <Button onClick={() => navigate('/register')} sx={{ textTransform: 'none' }}>
-              S'inscrire
-            </Button>
-          </Typography>
         </Box>
       </Box>
     </Container>
