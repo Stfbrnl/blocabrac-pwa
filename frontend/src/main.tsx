@@ -6,6 +6,7 @@ import { AuthProvider } from './context/AuthContext';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import ForgotPassword from './pages/ForgotPassword'; // ✅ Ajout de l'import
 import Ouvreur from './pages/Ouvreur';
 import Client from './pages/Client';
 import Moniteur from './pages/Moniteur';
@@ -31,6 +32,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             <Route path="/" element={<Home />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            {/* ✅ NOUVELLE ROUTE : Récupération du mot de passe (PUBLIQUE) */}
+            <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/client" element={<ProtectedRoute role="client"><Client /></ProtectedRoute>} />
             <Route path="/ouvreur" element={<ProtectedRoute role="ouvreur"><Ouvreur /></ProtectedRoute>} />
             <Route path="/moniteur" element={<ProtectedRoute role="moniteur"><Moniteur /></ProtectedRoute>} />

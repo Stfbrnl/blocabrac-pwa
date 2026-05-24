@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { signInWithEmailAndPassword } from 'firebase/auth'; // ✅ Utiliser signInWithEmailAndPassword
-import { auth } from '../services/firebaseConfig'; // ✅ Importer auth depuis firebaseConfig
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '../services/firebaseConfig';
 import {
   TextField,
   Button,
@@ -20,15 +20,10 @@ export default function Login() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      // ✅ Utiliser signInWithEmailAndPassword (Firebase Auth)
       await signInWithEmailAndPassword(auth, email, password);
-
-      // Redirection vers la page d'accueil après connexion réussie
       navigate('/');
     } catch (err: any) {
       let errorMessage = 'Email ou mot de passe incorrect.';
-
-      // ✅ Gestion des erreurs spécifiques Firebase Auth
       if (err.code === 'auth/user-not-found') {
         errorMessage = 'Aucun compte trouvé avec cet email.';
       } else if (err.code === 'auth/wrong-password') {
@@ -38,7 +33,6 @@ export default function Login() {
       } else if (err.message) {
         errorMessage = err.message;
       }
-
       setError(errorMessage);
     }
   };
@@ -91,6 +85,14 @@ export default function Login() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
+
+          {/* ✅ Lien pour la récupération du mot de passe */}
+          <Button
+            onClick={() => navigate('/forgot-password')}
+            sx={{ textTransform: 'none', textAlign: 'right', width: '100%', mt: 1 }}
+          >
+            Mot de passe oublié ?
+          </Button>
 
           <Button
             type="submit"
