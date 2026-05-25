@@ -3,26 +3,25 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   TextField, Button, MenuItem, Select, InputLabel, FormControl, Box,
   Typography, Container, Paper, IconButton, Stack, Dialog, DialogTitle,
-  DialogContent, DialogActions, Chip
+  DialogContent, DialogActions, Chip, CircularProgress
 } from '@mui/material';
-import Grid from '@mui/material/Grid';
 import { Delete as DeleteIcon, Check as CheckIcon } from '@mui/icons-material';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import {
   addDoc, collection, doc, updateDoc, query, where, getDocs
 } from 'firebase/firestore';
-import { db, storage } from '../../../services/firebaseConfig';
+import { db } from '../../../services/firebaseConfig';
 
-// ✅ Types explicites
-interface Hold {
+interface RelativeHold {
   x: number;
   y: number;
 }
 
 interface BoulderAnnotations {
-  start_holds: Hold[];
-  end_holds: Hold[];
+  start_holds: RelativeHold[];
+  end_holds: RelativeHold[];
 }
+
+type DifficultyLevel = 'Plus' | 'Égal' | 'Moins';
 
 interface Boulder {
   id: string;
@@ -30,11 +29,12 @@ interface Boulder {
   color?: string;
   difficulty_types?: string[];
   instructions?: string;
-  image_url?: string;
+  image_base64?: string;
   annotations?: BoulderAnnotations;
   wall: string;
   type: string;
   is_active?: boolean;
+  difficulty_level?: DifficultyLevel;
 }
 
 const walls: string[] = [
@@ -43,6 +43,7 @@ const walls: string[] = [
 ];
 
 const difficultyTypes: string[] = ['technique', 'équilibre', 'force', 'engagement'];
+const difficultyLevels: DifficultyLevel[] = ['Plus', 'Égal', 'Moins'];
 
 interface ColorRating {
   value: string;
@@ -60,11 +61,48 @@ const colorRatings: ColorRating[] = [
   { value: 'rose', label: 'Rose (7B+-8A)' }
 ];
 
-// ✅ Type pour le state des annotations (toujours défini)
-interface FormAnnotations {
-  start_holds: Hold[];
-  end_holds: Hold[];
-}
+// Fonction utilitaire pour redimensionner une image
+const resizeAndCompressImage = (file: File, maxWidth: number = 800, quality: number = 0.7): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      img.src = e.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Impossible de créer le contexte 2D'));
+        return;
+      }
+
+      const ratio = maxWidth / img.width;
+      canvas.width = maxWidth;
+      canvas.height = Math.round(img.height * ratio);
+
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            reject(new Error('Impossible de créer le blob'));
+            return;
+          }
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        },
+        'image/jpeg',
+        quality
+      );
+    };
+    img.onerror = reject;
+  });
+};
 
 export default function DailyBoulderForm(): JSX.Element {
   const { wall } = useParams<{ wall: string }>();
@@ -77,23 +115,26 @@ export default function DailyBoulderForm(): JSX.Element {
     difficulty_types: string[];
     instructions: string;
     imageFile: File | null;
-    imageUrl: string;
-    annotations: FormAnnotations; // ✅ Toujours défini
+    imagePreview: string;
+    annotations: BoulderAnnotations;
+    difficulty_level: DifficultyLevel;
   }>({
     number: '',
     color: '',
     difficulty_types: [],
     instructions: '',
     imageFile: null,
-    imageUrl: '',
+    imagePreview: '',
     annotations: {
       start_holds: [],
       end_holds: []
-    }
+    },
+    difficulty_level: 'Égal'
   });
   const [currentMode, setCurrentMode] = useState<'start' | 'end'>('start');
   const [openDeleteDialog, setOpenDeleteDialog] = useState<boolean>(false);
   const [boulderToDelete, setBoulderToDelete] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState<boolean>(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
 
@@ -115,7 +156,6 @@ export default function DailyBoulderForm(): JSX.Element {
     fetchBoulders();
   }, [wall]);
 
-  // ✅ Correction : Conversion explicite des annotations optionnelles en annotations obligatoires
   const handleEdit = (boulder: Boulder): void => {
     setEditingBoulder(boulder);
     setFormData({
@@ -123,60 +163,66 @@ export default function DailyBoulderForm(): JSX.Element {
       color: boulder.color || '',
       difficulty_types: boulder.difficulty_types || [],
       instructions: boulder.instructions || '',
-      imageUrl: boulder.image_url || '',
       imageFile: null,
+      imagePreview: boulder.image_base64 || '',
       annotations: {
         start_holds: boulder.annotations?.start_holds || [],
         end_holds: boulder.annotations?.end_holds || []
-      } // ✅ Garantit que start_holds et end_holds sont toujours des tableaux
+      },
+      difficulty_level: boulder.difficulty_level || 'Égal'
     });
   };
 
   useEffect(() => {
     const canvas: HTMLCanvasElement | null = canvasRef.current;
     const img: HTMLImageElement | null = imageRef.current;
-    if (!canvas || !img || !formData.imageUrl) return;
+    if (!canvas || !img || !formData.imagePreview) return;
 
     const ctx: CanvasRenderingContext2D | null = canvas.getContext('2d');
     if (!ctx) return;
 
-    img.onload = (): void => {
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
-      drawImageAndAnnotations();
-    };
-    img.src = formData.imageUrl;
-
     const drawImageAndAnnotations = (): void => {
-      if (!img.complete) return;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0);
+      if (img.complete) {
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      }
 
       ctx.fillStyle = 'rgba(255, 255, 0, 0.5)';
-      formData.annotations.start_holds.forEach((hold: Hold): void => {
+      formData.annotations.start_holds.forEach((hold: RelativeHold): void => {
         ctx.beginPath();
-        ctx.arc(hold.x, hold.y, 15, 0, 2 * Math.PI);
+        ctx.arc(hold.x * canvas.width, hold.y * canvas.height, 15, 0, 2 * Math.PI);
         ctx.fill();
       });
 
       ctx.fillStyle = 'rgba(0, 255, 0, 0.5)';
-      formData.annotations.end_holds.forEach((hold: Hold): void => {
+      formData.annotations.end_holds.forEach((hold: RelativeHold): void => {
         ctx.beginPath();
-        ctx.arc(hold.x, hold.y, 15, 0, 2 * Math.PI);
+        ctx.arc(hold.x * canvas.width, hold.y * canvas.height, 15, 0, 2 * Math.PI);
         ctx.fill();
       });
     };
 
-    drawImageAndAnnotations();
-  }, [formData.imageUrl, formData.annotations]);
+    if (img.complete && formData.imagePreview) {
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      drawImageAndAnnotations();
+    } else if (formData.imagePreview) {
+      img.onload = (): void => {
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        drawImageAndAnnotations();
+      };
+      img.src = formData.imagePreview;
+    }
+  }, [formData.imagePreview, formData.annotations]);
 
   const handleCanvasClick = (e: MouseEvent<HTMLCanvasElement>): void => {
     const canvas: HTMLCanvasElement | null = canvasRef.current;
-    if (!canvas || !imageRef.current) return;
+    if (!canvas) return;
 
     const rect: DOMRect = canvas.getBoundingClientRect();
-    const x: number = e.clientX - rect.left;
-    const y: number = e.clientY - rect.top;
+    const x: number = (e.clientX - rect.left) / rect.width;
+    const y: number = (e.clientY - rect.top) / rect.height;
 
     setFormData({
       ...formData,
@@ -192,19 +238,19 @@ export default function DailyBoulderForm(): JSX.Element {
     const file: File | undefined = e.target.files?.[0];
     if (!file) return;
 
-    const reader: FileReader = new FileReader();
-    reader.onload = (event: ProgressEvent<FileReader>): void => {
-      const result = event.target?.result;
-      if (typeof result === 'string') {
+    resizeAndCompressImage(file, 800, 0.7)
+      .then((resizedImageBase64: string) => {
         setFormData({
           ...formData,
           imageFile: file,
-          imageUrl: result,
+          imagePreview: resizedImageBase64,
           annotations: { start_holds: [], end_holds: [] }
         });
-      }
-    };
-    reader.readAsDataURL(file);
+      })
+      .catch((error: unknown) => {
+        console.error('Erreur lors du redimensionnement :', error);
+        alert('Impossible de traiter l\'image. Veuillez essayer une autre image.');
+      });
   };
 
   const handleDeleteAnnotation = (type: 'start_holds' | 'end_holds', index: number): void => {
@@ -215,31 +261,72 @@ export default function DailyBoulderForm(): JSX.Element {
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
-    if (!wall || !formData.number || !formData.color || !formData.imageFile) {
-      alert('Veuillez remplir tous les champs obligatoires (numéro, cotation, image).');
+    if (!wall) {
+      alert('Erreur : mur non sélectionné.');
       return;
     }
-
+    if (!formData.number) {
+      alert('Veuillez saisir un numéro de bloc.');
+      return;
+    }
+    if (!formData.color) {
+      alert('Veuillez sélectionner une cotation.');
+      return;
+    }
+    if (!formData.imagePreview) {
+      alert('Veuillez uploader une image.');
+      return;
+    }
     if (formData.annotations.start_holds.length < 2 || formData.annotations.end_holds.length < 2) {
       alert('Veuillez placer au moins 2 cercles jaunes (départ) et 2 cercles verts (fin).');
       return;
     }
 
     try {
-      let annotatedImageUrl: string = formData.imageUrl;
+      setIsUploading(true);
+
+      let annotatedImageBase64: string = formData.imagePreview;
       if (formData.imageFile) {
         const canvas: HTMLCanvasElement | null = canvasRef.current;
         if (canvas) {
-          const annotatedImageBlob: Blob | null = await new Promise<Blob | null>((resolve) => {
-            canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.9);
+          const img = new Image();
+          img.src = formData.imagePreview;
+          await new Promise<void>((resolve) => {
+            img.onload = () => {
+              canvas.width = img.width;
+              canvas.height = img.height;
+              const ctx = canvas.getContext('2d');
+              if (ctx) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+                ctx.fillStyle = 'rgba(255, 255, 0, 0.5)';
+                formData.annotations.start_holds.forEach((hold: RelativeHold): void => {
+                  ctx.beginPath();
+                  ctx.arc(hold.x * canvas.width, hold.y * canvas.height, 15, 0, 2 * Math.PI);
+                  ctx.fill();
+                });
+
+                ctx.fillStyle = 'rgba(0, 255, 0, 0.5)';
+                formData.annotations.end_holds.forEach((hold: RelativeHold): void => {
+                  ctx.beginPath();
+                  ctx.arc(hold.x * canvas.width, hold.y * canvas.height, 15, 0, 2 * Math.PI);
+                  ctx.fill();
+                });
+                resolve();
+              }
+            };
           });
 
-          if (annotatedImageBlob) {
-            const storageRef = ref(storage, `boulders/annotated/${Date.now()}_${formData.imageFile.name}`);
-            await uploadBytes(storageRef, annotatedImageBlob);
-            annotatedImageUrl = await getDownloadURL(storageRef);
-          }
+          annotatedImageBase64 = canvas.toDataURL('image/jpeg', 0.7);
         }
+      }
+
+      const base64Data = annotatedImageBase64.split(',')[1];
+      if (base64Data && atob(base64Data).length > 900000) {
+        alert('L\'image est trop grande (max ~1 Mo). Veuillez choisir une image plus petite ou la recadrer.');
+        setIsUploading(false);
+        return;
       }
 
       const boulderData = {
@@ -248,13 +335,14 @@ export default function DailyBoulderForm(): JSX.Element {
         color: formData.color,
         difficulty_types: formData.difficulty_types,
         instructions: formData.instructions,
-        image_url: annotatedImageUrl,
+        image_base64: annotatedImageBase64,
         annotations: formData.annotations,
         type: 'daily',
         competition_id: null,
         is_active: true,
         created_at: new Date().toISOString(),
-        created_by: 'ouvreur_uid'
+        created_by: 'ouvreur_uid',
+        difficulty_level: formData.difficulty_level
       };
 
       if (editingBoulder) {
@@ -269,8 +357,9 @@ export default function DailyBoulderForm(): JSX.Element {
         difficulty_types: [],
         instructions: '',
         imageFile: null,
-        imageUrl: '',
-        annotations: { start_holds: [], end_holds: [] }
+        imagePreview: '',
+        annotations: { start_holds: [], end_holds: [] },
+        difficulty_level: 'Égal'
       });
       setEditingBoulder(null);
 
@@ -288,7 +377,9 @@ export default function DailyBoulderForm(): JSX.Element {
 
     } catch (error: unknown) {
       console.error('Erreur lors de la sauvegarde :', error);
-      alert('Une erreur est survenue lors de la sauvegarde.');
+      alert(`Une erreur est survenue : ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -327,8 +418,9 @@ export default function DailyBoulderForm(): JSX.Element {
               onChange={(e: ChangeEvent<HTMLInputElement>): void => setFormData({ ...formData, number: e.target.value })}
               fullWidth
               required
+              disabled={isUploading}
             />
-            <FormControl fullWidth>
+            <FormControl fullWidth disabled={isUploading}>
               <InputLabel>Cotation</InputLabel>
               <Select
                 value={formData.color}
@@ -342,7 +434,25 @@ export default function DailyBoulderForm(): JSX.Element {
             </FormControl>
           </Box>
 
-          <FormControl fullWidth margin="normal">
+          <FormControl fullWidth margin="normal" disabled={isUploading}>
+            <InputLabel>Difficulté dans le niveau</InputLabel>
+            <Select
+              value={formData.difficulty_level}
+              onChange={(e: any): void => setFormData({ ...formData, difficulty_level: e.target.value as DifficultyLevel })}
+              label="Difficulté dans le niveau"
+            >
+              {difficultyLevels.map((level: DifficultyLevel) => (
+                <MenuItem key={level} value={level}>
+                  {formData.color ? `${formData.color} ${level}` : level}
+                </MenuItem>
+              ))}
+            </Select>
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
+              Exemple: "Rouge Plus" pour un bloc plus difficile que la moyenne du niveau Rouge.
+            </Typography>
+          </FormControl>
+
+          <FormControl fullWidth margin="normal" disabled={isUploading}>
             <InputLabel>Types de difficulté (multiple)</InputLabel>
             <Select
               multiple
@@ -367,6 +477,7 @@ export default function DailyBoulderForm(): JSX.Element {
             onChange={(e: ChangeEvent<HTMLInputElement>): void => setFormData({ ...formData, instructions: e.target.value })}
             margin="normal"
             fullWidth
+            disabled={isUploading}
           />
 
           <input
@@ -374,13 +485,14 @@ export default function DailyBoulderForm(): JSX.Element {
             accept="image/*"
             onChange={handleImageUpload}
             style={{ marginBottom: '16px' }}
+            disabled={isUploading}
           />
 
-          {formData.imageUrl && (
+          {formData.imagePreview && (
             <Box sx={{ position: 'relative', mb: 2 }}>
               <img
                 ref={imageRef}
-                src={formData.imageUrl}
+                src={formData.imagePreview}
                 alt="Bloc"
                 style={{ maxWidth: '100%', display: 'block', border: '1px solid #ddd' }}
               />
@@ -401,6 +513,7 @@ export default function DailyBoulderForm(): JSX.Element {
                   variant={currentMode === 'start' ? 'contained' : 'outlined'}
                   onClick={(): void => setCurrentMode('start')}
                   startIcon={<CheckIcon />}
+                  disabled={isUploading}
                 >
                   Départ (Jaune)
                 </Button>
@@ -408,6 +521,7 @@ export default function DailyBoulderForm(): JSX.Element {
                   variant={currentMode === 'end' ? 'contained' : 'outlined'}
                   onClick={(): void => setCurrentMode('end')}
                   startIcon={<CheckIcon />}
+                  disabled={isUploading}
                 >
                   Fin (Vert)
                 </Button>
@@ -415,7 +529,7 @@ export default function DailyBoulderForm(): JSX.Element {
               <Box sx={{ mt: 1 }}>
                 <Typography variant="subtitle2">Annotations :</Typography>
                 <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1 }}>
-                  {formData.annotations.start_holds.map((hold: Hold, index: number) => (
+                  {formData.annotations.start_holds.map((hold: RelativeHold, index: number) => (
                     <Box key={`start-${index}`} sx={{ position: 'relative', display: 'inline-flex' }}>
                       <Box
                         sx={{
@@ -430,12 +544,13 @@ export default function DailyBoulderForm(): JSX.Element {
                         size="small"
                         onClick={(): void => handleDeleteAnnotation('start_holds', index)}
                         sx={{ position: 'absolute', top: -8, right: -8, backgroundColor: 'white' }}
+                        disabled={isUploading}
                       >
                         <DeleteIcon fontSize="small" color="error" />
                       </IconButton>
                     </Box>
                   ))}
-                  {formData.annotations.end_holds.map((hold: Hold, index: number) => (
+                  {formData.annotations.end_holds.map((hold: RelativeHold, index: number) => (
                     <Box key={`end-${index}`} sx={{ position: 'relative', display: 'inline-flex' }}>
                       <Box
                         sx={{
@@ -450,6 +565,7 @@ export default function DailyBoulderForm(): JSX.Element {
                         size="small"
                         onClick={(): void => handleDeleteAnnotation('end_holds', index)}
                         sx={{ position: 'absolute', top: -8, right: -8, backgroundColor: 'white' }}
+                        disabled={isUploading}
                       >
                         <DeleteIcon fontSize="small" color="error" />
                       </IconButton>
@@ -475,8 +591,10 @@ export default function DailyBoulderForm(): JSX.Element {
               type="submit"
               variant="contained"
               color="primary"
+              disabled={isUploading}
+              startIcon={isUploading ? <CircularProgress size={20} /> : null}
             >
-              {editingBoulder ? 'Modifier le bloc' : 'Créer le bloc'}
+              {isUploading ? 'Chargement...' : editingBoulder ? 'Modifier le bloc' : 'Créer le bloc'}
             </Button>
             {editingBoulder && (
               <Button
@@ -490,10 +608,12 @@ export default function DailyBoulderForm(): JSX.Element {
                     difficulty_types: [],
                     instructions: '',
                     imageFile: null,
-                    imageUrl: '',
-                    annotations: { start_holds: [], end_holds: [] }
+                    imagePreview: '',
+                    annotations: { start_holds: [], end_holds: [] },
+                    difficulty_level: 'Égal'
                   });
                 }}
+                disabled={isUploading}
               >
                 Annuler
               </Button>
@@ -504,12 +624,18 @@ export default function DailyBoulderForm(): JSX.Element {
         <Typography variant="h6" sx={{ mt: 4, mb: 2 }}>
           Blocs existants pour {wall}
         </Typography>
-        {/* ✅ Correction Grid : Utilisation de la syntaxe MUI v5+ avec sx */}
         <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 2 }}>
           {boulders.map((boulder: Boulder) => (
             <Paper key={boulder.id} sx={{ p: 2 }}>
               <Typography variant="subtitle1">
                 Bloc n°{boulder.number || '?'} - {boulder.color || 'Non spécifiée'}
+                {boulder.difficulty_level && (
+                  <Chip
+                    label={`${boulder.color} ${boulder.difficulty_level}`}
+                    size="small"
+                    sx={{ ml: 1, backgroundColor: 'action.selected' }}
+                  />
+                )}
               </Typography>
               <Typography variant="body2">
                 Types: {(boulder.difficulty_types || []).join(', ')}
@@ -519,9 +645,9 @@ export default function DailyBoulderForm(): JSX.Element {
                   {boulder.instructions}
                 </Typography>
               )}
-              {boulder.image_url && (
+              {boulder.image_base64 && (
                 <img
-                  src={boulder.image_url}
+                  src={boulder.image_base64}
                   alt={`Bloc ${boulder.number || '?'}`}
                   style={{ width: '100%', marginTop: '8px', border: '1px solid #ddd' }}
                 />
@@ -556,8 +682,8 @@ export default function DailyBoulderForm(): JSX.Element {
             Êtes-vous sûr de vouloir supprimer ce bloc ? Il sera marqué comme inactif mais ne sera plus visible.
           </DialogContent>
           <DialogActions>
-            <Button onClick={(): void => setOpenDeleteDialog(false)}>Annuler</Button>
-            <Button onClick={confirmDelete} color="error">
+            <Button onClick={(): void => setOpenDeleteDialog(false)} disabled={isUploading}>Annuler</Button>
+            <Button onClick={confirmDelete} color="error" disabled={isUploading}>
               Supprimer
             </Button>
           </DialogActions>

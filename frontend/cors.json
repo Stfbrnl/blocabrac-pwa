@@ -1,0 +1,19 @@
+[
+  {
+    "origin": ["https://fictional-space-pancake-vpv99x5q4g49f64wg-5173.app.github.dev"],
+    "method": ["GET", "HEAD", "DELETE", "PUT", "POST", "OPTIONS"],
+    "responseHeader": ["Content-Type", "Authorization"],
+    "maxAgeSeconds": 3600
+  },
+  {
+    "origin": ["http://localhost:5173"],
+    "method": ["GET", "HEAD", "DELETE", "PUT", "POST", "OPTIONS"],
+    "responseHeader": ["Content-Type", "Authorization"],
+    "maxAgeSeconds": 3600
+  },
+  {
+    "origin": ["*"],
+    "method": ["GET"],
+    "maxAgeSeconds": 3600
+  }
+]

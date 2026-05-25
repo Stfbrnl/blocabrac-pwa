@@ -27,7 +27,6 @@ export default function ReportsList(): JSX.Element {
   const [reports, setReports] = useState<Report[]>([]);
   const [filterType, setFilterType] = useState<ReportType | 'all'>('all');
 
-  // ✅ Charger les signalements
   useEffect(() => {
     const q = query(collection(db, 'boulder_reports'), where('status', '!=', 'ignored'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -39,7 +38,6 @@ export default function ReportsList(): JSX.Element {
     return () => unsubscribe();
   }, []);
 
-  // ✅ Marquer un signalement comme résolu
   const handleMarkAsResolved = async (reportId: string): Promise<void> => {
     try {
       await updateDoc(doc(db, 'boulder_reports', reportId), { status: 'resolved' });
@@ -48,12 +46,10 @@ export default function ReportsList(): JSX.Element {
     }
   };
 
-  // ✅ Filtrer les signalements par type
   const filteredReports = filterType === 'all'
     ? reports
     : reports.filter(report => report.report_type === filterType);
 
-  // ✅ Couleurs pour les types de signalements
   const getReportTypeColor = (type: ReportType): 'error' | 'warning' | 'info' | 'default' => {
     switch (type) {
       case 'défaillance_prisede': return 'error';
@@ -63,7 +59,6 @@ export default function ReportsList(): JSX.Element {
     }
   };
 
-  // ✅ Couleurs pour les statuts
   const getStatusColor = (status: string): 'warning' | 'success' | 'default' => {
     switch (status) {
       case 'pending': return 'warning';

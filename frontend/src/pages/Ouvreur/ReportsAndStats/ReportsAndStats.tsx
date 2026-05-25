@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Box, Paper, Tabs, Tab, Container, Typography } from '@mui/material';
-import ReportsList from './ReportsList'; // ✅ Chemin relatif (vérifiez la casse !)
-import BoulderStats from './BoulderStats'; // ✅ Chemin relatif (vérifiez la casse !)
+import ReportsList from './ReportsList';
+import BoulderStats from './BoulderStats';
 
 export default function ReportsAndStats(): JSX.Element {
   const [activeTab, setActiveTab] = useState<number>(0);

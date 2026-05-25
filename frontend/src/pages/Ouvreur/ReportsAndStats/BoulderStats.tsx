@@ -11,12 +11,13 @@ import {
   ResponsiveContainer
 } from 'recharts';
 
-// ✅ Interface pour les blocs (avec champs optionnels)
 interface Boulder {
   id: string;
   number?: number;
   wall?: string;
-  [key: string]: any; // Pour les autres champs dynamiques
+  image_data?: ArrayBuffer;
+  image_type?: string;
+  [key: string]: any;
 }
 
 const walls: string[] = [
@@ -43,20 +44,17 @@ export default function BoulderStats(): JSX.Element {
     const fetchStats = async (): Promise<void> => {
       setLoading(true);
       try {
-        // 1. Charger les blocs pour le mur sélectionné
         const bouldersQuery = query(
           collection(db, 'boulders'),
           where('wall', '==', selectedWall),
           where('is_active', '==', true)
         );
         const bouldersSnapshot = await getDocs(bouldersQuery);
-        // ✅ Typage explicite des blocs
         const boulders: Boulder[] = bouldersSnapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         })) as Boulder[];
 
-        // 2. Pour chaque bloc, calculer la moyenne des notes
         const statsData: StatsData[] = [];
         for (const boulder of boulders) {
           const ratingsQuery = query(
@@ -66,7 +64,6 @@ export default function BoulderStats(): JSX.Element {
           const ratingsSnapshot = await getDocs(ratingsQuery);
           const ratings: number[] = ratingsSnapshot.docs.map((doc: DocumentData) => doc.data().rating);
 
-          // ✅ Utilisation de valeurs par défaut pour number et wall
           const boulderNumber: number = boulder.number || 0;
           const boulderWall: string = boulder.wall || 'Inconnu';
 
@@ -101,17 +98,21 @@ export default function BoulderStats(): JSX.Element {
     fetchStats();
   }, [selectedWall]);
 
-  // ✅ Préparer les données pour le graphique
   const chartData = stats.map((s: StatsData) => ({
     name: `Bloc ${s.boulderNumber}`,
     'Note moyenne': s.averageRating,
     'Nombre de notes': s.ratingCount
   }));
 
-  // ✅ Calculer la moyenne générale du mur
   const wallAverage: number = stats.length > 0
     ? stats.reduce((sum: number, s: StatsData) => sum + s.averageRating, 0) / stats.length
     : 0;
+
+  const getImageUrlFromBinary = (boulder: Boulder): string => {
+    if (!boulder.image_data || !boulder.image_type) return '';
+    const blob = new Blob([boulder.image_data], { type: boulder.image_type });
+    return URL.createObjectURL(blob);
+  };
 
   return (
     <Box sx={{ mt: 2 }}>

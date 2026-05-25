@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Typography, Paper, Container, Button } from '@mui/material';
+import { Box } from '@mui/material';
 
 const walls: string[] = [
   'Caverne des petits', 'Réta d\'initiation', 'Réta Adultes', 'Grande Face',
@@ -16,7 +17,6 @@ export default function DailyBouldersList(): JSX.Element {
         <Typography variant="h5" gutterBottom>
           Sélectionnez un mur pour gérer les blocs quotidiens
         </Typography>
-        {/* ✅ Correction Grid : Utilisation de la syntaxe MUI v5+ avec sx */}
         <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 2 }}>
           {walls.map((wall: string) => (
             <Button
@@ -34,6 +34,3 @@ export default function DailyBouldersList(): JSX.Element {
     </Container>
   );
 }
-
-// ✅ Import de Box depuis @mui/material
-import { Box } from '@mui/material';

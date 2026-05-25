@@ -1,53 +1,55 @@
-import { useState, useEffect } from 'react';
+import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuthState } from 'react-firebase-hooks/auth';
-import { auth, db } from '../services/firebaseConfig';
+import { auth } from '../services/firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
-
-type UserRole = 'admin' | 'ouvreur' | 'moniteur' | 'client';
+import { db } from '../services/firebaseConfig';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  role?: UserRole;
+  role?: string;
 }
 
-const ProtectedRoute = ({ children, role }: ProtectedRouteProps) => {
-  const [user, loadingAuth] = useAuthState(auth);
-  const [userRoles, setUserRoles] = useState<UserRole[]>([]); // ✅ Tableau de rôles
-  const [loadingRole, setLoadingRole] = useState(true);
+const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, role }) => {
+  const [user, loading, error] = useAuthState(auth);
   const location = useLocation();
+  const [userRoles, setUserRoles] = React.useState<string[]>([]);
+  const [rolesLoading, setRolesLoading] = React.useState<boolean>(true);
 
-  useEffect(() => {
-    if (user) {
-      const fetchUserRoles = async () => {
-        try {
-          const userDoc = await getDoc(doc(db, 'users', user.uid));
-          if (userDoc.exists()) {
-            // ✅ Récupérer le tableau de rôles (ou convertir l'ancien rôle en tableau)
-            const roles = userDoc.data().roles || (userDoc.data().role ? [userDoc.data().role] : []);
-            setUserRoles(roles);
-          }
-        } catch (error) {
-          console.error("Erreur :", error);
-        } finally {
-          setLoadingRole(false);
+  React.useEffect(() => {
+    const fetchUserRoles = async () => {
+      if (!user) {
+        setRolesLoading(false);
+        return;
+      }
+      try {
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          setUserRoles(userData.roles || []);
         }
-      };
-      fetchUserRoles();
-    } else {
-      setLoadingRole(false);
-    }
+      } catch (err) {
+        console.error('Erreur lors de la récupération des rôles :', err);
+      } finally {
+        setRolesLoading(false);
+      }
+    };
+    fetchUserRoles();
   }, [user]);
 
-  if (loadingAuth || loadingRole) {
+  if (loading || rolesLoading) {
     return <div>Chargement...</div>;
+  }
+
+  if (error) {
+    console.error('Erreur d\'authentification :', error);
+    return <div>Erreur d'authentification</div>;
   }
 
   if (!user) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // ✅ Vérifier si le rôle requis est dans le tableau des rôles de l'utilisateur
   if (role && !userRoles.includes(role)) {
     return <Navigate to="/" replace />;
   }

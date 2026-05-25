@@ -40,7 +40,6 @@ export default function OuvreurScreen(): JSX.Element {
           )}
         </Box>
 
-        {/* ✅ Correction Grid : Utilisation de la syntaxe MUI v5+ avec sx */}
         <Box sx={{
           display: 'grid',
           gridTemplateColumns: 'repeat(3, 1fr)',

@@ -1,308 +1,320 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Typography, Paper, Container, Box, Table, TableBody,
-  TableCell, TableContainer, TableHead, TableRow, Tabs, Tab,
-  FormControl, InputLabel, Select, MenuItem
+  Typography, Paper, Box, MenuItem, Select, InputLabel, FormControl,
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
+  LinearProgress, Chip
 } from '@mui/material';
-import { db } from '../services/firebaseConfig';
-import { collection, getDocs, query, where } from 'firebase/firestore';
-import { useLocation } from 'react-router-dom';
+import { collection, query, where, getDocs, DocumentData } from 'firebase/firestore';
 
-const levelMap: Record<string, number> = {
-  'jaune': 3,
-  'vert': 4,
-  'bleu': 5,
-  'violet': 6,
-  'rouge': 7,
-  'noire': 8,
-  'blanc': 9,
-  'rose': 10
-};
+// ✅ Chemin ABSOLU pour éviter les problèmes de résolution de module
+// Remplacez par le chemin exact si différent :
+import { db } from '/workspaces/blocabrac-pwa/frontend/src/services/firebaseConfig';
 
-type UserRole = 'admin' | 'ouvreur' | 'moniteur' | 'client';
-type CompetitionStatus = 'à venir' | 'en cours' | 'terminée' | 'annulée';
-type Level = 'jaune' | 'vert' | 'bleu' | 'violet' | 'rouge' | 'noire' | 'blanc' | 'rose';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  ResponsiveContainer, PieChart, Pie, Cell
+} from 'recharts';
 
-interface User {
-  uid: string;
-  email: string;
-  first_name: string;
-  last_name: string;
-  role: UserRole;
-  age?: number;
-  gender?: string;
-  level?: Level;
-  created_at?: string;
-}
-
-interface Boulder {
-  id: string;
-  name: string;
-  level: Level;
-  type: string;
-  competition_id: string;
-  created_at: string;
-  created_by: string;
-}
-
+// ✅ Interfaces complètes
 interface Competition {
   id: string;
   name: string;
   date: string;
-  status: CompetitionStatus;
-  access_code: string;
-  max_participants: number;
-  registered_count: number;
+  status: string;
+  walls: string[];
 }
 
 interface CompetitionParticipant {
   id: string;
-  user_id: string | null;
+  user_id: string;
   competition_id: string;
   email: string;
   first_name: string;
   last_name: string;
-  age?: number;
-  gender?: string;
-  level?: Level;
-  registered_at: string;
-  is_client: boolean;
+  category?: string;
+  registration_date: string;
 }
 
 interface CompetitionResult {
   id: string;
+  user_id: string;
   competition_id: string;
-  participant_id: string;
   boulder_id: string;
   success: boolean;
   attempts: number;
-  rating: number;
-  completed_at: string;
+  rating?: number;
 }
 
-const AdminCompetitionStats: React.FC = () => {
-  const [competitions, setCompetitions] = useState<Competition[]>([]);
-  const [selectedCompetition, setSelectedCompetition] = useState<Competition | null>(null);
-  const [participantsStats, setParticipantsStats] = useState<any[]>([]);
-  const [favoriteBlocs, setFavoriteBlocs] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState(0);
-  const location = useLocation();
+interface Boulder {
+  id: string;
+  name?: string;
+  level?: string;
+  wall?: string;
+}
 
-  const competitionId = new URLSearchParams(location.search).get('competitionId');
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#A4DE6C'];
+
+export default function AdminCompetitionStats(): JSX.Element {
+  const [competitions, setCompetitions] = useState<Competition[]>([]);
+  const [selectedCompetition, setSelectedCompetition] = useState<string>('');
+  const [participants, setParticipants] = useState<CompetitionParticipant[]>([]);
+  const [results, setResults] = useState<CompetitionResult[]>([]);
+  const [boulders, setBoulders] = useState<Boulder[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    const fetchCompetitions = async () => {
+    const fetchCompetitions = async (): Promise<void> => {
       try {
         setLoading(true);
-        const querySnapshot = await getDocs(collection(db, 'competitions'));
-        const competitionsData: Competition[] = querySnapshot.docs.map(doc => ({
+        const q = query(collection(db, 'competitions'));
+        const snapshot = await getDocs(q);
+        const competitionsData: Competition[] = snapshot.docs.map(doc => ({
           id: doc.id,
-          name: doc.data().name || '',
-          date: doc.data().date || '',
-          status: doc.data().status || 'à venir',
-          access_code: doc.data().access_code || '',
-          max_participants: doc.data().max_participants || 50,
-          registered_count: doc.data().registered_count || 0
-        }));
+          ...doc.data()
+        })) as Competition[];
         setCompetitions(competitionsData);
-
-        if (competitionId) {
-          const selectedComp = competitionsData.find(c => c.id === competitionId) || null;
-          setSelectedCompetition(selectedComp);
-        } else if (competitionsData.length > 0) {
-          setSelectedCompetition(competitionsData[0]);
-        }
-      } catch (error) {
-        console.error("Erreur :", error);
+      } catch (error: unknown) {
+        console.error('Erreur lors du chargement des compétitions :', error);
       } finally {
         setLoading(false);
       }
     };
     fetchCompetitions();
-  }, [competitionId, location.search]);
+  }, []);
 
   useEffect(() => {
-    if (!selectedCompetition) return;
-    const fetchStats = async () => {
+    if (!selectedCompetition) {
+      setParticipants([]);
+      setResults([]);
+      setBoulders([]);
+      return;
+    }
+
+    const fetchStats = async (): Promise<void> => {
       try {
         setLoading(true);
 
-        const participantsSnapshot = await getDocs(
-          query(collection(db, 'competition_participants'), where('competition_id', '==', selectedCompetition.id))
+        const participantsQuery = query(
+          collection(db, 'competition_participants'),
+          where('competition_id', '==', selectedCompetition)
         );
-        const participants: CompetitionParticipant[] = participantsSnapshot.docs.map(doc => ({
+        const participantsSnapshot = await getDocs(participantsQuery);
+        const participantsData: CompetitionParticipant[] = participantsSnapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
-        }));
+        })) as CompetitionParticipant[];
+        setParticipants(participantsData);
 
-        const resultsSnapshot = await getDocs(
-          query(collection(db, 'competition_results'), where('competition_id', '==', selectedCompetition.id))
+        const resultsQuery = query(
+          collection(db, 'competition_results'),
+          where('competition_id', '==', selectedCompetition)
         );
-        const results: CompetitionResult[] = resultsSnapshot.docs.map(doc => ({
+        const resultsSnapshot = await getDocs(resultsQuery);
+        const resultsData: CompetitionResult[] = resultsSnapshot.docs.map(doc => ({
           id: doc.id,
-          competition_id: doc.data().competition_id || '',
-          participant_id: doc.data().participant_id || '',
-          boulder_id: doc.data().boulder_id || '',
-          success: doc.data().success || false,
-          attempts: doc.data().attempts || 0,
-          rating: doc.data().rating || 0,
-          completed_at: doc.data().completed_at || ''
-        }));
+          ...doc.data()
+        })) as CompetitionResult[];
+        setResults(resultsData);
 
-        const bouldersSnapshot = await getDocs(
-          query(collection(db, 'boulders'), where('competition_id', '==', selectedCompetition.id))
+        const bouldersQuery = query(
+          collection(db, 'boulders'),
+          where('competition_id', '==', selectedCompetition)
         );
-        const boulders: Boulder[] = bouldersSnapshot.docs.map(doc => ({
+        const bouldersSnapshot = await getDocs(bouldersQuery);
+        const bouldersData: Boulder[] = bouldersSnapshot.docs.map(doc => ({
           id: doc.id,
-          name: doc.data().name || '',
-          level: doc.data().level || '',
-          type: doc.data().type || '',
-          competition_id: doc.data().competition_id || '',
-          created_at: doc.data().created_at || '',
-          created_by: doc.data().created_by || ''
-        }));
+          ...doc.data()
+        })) as Boulder[];
+        setBoulders(bouldersData);
 
-        const statsByParticipant: Record<string, {
-          participant: CompetitionParticipant;
-          successfulBlocs: number;
-          totalLevel: number;
-          attemptsOnHardestBloc: number;
-          hardestBlocLevel: number;
-          blocRatings: number[];
-        }> = {};
-
-        results.forEach(result => {
-          if (!statsByParticipant[result.participant_id]) {
-            const participant = participants.find(p => p.id === result.participant_id);
-            if (!participant) return;
-
-            statsByParticipant[result.participant_id] = {
-              participant,
-              successfulBlocs: 0,
-              totalLevel: 0,
-              attemptsOnHardestBloc: Infinity,
-              hardestBlocLevel: 0,
-              blocRatings: []
-            };
-          }
-
-          const bloc = boulders.find(b => b.id === result.boulder_id);
-          if (bloc && result.success) {
-            const level = levelMap[bloc.level] || 0;
-            statsByParticipant[result.participant_id].successfulBlocs += 1;
-            statsByParticipant[result.participant_id].totalLevel += level;
-            statsByParticipant[result.participant_id].blocRatings.push(result.rating || 0);
-
-            if (level > statsByParticipant[result.participant_id].hardestBlocLevel) {
-              statsByParticipant[result.participant_id].hardestBlocLevel = level;
-              statsByParticipant[result.participant_id].attemptsOnHardestBloc = result.attempts;
-            } else if (level === statsByParticipant[result.participant_id].hardestBlocLevel) {
-              if (result.attempts < statsByParticipant[result.participant_id].attemptsOnHardestBloc) {
-                statsByParticipant[result.participant_id].attemptsOnHardestBloc = result.attempts;
-              }
-            }
-          }
-        });
-
-        const participantsArray = Object.entries(statsByParticipant).map(([participantId, stats]) => ({
-          participantId,
-          participant: stats.participant,
-          successfulBlocs: stats.successfulBlocs,
-          totalLevel: stats.totalLevel,
-          attemptsOnHardestBloc: stats.attemptsOnHardestBloc,
-          averageRating: stats.blocRatings.length > 0
-            ? stats.blocRatings.reduce((a, b) => a + b, 0) / stats.blocRatings.length
-            : 0
-        }));
-
-        participantsArray.sort((a, b) => {
-          if (b.successfulBlocs !== a.successfulBlocs) {
-            return b.successfulBlocs - a.successfulBlocs;
-          }
-          if (b.totalLevel !== a.totalLevel) {
-            return b.totalLevel - a.totalLevel;
-          }
-          return a.attemptsOnHardestBloc - b.attemptsOnHardestBloc;
-        });
-
-        setParticipantsStats(participantsArray);
-
-        const blocRatings: Record<string, { total: number; count: number }> = {};
-        results.forEach(result => {
-          if (result.rating) {
-            if (!blocRatings[result.boulder_id]) {
-              blocRatings[result.boulder_id] = { total: 0, count: 0 };
-            }
-            blocRatings[result.boulder_id].total += result.rating;
-            blocRatings[result.boulder_id].count += 1;
-          }
-        });
-
-        const favoriteBlocsArray = Object.entries(blocRatings).map(([boulderId, data]) => {
-          const bloc = boulders.find(b => b.id === boulderId);
-          return {
-            boulderId,
-            name: bloc?.name || 'Inconnu',
-            level: bloc?.level || 'Inconnu',
-            averageRating: data.total / data.count
-          };
-        }).sort((a, b) => b.averageRating - a.averageRating);
-
-        setFavoriteBlocs(favoriteBlocsArray);
-        setLoading(false);
-      } catch (error) {
-        console.error("Erreur :", error);
+      } catch (error: unknown) {
+        console.error('Erreur lors du chargement des statistiques :', error);
+      } finally {
         setLoading(false);
       }
     };
+
     fetchStats();
   }, [selectedCompetition]);
 
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
-    setActiveTab(newValue);
+  const getParticipantsByCategory = (): { name: string; value: number }[] => {
+    const categoryCounts: Record<string, number> = {};
+    participants.forEach((p: CompetitionParticipant) => {
+      const category = p.category || 'Non spécifiée';
+      categoryCounts[category] = (categoryCounts[category] || 0) + 1;
+    });
+    return Object.entries(categoryCounts).map(([name, value]) => ({ name, value }));
   };
 
-  if (loading && !participantsStats.length) {
-    return <Typography>Chargement des statistiques...</Typography>;
-  }
+  const getBoulderSuccessRates = (): { name: string; successRate: number; totalAttempts: number }[] => {
+    const boulderStats: Record<string, { success: number; attempts: number }> = {};
+
+    results.forEach((result: CompetitionResult) => {
+      const boulderId = result.boulder_id;
+      if (!boulderStats[boulderId]) {
+        boulderStats[boulderId] = { success: 0, attempts: 0 };
+      }
+      boulderStats[boulderId].success += result.success ? 1 : 0;
+      boulderStats[boulderId].attempts += result.attempts;
+    });
+
+    return boulders.map((boulder: Boulder) => {
+      const stats = boulderStats[boulder.id] || { success: 0, attempts: 0 };
+      const successRate = stats.attempts > 0 ? (stats.success / stats.attempts) * 100 : 0;
+      return {
+        name: `Bloc ${boulder.level || boulder.name || boulder.id}`,
+        successRate: parseFloat(successRate.toFixed(1)),
+        totalAttempts: stats.attempts
+      };
+    });
+  };
+
+  const getTopParticipants = (): { name: string; successRate: number; totalBoulders: number }[] => {
+    const participantStats: Record<string, { success: number; total: number }> = {};
+
+    results.forEach((result: CompetitionResult) => {
+      const participant = participants.find(p => p.user_id === result.user_id);
+      if (!participant) return;
+
+      const key = `${participant.first_name} ${participant.last_name}`;
+      if (!participantStats[key]) {
+        participantStats[key] = { success: 0, total: 0 };
+      }
+      participantStats[key].success += result.success ? 1 : 0;
+      participantStats[key].total += 1;
+    });
+
+    return Object.entries(participantStats)
+      .map(([name, stats]) => ({
+        name,
+        successRate: (stats.success / stats.total) * 100,
+        totalBoulders: stats.total
+      }))
+      .sort((a, b) => b.successRate - a.successRate)
+      .slice(0, 5);
+  };
+
+  // ✅ Composant Tooltip personnalisé pour contourner les problèmes de typage Recharts
+  const CustomTooltip: React.FC<{ active?: boolean; payload?: any[] }> = ({ active, payload }) => {
+    if (!active || !payload || payload.length === 0) {
+      return null;
+    }
+    const value = payload[0].value;
+    const numericValue = typeof value === 'number' ? value : 0;
+    return (
+      <Paper sx={{ p: 1, border: '1px solid #ddd' }}>
+        <Typography variant="body2">{`${numericValue.toFixed(1)}%`}</Typography>
+        <Typography variant="caption">Taux de réussite</Typography>
+      </Paper>
+    );
+  };
 
   return (
-    <Container maxWidth="lg">
-      <Paper sx={{ p: 3, mt: 3 }}>
-        <Typography variant="h4" gutterBottom>
-          Statistiques des Compétitions
-        </Typography>
+    <Box sx={{ p: 3 }}>
+      <Typography variant="h4" gutterBottom>
+        Statistiques des Compétitions
+      </Typography>
 
-        <FormControl fullWidth sx={{ mb: 3 }}>
-          <InputLabel>Sélectionnez une compétition</InputLabel>
-          <Select
-            value={selectedCompetition?.id || ''}
-            onChange={(e) => {
-              const selectedComp = competitions.find(c => c.id === e.target.value);
-              setSelectedCompetition(selectedComp || null); // ✅ Correction : || null
-            }}
-            label="Sélectionnez une compétition"
-          >
-            {competitions.map(comp => (
-              <MenuItem key={comp.id} value={comp.id}>
-                {comp.name} - {new Date(comp.date).toLocaleDateString()}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+      <FormControl fullWidth sx={{ mb: 3 }}>
+        <InputLabel>Sélectionnez une compétition</InputLabel>
+        <Select
+          value={selectedCompetition}
+          onChange={(e: any): void => setSelectedCompetition(e.target.value as string)}
+          label="Compétition"
+        >
+          {competitions.map((comp: Competition) => (
+            <MenuItem key={comp.id} value={comp.id}>
+              {comp.name} - {new Date(comp.date).toLocaleDateString()}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
 
-        {selectedCompetition && (
-          <>
-            <Tabs value={activeTab} onChange={handleTabChange}>
-              <Tab label="Classement des Grimpeurs" />
-              <Tab label="Blocs Préférés" />
-            </Tabs>
-
-            {activeTab === 0 && (
-              <Box sx={{ mt: 2 }}>
+      {loading ? (
+        <LinearProgress />
+      ) : selectedCompetition ? (
+        <>
+          {participants.length > 0 ? (
+            <>
+              <Paper sx={{ p: 2, mb: 3 }}>
                 <Typography variant="h6" gutterBottom>
-                  Classement des Grimpeurs
+                  Répartition des participants par catégorie ({participants.length} participants)
+                </Typography>
+                <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <PieChart>
+                      <Pie
+                        data={getParticipantsByCategory()}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        outerRadius={80}
+                        fill="#8884d8"
+                        dataKey="value"
+                        label={({ name, percent = 0 }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                      >
+                        {getParticipantsByCategory().map((entry: { name: string; value: number }, index: number) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </Box>
+              </Paper>
+
+              <Paper sx={{ p: 2, mb: 3 }}>
+                <Typography variant="h6" gutterBottom>
+                  Taux de réussite par bloc
+                </Typography>
+                <Box sx={{ height: 400 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={getBoulderSuccessRates()}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" />
+                      <YAxis domain={[0, 100]} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Legend />
+                      <Bar dataKey="successRate" fill="#8884d8" name="Taux de réussite (%)" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </Box>
+              </Paper>
+
+              <Paper sx={{ p: 2, mb: 3 }}>
+                <Typography variant="h6" gutterBottom>
+                  Top 5 des participants
+                </Typography>
+                <TableContainer>
+                  <Table>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Participant</TableCell>
+                        <TableCell>Taux de réussite</TableCell>
+                        <TableCell>Blocs tentés</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {getTopParticipants().map((participant: { name: string; successRate: number; totalBoulders: number }, index: number) => (
+                        <TableRow key={index}>
+                          <TableCell>{participant.name}</TableCell>
+                          <TableCell>
+                            <Chip
+                              label={`${participant.successRate.toFixed(1)}%`}
+                              color={participant.successRate >= 80 ? 'success' : participant.successRate >= 50 ? 'primary' : 'error'}
+                            />
+                          </TableCell>
+                          <TableCell>{participant.totalBoulders}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Paper>
+
+              <Paper sx={{ p: 2 }}>
+                <Typography variant="h6" gutterBottom>
+                  Liste des participants ({participants.length})
                 </Typography>
                 <TableContainer>
                   <Table>
@@ -310,67 +322,37 @@ const AdminCompetitionStats: React.FC = () => {
                       <TableRow>
                         <TableCell>Nom</TableCell>
                         <TableCell>Email</TableCell>
-                        <TableCell>Niveau</TableCell>
-                        <TableCell>Blocs Réussis</TableCell>
-                        <TableCell>Niveau Total</TableCell>
-                        <TableCell>Essais sur Bloc le Plus Dur</TableCell>
-                        <TableCell>Note Moyenne</TableCell>
+                        <TableCell>Catégorie</TableCell>
+                        <TableCell>Date d'inscription</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {participantsStats.map(stat => (
-                        <TableRow key={stat.participantId}>
+                      {participants.map((participant: CompetitionParticipant) => (
+                        <TableRow key={participant.id}>
+                          <TableCell>{participant.first_name} {participant.last_name}</TableCell>
+                          <TableCell>{participant.email}</TableCell>
                           <TableCell>
-                            {stat.participant.first_name} {stat.participant.last_name}
+                            <Chip
+                              label={participant.category || 'Non spécifiée'}
+                              color="primary"
+                              variant="outlined"
+                            />
                           </TableCell>
-                          <TableCell>{stat.participant.email}</TableCell>
-                          <TableCell>{stat.participant.level || 'N/A'}</TableCell>
-                          <TableCell>{stat.successfulBlocs}</TableCell>
-                          <TableCell>{stat.totalLevel}</TableCell>
-                          <TableCell>
-                            {stat.attemptsOnHardestBloc === Infinity ? 'Aucun' : stat.attemptsOnHardestBloc}
-                          </TableCell>
-                          <TableCell>{stat.averageRating.toFixed(1)}</TableCell>
+                          <TableCell>{new Date(participant.registration_date).toLocaleDateString()}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
                   </Table>
                 </TableContainer>
-              </Box>
-            )}
-
-            {activeTab === 1 && (
-              <Box sx={{ mt: 2 }}>
-                <Typography variant="h6" gutterBottom>
-                  Blocs Préférés (par note moyenne)
-                </Typography>
-                <TableContainer>
-                  <Table>
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Nom du Bloc</TableCell>
-                        <TableCell>Niveau</TableCell>
-                        <TableCell>Note Moyenne</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {favoriteBlocs.map(bloc => (
-                        <TableRow key={bloc.boulderId}>
-                          <TableCell>{bloc.name}</TableCell>
-                          <TableCell>{bloc.level}</TableCell>
-                          <TableCell>{bloc.averageRating.toFixed(1)}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              </Box>
-            )}
-          </>
-        )}
-      </Paper>
-    </Container>
+              </Paper>
+            </>
+          ) : (
+            <Typography>Aucune donnée disponible pour cette compétition.</Typography>
+          )}
+        </>
+      ) : (
+        <Typography>Sélectionnez une compétition pour afficher les statistiques.</Typography>
+      )}
+    </Box>
   );
-};
-
-export default AdminCompetitionStats;
+}

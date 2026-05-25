@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Typography, Paper, Container, Button, Box,
   MenuItem, Select, InputLabel, FormControl, IconButton, Table, TableBody,
-  TableCell, TableContainer, TableHead, TableRow, TextField
+  TableCell, TableContainer, TableHead, TableRow, TextField, Chip
 } from '@mui/material';
 import { Delete as DeleteIcon, Edit as EditIcon, Add as AddIcon } from '@mui/icons-material';
 import { collection, query, where, getDocs, orderBy, updateDoc, doc } from 'firebase/firestore';
@@ -24,9 +24,10 @@ interface Boulder {
   difficulty: string;
   difficulty_types: string[];
   instructions: string;
-  image_url: string;
+  image_base64?: string;
   competition_id: string;
   is_active: boolean;
+  difficulty_level?: 'Plus' | 'Égal' | 'Moins';
 }
 
 export default function CompetitionBouldersList(): JSX.Element {
@@ -35,7 +36,6 @@ export default function CompetitionBouldersList(): JSX.Element {
   const [selectedCompetition, setSelectedCompetition] = useState<string>('');
   const [boulders, setBoulders] = useState<Boulder[]>([]);
 
-  // ✅ Charger les compétitions
   useEffect(() => {
     const fetchCompetitions = async (): Promise<void> => {
       const q = query(collection(db, 'competitions'), orderBy('date', 'desc'));
@@ -48,27 +48,42 @@ export default function CompetitionBouldersList(): JSX.Element {
     fetchCompetitions();
   }, []);
 
-  // ✅ Charger les blocs pour la compétition sélectionnée
   useEffect(() => {
-    if (!selectedCompetition) return;
+    if (!selectedCompetition) {
+      setBoulders([]);
+      return;
+    }
+
     const fetchBoulders = async (): Promise<void> => {
-      const q = query(
-        collection(db, 'boulders'),
-        where('competition_id', '==', selectedCompetition),
-        where('type', '==', 'competition'),
-        where('is_active', '==', true),
-        orderBy('number')
-      );
-      const snapshot = await getDocs(q);
-      setBoulders(snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Boulder[]);
+      try {
+        // ✅ Requête simplifiée (sans orderBy pour éviter l'index composite)
+        const q = query(
+          collection(db, 'boulders'),
+          where('competition_id', '==', selectedCompetition),
+          where('type', '==', 'competition')
+        );
+        const snapshot = await getDocs(q);
+
+        // ✅ Filtrer et trier en mémoire (au lieu de le faire dans la requête)
+        const allBoulders = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Boulder[];
+
+        const filteredAndSortedBoulders = allBoulders
+          .filter(boulder => boulder.is_active === true)
+          .sort((a, b) => (a.number || 0) - (b.number || 0));
+
+        setBoulders(filteredAndSortedBoulders);
+      } catch (error: unknown) {
+        console.error('Erreur lors du chargement des blocs :', error);
+        alert('Une erreur est survenue lors du chargement des blocs.');
+      }
     };
+
     fetchBoulders();
   }, [selectedCompetition]);
 
-  // ✅ Réorganiser les numéros
   const handleReorder = async (): Promise<void> => {
     try {
       for (const boulder of boulders) {
@@ -145,16 +160,31 @@ export default function CompetitionBouldersList(): JSX.Element {
                             onChange={(e: any): void => {
                               const newBoulders = [...boulders];
                               const index = newBoulders.findIndex(b => b.id === boulder.id);
-                              newBoulders[index] = { ...newBoulders[index], number: parseInt(e.target.value) || 0 };
-                              setBoulders(newBoulders);
+                              if (index !== -1) {
+                                newBoulders[index] = { ...newBoulders[index], number: parseInt(e.target.value) || 0 };
+                                setBoulders(newBoulders);
+                              }
                             }}
                             size="small"
                             sx={{ width: 60 }}
                           />
                         </TableCell>
                         <TableCell>{boulder.wall}</TableCell>
-                        <TableCell>{boulder.difficulty || 'Non spécifiée'}</TableCell>
-                        <TableCell>{boulder.difficulty_types.join(', ')}</TableCell>
+                        <TableCell>
+                          {boulder.difficulty}
+                          {boulder.difficulty_level && (
+                            <Chip
+                              label={boulder.difficulty_level}
+                              size="small"
+                              color={
+                                boulder.difficulty_level === 'Plus' ? 'error' :
+                                boulder.difficulty_level === 'Moins' ? 'success' : 'default'
+                              }
+                              sx={{ ml: 1 }}
+                            />
+                          )}
+                        </TableCell>
+                        <TableCell>{boulder.difficulty_types?.join(', ') || 'Aucun'}</TableCell>
                         <TableCell>
                           <IconButton
                             color="primary"

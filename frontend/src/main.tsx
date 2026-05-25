@@ -3,11 +3,24 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { AuthProvider } from './context/AuthContext';
+
+// Pages publiques
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
-import ForgotPassword from './pages/ForgotPassword'; // ✅ Ajout de l'import
-import Ouvreur from './pages/Ouvreur';
+import ForgotPassword from './pages/ForgotPassword';
+
+// Pages Ouvreur
+import OuvreurScreen from './pages/Ouvreur/OuvreurScreen';
+import DailyBouldersList from './pages/Ouvreur/DailyBoulders/DailyBouldersList';
+import DailyBoulderForm from './pages/Ouvreur/DailyBoulders/DailyBoulderForm';
+import CompetitionBouldersList from './pages/Ouvreur/CompetitionBoulders/CompetitionBouldersList';
+import CompetitionBoulderForm from './pages/Ouvreur/CompetitionBoulders/CompetitionBoulderForm';
+import ReportsAndStats from './pages/Ouvreur/ReportsAndStats/ReportsAndStats';
+
+// Pages protégées existantes
+import ProtectedRoute from './components/ProtectedRoute';
+import Navbar from './components/Navbar';
 import Client from './pages/Client';
 import Moniteur from './pages/Moniteur';
 import Admin from './pages/Admin';
@@ -17,8 +30,6 @@ import AdminCompetitionManagement from './pages/AdminCompetitionManagement';
 import AdminCompetitionList from './pages/AdminCompetitionList';
 import AdminCompetitionRegistration from './pages/AdminCompetitionRegistration';
 import AdminCompetitionStats from './pages/AdminCompetitionStats';
-import ProtectedRoute from './components/ProtectedRoute';
-import Navbar from './components/Navbar';
 
 const theme = createTheme();
 
@@ -29,13 +40,23 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <AuthProvider>
           <Navbar />
           <Routes>
+            {/* ========== ROUTES PUBLIQUES ========== */}
             <Route path="/" element={<Home />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
-            {/* ✅ NOUVELLE ROUTE : Récupération du mot de passe (PUBLIQUE) */}
             <Route path="/forgot-password" element={<ForgotPassword />} />
+
+            {/* ========== ROUTES OUVREUR ========== */}
+            <Route path="/ouvreur" element={<ProtectedRoute role="ouvreur"><OuvreurScreen /></ProtectedRoute>} />
+            <Route path="/ouvreur/daily-boulders" element={<ProtectedRoute role="ouvreur"><DailyBouldersList /></ProtectedRoute>} />
+            <Route path="/ouvreur/daily-boulders/:wall" element={<ProtectedRoute role="ouvreur"><DailyBoulderForm /></ProtectedRoute>} />
+            <Route path="/ouvreur/competition-boulders" element={<ProtectedRoute role="ouvreur"><CompetitionBouldersList /></ProtectedRoute>} />
+            <Route path="/ouvreur/competition-boulders/:competitionId/add" element={<ProtectedRoute role="ouvreur"><CompetitionBoulderForm /></ProtectedRoute>} />
+            <Route path="/ouvreur/competition-boulders/:competitionId/edit/:boulderId" element={<ProtectedRoute role="ouvreur"><CompetitionBoulderForm /></ProtectedRoute>} />
+            <Route path="/ouvreur/reports-and-stats" element={<ProtectedRoute role="ouvreur"><ReportsAndStats /></ProtectedRoute>} />
+
+            {/* ========== ROUTES EXISTANTES (Client/Moniteur/Admin) ========== */}
             <Route path="/client" element={<ProtectedRoute role="client"><Client /></ProtectedRoute>} />
-            <Route path="/ouvreur" element={<ProtectedRoute role="ouvreur"><Ouvreur /></ProtectedRoute>} />
             <Route path="/moniteur" element={<ProtectedRoute role="moniteur"><Moniteur /></ProtectedRoute>} />
             <Route path="/admin" element={<ProtectedRoute role="admin"><Admin /></ProtectedRoute>} />
             <Route path="/admin/users" element={<ProtectedRoute role="admin"><AdminUsers /></ProtectedRoute>} />
