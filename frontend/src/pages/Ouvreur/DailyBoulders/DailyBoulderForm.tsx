@@ -45,6 +45,7 @@ const walls: string[] = [
 const difficultyTypes: string[] = ['technique', 'équilibre', 'force', 'engagement'];
 const difficultyLevels: DifficultyLevel[] = ['Plus', 'Égal', 'Moins'];
 
+// ✅ Ajout de l'option "Bloc Mystère" dans les cotations
 interface ColorRating {
   value: string;
   label: string;
@@ -58,10 +59,11 @@ const colorRatings: ColorRating[] = [
   { value: 'rouge', label: 'Rouge (6A-6B)' },
   { value: 'noire', label: 'Noire (6B+-6C+)' },
   { value: 'blanc', label: 'Blanc (7A-7B)' },
-  { value: 'rose', label: 'Rose (7B+-8A)' }
+  { value: 'rose', label: 'Rose (7B+-8A)' },
+  { value: 'mystere', label: 'Bloc Mystère' } // ✅ NOUVEAU : Option pour les clients
 ];
 
-// Fonction utilitaire pour redimensionner une image
+// ✅ Fonction utilitaire pour redimensionner une image
 const resizeAndCompressImage = (file: File, maxWidth: number = 800, quality: number = 0.7): Promise<string> => {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -426,7 +428,9 @@ export default function DailyBoulderForm(): JSX.Element {
                 value={formData.color}
                 onChange={(e: any): void => setFormData({ ...formData, color: e.target.value as string })}
                 label="Cotation"
+                required
               >
+                {/* ✅ Menu déroulant avec "Bloc Mystère" */}
                 {colorRatings.map((c: ColorRating) => (
                   <MenuItem key={c.value} value={c.value}>{c.label}</MenuItem>
                 ))}
@@ -628,8 +632,8 @@ export default function DailyBoulderForm(): JSX.Element {
           {boulders.map((boulder: Boulder) => (
             <Paper key={boulder.id} sx={{ p: 2 }}>
               <Typography variant="subtitle1">
-                Bloc n°{boulder.number || '?'} - {boulder.color || 'Non spécifiée'}
-                {boulder.difficulty_level && (
+                Bloc n°{boulder.number || '?'} - {boulder.color === 'mystere' ? 'Bloc Mystère' : boulder.color || 'Non spécifiée'}
+                {boulder.difficulty_level && boulder.color !== 'mystere' && (
                   <Chip
                     label={`${boulder.color} ${boulder.difficulty_level}`}
                     size="small"

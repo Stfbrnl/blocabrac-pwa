@@ -1,60 +1,31 @@
-import React from 'react';
+import React, { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { useAuthState } from 'react-firebase-hooks/auth';
-import { auth } from '../services/firebaseConfig';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../services/firebaseConfig';
+import { User } from 'firebase/auth';
+import { useAuth } from '../context/AuthContext';
 
-interface ProtectedRouteProps {
-  children: React.ReactNode;
+// ✅ Type étendu pour inclure le rôle
+interface AppUser extends User {
   role?: string;
 }
 
-const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, role }) => {
-  const [user, loading, error] = useAuthState(auth);
+interface ProtectedRouteProps {
+  children: ReactNode;
+  allowedRoles?: string[];
+}
+
+export default function ProtectedRoute({ children, allowedRoles = [] }: ProtectedRouteProps): JSX.Element {
+  const { currentUser } = useAuth() as { currentUser: AppUser | null };
   const location = useLocation();
-  const [userRoles, setUserRoles] = React.useState<string[]>([]);
-  const [rolesLoading, setRolesLoading] = React.useState<boolean>(true);
 
-  React.useEffect(() => {
-    const fetchUserRoles = async () => {
-      if (!user) {
-        setRolesLoading(false);
-        return;
-      }
-      try {
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
-        if (userDoc.exists()) {
-          const userData = userDoc.data();
-          setUserRoles(userData.roles || []);
-        }
-      } catch (err) {
-        console.error('Erreur lors de la récupération des rôles :', err);
-      } finally {
-        setRolesLoading(false);
-      }
-    };
-    fetchUserRoles();
-  }, [user]);
-
-  if (loading || rolesLoading) {
-    return <div>Chargement...</div>;
-  }
-
-  if (error) {
-    console.error('Erreur d\'authentification :', error);
-    return <div>Erreur d'authentification</div>;
-  }
-
-  if (!user) {
+  if (!currentUser) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (role && !userRoles.includes(role)) {
+  // ✅ Vérification du rôle (avec fallback si undefined)
+  const userRole = currentUser.role || 'client';
+  if (allowedRoles.length > 0 && !allowedRoles.includes(userRole)) {
     return <Navigate to="/" replace />;
   }
 
   return <>{children}</>;
-};
-
-export default ProtectedRoute;
+}
