@@ -22,7 +22,7 @@ import ReportsAndStats from './pages/Ouvreur/ReportsAndStats/ReportsAndStats';
 import ProtectedRoute from './components/ProtectedRoute';
 import Navbar from './components/Navbar';
 import Client from './pages/Client';
-import Moniteur from './pages/Moniteur';
+import MoniteurScreen from './pages/Moniteur/MoniteurScreen';
 import Admin from './pages/Admin';
 import AdminUsers from './pages/AdminUsers';
 import AdminHomeContent from './pages/AdminHomeContent';
@@ -57,7 +57,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 
             {/* ========== ROUTES EXISTANTES (Client/Moniteur/Admin) ========== */}
             <Route path="/client" element={<ProtectedRoute role="client"><Client /></ProtectedRoute>} />
-            <Route path="/moniteur" element={<ProtectedRoute role="moniteur"><Moniteur /></ProtectedRoute>} />
+            <Route path="/moniteur" element={<ProtectedRoute role="moniteur"><MoniteurScreen /></ProtectedRoute>} />
             <Route path="/admin" element={<ProtectedRoute role="admin"><Admin /></ProtectedRoute>} />
             <Route path="/admin/users" element={<ProtectedRoute role="admin"><AdminUsers /></ProtectedRoute>} />
             <Route path="/admin/home-content" element={<ProtectedRoute role="admin"><AdminHomeContent /></ProtectedRoute>} />

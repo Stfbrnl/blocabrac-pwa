@@ -1,51 +1,47 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Box, Typography, Container, Paper } from '@mui/material';
-import Grid from '@mui/material/Grid';
+import { Container, Typography, Box, Button, Paper } from '@mui/material';
 
-export default function MoniteurScreen(): JSX.Element {
+export default function MoniteurScreen() {
   const navigate = useNavigate();
 
   return (
-    <Container maxWidth="md">
+    <Container maxWidth="lg">
       <Paper sx={{ p: 3, mt: 3 }}>
         <Typography variant="h4" gutterBottom>
-          Espace Moniteur
+          Espace Moniteur - BLOCABRAC
         </Typography>
-        <Box sx={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
-          gap: 2,
-          '@media (max-width: 900px)': { gridTemplateColumns: '1fr' }
-        }}>
+
+        <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
           <Button
-            fullWidth
             variant="contained"
-            size="large"
+            color="primary"
             onClick={() => navigate('/moniteur/groups')}
             sx={{ p: 3 }}
           >
-            Gérer les Groupes
+            Gérer les groupes
           </Button>
           <Button
-            fullWidth
             variant="contained"
-            size="large"
+            color="primary"
             onClick={() => navigate('/moniteur/courses')}
             sx={{ p: 3 }}
           >
-            Gérer les Cours
+            Gérer les séances
           </Button>
           <Button
-            fullWidth
             variant="contained"
-            size="large"
-            onClick={() => navigate('/moniteur/stats')}
+            color="primary"
+            onClick={() => navigate('/moniteur/exercises')}
             sx={{ p: 3 }}
           >
-            Statistiques
+            Gérer les exercices
           </Button>
         </Box>
+
+        <Typography variant="body1">
+          Bienvenue dans votre espace Moniteur.
+        </Typography>
       </Paper>
     </Container>
   );
