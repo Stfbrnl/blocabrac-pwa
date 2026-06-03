@@ -1,23 +1,31 @@
 import React from 'react';
+import {
+  Box,
+  Button,
+  Container,
+  Paper,
+  Typography,
+} from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import { Container, Typography, Box, Button, Paper } from '@mui/material';
 
-export default function MoniteurScreen() {
+const MoniteurScreen: React.FC = () => {
   const navigate = useNavigate();
 
   return (
     <Container maxWidth="lg">
       <Paper sx={{ p: 3, mt: 3 }}>
         <Typography variant="h4" gutterBottom>
-          Espace Moniteur - BLOCABRAC
+          Espace Moniteur
         </Typography>
-
-        <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
+        <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
+          Gestion des groupes, séances et exercices.
+        </Typography>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Button
             variant="contained"
             color="primary"
             onClick={() => navigate('/moniteur/groups')}
-            sx={{ p: 3 }}
+            sx={{ height: '48px' }}
           >
             Gérer les groupes
           </Button>
@@ -25,7 +33,7 @@ export default function MoniteurScreen() {
             variant="contained"
             color="primary"
             onClick={() => navigate('/moniteur/courses')}
-            sx={{ p: 3 }}
+            sx={{ height: '48px' }}
           >
             Gérer les séances
           </Button>
@@ -33,16 +41,14 @@ export default function MoniteurScreen() {
             variant="contained"
             color="primary"
             onClick={() => navigate('/moniteur/exercises')}
-            sx={{ p: 3 }}
+            sx={{ height: '48px' }}
           >
             Gérer les exercices
           </Button>
         </Box>
-
-        <Typography variant="body1">
-          Bienvenue dans votre espace Moniteur.
-        </Typography>
       </Paper>
     </Container>
   );
-}
+};
+
+export default MoniteurScreen;
