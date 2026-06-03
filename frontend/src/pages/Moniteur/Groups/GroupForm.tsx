@@ -1,175 +1,263 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useAuthState } from 'react-firebase-hooks/auth';
+import { auth, db } from '../../../services/firebaseConfig';
 import {
-  Typography, Paper, Container, Button, Box,
-  TextField, FormControl, InputLabel, Select, MenuItem,
-  Checkbox, ListItemText, OutlinedInput, Chip
+  collection,
+  doc,
+  addDoc,
+  updateDoc,
+  getDoc,
+  query,
+  where,
+  getDocs,
+} from 'firebase/firestore';
+import {
+  Container,
+  Typography,
+  Box,
+  Paper,
+  TextField,
+  Button,
+  CircularProgress,
+  Autocomplete,
+  Chip,
+  FormControl,
+  FormLabel,
+  Snackbar,
+  Alert,
+  AutocompleteRenderInputParams,
 } from '@mui/material';
-import { collection, query, getDocs, doc, addDoc, updateDoc, getDoc } from 'firebase/firestore';
-import { db } from '../../../services/firebaseConfig';
-import { useAuth } from '../../../context/AuthContext';
+import { useNavigate, useParams } from 'react-router-dom';
 
-interface Client {
-  id: string;
-  first_name: string;
-  last_name: string;
+interface Group {
+  id?: string;
+  name: string;
+  description: string;
+  createdBy: string;
+  createdAt: Date;
+  students: string[];
+  moniteurId: string;
+}
+
+interface User {
+  uid: string;
+  displayName: string;
   email: string;
 }
 
-interface MoniteurGroup {
-  id: string;
-  name: string;
-  moniteur_id: string;
-  client_ids: string[];
-}
-
-export default function GroupForm(): JSX.Element {
+const GroupForm: React.FC = () => {
+  const [user, loadingAuth] = useAuthState(auth);
+  const { mode, groupId } = useParams<{ mode: string; groupId?: string }>();
   const navigate = useNavigate();
-  const { groupId } = useParams<{ groupId?: string }>();
-  const { currentUser } = useAuth();
-  const [clients, setClients] = useState<Client[]>([]);
-  const [formData, setFormData] = useState<{
-    name: string;
-    selectedClients: string[];
-  }>({
+
+  const [group, setGroup] = useState<Group>({
     name: '',
-    selectedClients: []
+    description: '',
+    createdBy: user?.uid || '',
+    createdAt: new Date(),
+    students: [],
+    moniteurId: user?.uid || '',
   });
+  const [allClients, setAllClients] = useState<User[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchClients = async (): Promise<void> => {
-      try {
-        const q = query(collection(db, 'clients'));
-        const snapshot = await getDocs(q);
-        setClients(snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as Client[]);
-      } catch (error: unknown) {
-        console.error('Erreur lors du chargement des clients :', error);
-      }
-    };
-    fetchClients();
-  }, []);
+    if (!user) return;
 
-  useEffect(() => {
-    if (!groupId) return;
-    const fetchGroup = async (): Promise<void> => {
+    const fetchClients = async () => {
       try {
-        const docSnap = await getDoc(doc(db, 'moniteur_groups', groupId));
-        if (docSnap.exists()) {
-          const data = docSnap.data() as MoniteurGroup;
-          setFormData({
-            name: data.name,
-            selectedClients: data.client_ids || []
+        const usersQuery = query(
+          collection(db, 'users'),
+          where('role', '==', 'client')
+        );
+        const querySnapshot = await getDocs(usersQuery);
+        const clients: User[] = [];
+        querySnapshot.forEach((doc) => {
+          clients.push({
+            uid: doc.id,
+            displayName: doc.data().displayName || doc.data().email || doc.id,
+            email: doc.data().email || '',
           });
-        }
-      } catch (error: unknown) {
-        console.error('Erreur lors du chargement du groupe :', error);
+        });
+        setAllClients(clients);
+      } catch (err) {
+        setError(`Erreur lors du chargement des clients : ${err}`);
       }
     };
-    fetchGroup();
-  }, [groupId]);
 
-  const handleSubmit = async (): Promise<void> => {
-    if (!formData.name) {
-      alert('Veuillez donner un nom au groupe.');
-      return;
-    }
-    if (formData.selectedClients.length === 0) {
-      alert('Veuillez sélectionner au moins un client.');
-      return;
-    }
+    const fetchGroup = async () => {
+      if (mode !== 'edit' || !groupId) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const docRef = doc(db, 'groups', groupId);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          setGroup({
+            id: docSnap.id,
+            ...docSnap.data(),
+            createdAt: docSnap.data().createdAt?.toDate() || new Date(),
+          } as Group);
+        }
+      } catch (err) {
+        setError(`Erreur lors du chargement du groupe : ${err}`);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchClients();
+    fetchGroup();
+  }, [user, mode, groupId]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+
+    setIsSubmitting(true);
+    setError(null);
 
     try {
       const groupData = {
-        name: formData.name,
-        moniteur_id: currentUser?.uid,
-        client_ids: formData.selectedClients,
-        created_at: groupId ? new Date().toISOString() : new Date().toISOString()
+        name: group.name,
+        description: group.description,
+        createdBy: user.uid,
+        createdAt: group.createdAt || new Date(),
+        students: group.students,
+        moniteurId: user.uid,
       };
 
-      if (groupId) {
-        await updateDoc(doc(db, 'moniteur_groups', groupId), groupData);
+      if (mode === 'edit' && groupId) {
+        await updateDoc(doc(db, 'groups', groupId), groupData);
+        setSuccess('Groupe mis à jour avec succès !');
       } else {
-        await addDoc(collection(db, 'moniteur_groups'), groupData);
+        await addDoc(collection(db, 'groups'), groupData);
+        setSuccess('Groupe créé avec succès !');
       }
-      navigate('/moniteur/groups');
-    } catch (error: unknown) {
-      console.error('Erreur lors de la sauvegarde :', error);
-      alert(`Une erreur est survenue : ${error instanceof Error ? error.message : String(error)}`);
+
+      setTimeout(() => {
+        navigate('/moniteur/groups');
+      }, 1500);
+    } catch (err) {
+      setError(`Erreur lors de l'enregistrement : ${err}`);
+    } finally {
+      setIsSubmitting(false);
     }
   };
+
+  const handleCloseSnackbar = () => {
+    setError(null);
+    setSuccess(null);
+  };
+
+  if (loadingAuth || isLoading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
 
   return (
     <Container maxWidth="md">
       <Paper sx={{ p: 3, mt: 3 }}>
-        <Typography variant="h5" gutterBottom>
-          {groupId ? 'Modifier le groupe' : 'Créer un nouveau groupe'}
+        <Typography variant="h4" gutterBottom>
+          {mode === 'edit' ? 'Modifier le groupe' : 'Nouveau groupe'}
         </Typography>
 
-        <Box component="form" sx={{ mt: 2 }}>
-          <TextField
-            label="Nom du groupe"
-            value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            fullWidth
-            margin="normal"
-            required
-          />
-
+        <form onSubmit={handleSubmit}>
           <FormControl fullWidth margin="normal">
-            <InputLabel>Sélectionner les clients</InputLabel>
-            <Select
-              multiple
-              value={formData.selectedClients}
-              onChange={(e) => setFormData({
-                ...formData,
-                selectedClients: e.target.value as string[]
-              })}
-              input={<OutlinedInput label="Sélectionner les clients" />}
-              renderValue={(selected: string[]) => (
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                  {selected.map((id: string) => {
-                    const client = clients.find(c => c.id === id);
-                    return client ? (
-                      <Chip
-                        key={id}
-                        label={`${client.first_name} ${client.last_name}`}
-                      />
-                    ) : null;
-                  })}
-                </Box>
-              )}
-            >
-              {clients.map((client: Client) => (
-                <MenuItem key={client.id} value={client.id}>
-                  <Checkbox
-                    checked={formData.selectedClients.indexOf(client.id) > -1}
-                  />
-                  <ListItemText primary={`${client.first_name} ${client.last_name}`} />
-                </MenuItem>
-              ))}
-            </Select>
+            <FormLabel>Nom du groupe *</FormLabel>
+            <TextField
+              name="name"
+              value={group.name}
+              onChange={(e) => setGroup({ ...group, name: e.target.value })}
+              required
+              variant="outlined"
+              placeholder="Ex: Groupe Débutants Lundi 18h"
+            />
           </FormControl>
 
-          <Box sx={{ display: 'flex', gap: 2, mt: 3 }}>
+          <FormControl fullWidth margin="normal">
+            <FormLabel>Description</FormLabel>
+            <TextField
+              name="description"
+              value={group.description}
+              onChange={(e) => setGroup({ ...group, description: e.target.value })}
+              variant="outlined"
+              multiline
+              rows={4}
+              placeholder="Description du groupe..."
+            />
+          </FormControl>
+
+          <FormControl fullWidth margin="normal">
+            <FormLabel>Élèves *</FormLabel>
+            <Autocomplete
+              multiple
+              options={allClients}
+              getOptionLabel={(option: User) => `${option.displayName} (${option.email})`}
+              value={allClients.filter((client) => group.students.includes(client.uid))}
+              onChange={(_, newValue: User[]) => {
+                setGroup({
+                  ...group,
+                  students: newValue.map((client) => client.uid),
+                });
+              }}
+              renderInput={(params: AutocompleteRenderInputParams) => (
+                <TextField
+                  {...params}
+                  variant="outlined"
+                  placeholder="Sélectionnez les élèves"
+                  required
+                />
+              )}
+              filterSelectedOptions
+            />
+          </FormControl>
+
+          <Box sx={{ mt: 4, display: 'flex', gap: 2 }}>
             <Button
-              variant="contained"
-              color="primary"
-              onClick={handleSubmit}
-            >
-              {groupId ? 'Modifier' : 'Créer'}
-            </Button>
-            <Button
+              type="button"
               variant="outlined"
               onClick={() => navigate('/moniteur/groups')}
+              disabled={isSubmitting}
             >
               Annuler
             </Button>
+            <Button
+              type="submit"
+              variant="contained"
+              color="primary"
+              disabled={isSubmitting || !group.name || group.students.length === 0}
+            >
+              {isSubmitting ? <CircularProgress size={24} /> : mode === 'edit' ? 'Mettre à jour' : 'Créer'}
+            </Button>
           </Box>
-        </Box>
+        </form>
       </Paper>
+
+      <Snackbar
+        open={!!error || !!success}
+        autoHideDuration={6000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={handleCloseSnackbar}
+          severity={error ? 'error' : 'success'}
+          sx={{ width: '100%' }}
+        >
+          {error || success}
+        </Alert>
+      </Snackbar>
     </Container>
   );
-}
+};
+
+export default GroupForm;

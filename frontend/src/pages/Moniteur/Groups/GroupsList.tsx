@@ -1,136 +1,245 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useAuthState } from 'react-firebase-hooks/auth';
+import { auth, db } from '../../../services/firebaseConfig';
 import {
-  Typography, Paper, Container, Button, Box,
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
+  collection,
+  query,
+  where,
+  onSnapshot,
+  doc,
+  deleteDoc,
+  getDocs,
+} from 'firebase/firestore';
+import {
+  Container,
+  Typography,
+  Box,
+  Button,
+  Paper,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   IconButton,
-  // ✅ Ajout des imports manquants
-  Dialog, DialogTitle, DialogContent, DialogActions
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  CircularProgress,
+  Chip,
+  Tooltip,
 } from '@mui/material';
-import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
-import { collection, query, where, getDocs, doc, deleteDoc } from 'firebase/firestore';
-import { db } from '../../../services/firebaseConfig';
-import { useAuth } from '../../../context/AuthContext';
+import {
+  Add as AddIcon,
+  Edit as EditIcon,
+  Delete as DeleteIcon,
+  Group as GroupIcon,
+} from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
 
-interface MoniteurGroup {
+interface Group {
   id: string;
   name: string;
-  moniteur_id: string;
-  client_ids: string[];
-  created_at: string;
+  description: string;
+  createdBy: string;
+  createdAt: Date;
+  students: string[];
+  moniteurId: string;
 }
 
-export default function GroupsList(): JSX.Element {
-  const navigate = useNavigate();
-  const { currentUser } = useAuth();
-  const [groups, setGroups] = useState<MoniteurGroup[]>([]);
+const GroupsList: React.FC = () => {
+  const [user, loadingAuth] = useAuthState(auth);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
   const [groupToDelete, setGroupToDelete] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    if (!currentUser?.uid) return;
-    const fetchGroups = async (): Promise<void> => {
-      try {
-        const q = query(
-          collection(db, 'moniteur_groups'),
-          where('moniteur_id', '==', currentUser.uid)
-        );
-        const snapshot = await getDocs(q);
-        setGroups(snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as MoniteurGroup[]);
-      } catch (error: unknown) {
-        console.error('Erreur lors du chargement des groupes :', error);
-        alert('Une erreur est survenue.');
-      }
-    };
-    fetchGroups();
-  }, [currentUser?.uid]);
+    if (!user) return;
 
-  const handleDelete = async (groupId: string): Promise<void> => {
-    if (!window.confirm('Êtes-vous sûr de vouloir supprimer ce groupe ?')) return;
+    setIsLoading(true);
+    setError(null);
+
+    const q = query(
+      collection(db, 'groups'),
+      where('moniteurId', '==', user.uid)
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (querySnapshot) => {
+        const groupsData: Group[] = [];
+        querySnapshot.forEach((doc) => {
+          groupsData.push({
+            id: doc.id,
+            ...doc.data(),
+            createdAt: doc.data().createdAt?.toDate() || new Date(),
+          } as Group);
+        });
+        setGroups(groupsData);
+        setIsLoading(false);
+      },
+      (err) => {
+        setError(`Erreur lors de la récupération des groupes : ${err.message}`);
+        setIsLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user]);
+
+  const handleDelete = async (groupId: string) => {
+    if (!user) return;
     try {
-      await deleteDoc(doc(db, 'moniteur_groups', groupId));
-      setGroups(groups.filter(g => g.id !== groupId));
+      const coursesQuery = query(
+        collection(db, 'courses'),
+        where('groupId', '==', groupId)
+      );
+      const coursesSnapshot = await getDocs(coursesQuery);
+
+      if (!coursesSnapshot.empty) {
+        setError('Impossible de supprimer ce groupe : il contient des séances.');
+        setOpenDeleteDialog(false);
+        return;
+      }
+
+      await deleteDoc(doc(db, 'groups', groupId));
       setOpenDeleteDialog(false);
-    } catch (error: unknown) {
-      console.error('Erreur lors de la suppression :', error);
-      alert('Une erreur est survenue.');
+      setGroupToDelete(null);
+    } catch (error) {
+      setError(`Erreur lors de la suppression du groupe : ${error}`);
+      setOpenDeleteDialog(false);
     }
   };
+
+  if (loadingAuth || isLoading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
 
   return (
     <Container maxWidth="lg">
       <Paper sx={{ p: 3, mt: 3 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-          <Typography variant="h5">Mes Groupes de Clients</Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <GroupIcon color="primary" sx={{ fontSize: 40 }} />
+            <Typography variant="h4">Gestion des groupes</Typography>
+          </Box>
           <Button
             variant="contained"
+            color="primary"
             startIcon={<AddIcon />}
-            onClick={() => navigate('/moniteur/groups/add')}
+            onClick={() => navigate('/moniteur/groups/new')}
+            sx={{ height: '48px' }}
           >
-            Ajouter un groupe
+            Nouveau groupe
           </Button>
         </Box>
 
-        {groups.length > 0 ? (
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Nom du groupe</TableCell>
-                  <TableCell>Nombre de membres</TableCell>
-                  <TableCell>Date de création</TableCell>
-                  <TableCell>Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {groups.map((group: MoniteurGroup) => (
-                  <TableRow key={group.id}>
-                    <TableCell>{group.name}</TableCell>
-                    <TableCell>{group.client_ids.length}</TableCell>
-                    <TableCell>{new Date(group.created_at).toLocaleDateString()}</TableCell>
-                    <TableCell>
-                      <IconButton
-                        color="primary"
-                        onClick={() => navigate(`/moniteur/groups/edit/${group.id}`)}
-                        title="Modifier"
-                      >
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton
-                        color="error"
-                        onClick={() => {
-                          setGroupToDelete(group.id);
-                          setOpenDeleteDialog(true);
-                        }}
-                        title="Supprimer"
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        ) : (
-          <Typography>Vous n'avez encore créé aucun groupe.</Typography>
+        {error && (
+          <Box sx={{ mb: 2, p: 2, bgcolor: 'error.main', color: 'white', borderRadius: 1 }}>
+            {error}
+          </Box>
         )}
 
-        {/* ✅ Dialog corrigé avec les imports */}
+        <TableContainer>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>Nom</TableCell>
+                <TableCell>Description</TableCell>
+                <TableCell>Élèves</TableCell>
+                <TableCell>Créé le</TableCell>
+                <TableCell>Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {groups.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} align="center">
+                    Aucun groupe trouvé. Créez-en un !
+                  </TableCell>
+                </TableRow>
+              ) : (
+                groups.map((group) => (
+                  <TableRow key={group.id} hover>
+                    <TableCell>{group.name}</TableCell>
+                    <TableCell>{group.description || 'Aucune description'}</TableCell>
+                    <TableCell>
+                      {group.students?.length || 0}
+                      {group.students?.length > 0 && (
+                        <Tooltip title={group.students?.join(', ') || ''}>
+                          <Chip
+                            label="Voir"
+                            size="small"
+                            sx={{ ml: 1, cursor: 'pointer' }}
+                          />
+                        </Tooltip>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {group.createdAt.toLocaleDateString('fr-FR')}
+                    </TableCell>
+                    <TableCell>
+                      <Tooltip title="Modifier le groupe">
+                        <IconButton
+                          color="primary"
+                          onClick={() => navigate(`/moniteur/groups/edit/${group.id}`)}
+                        >
+                          <EditIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Supprimer le groupe">
+                        <IconButton
+                          color="error"
+                          onClick={() => {
+                            setGroupToDelete(group.id);
+                            setOpenDeleteDialog(true);
+                          }}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+
         <Dialog
           open={openDeleteDialog}
           onClose={() => setOpenDeleteDialog(false)}
         >
           <DialogTitle>Supprimer le groupe</DialogTitle>
           <DialogContent>
-            Êtes-vous sûr de vouloir supprimer ce groupe ? Cette action est irréversible.
+            Êtes-vous sûr de vouloir supprimer ce groupe ?
+            <br />
+            <strong>Cette action est irréversible.</strong>
+            {groupToDelete && (
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="body2" color="text.secondary">
+                  Groupe : {groups.find(g => g.id === groupToDelete)?.name}
+                </Typography>
+              </Box>
+            )}
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setOpenDeleteDialog(false)}>Annuler</Button>
-            <Button onClick={() => handleDelete(groupToDelete!)} color="error">
+            <Button
+              onClick={() => groupToDelete && handleDelete(groupToDelete)}
+              color="error"
+              variant="contained"
+              autoFocus
+            >
               Supprimer
             </Button>
           </DialogActions>
@@ -138,4 +247,6 @@ export default function GroupsList(): JSX.Element {
       </Paper>
     </Container>
   );
-}
+};
+
+export default GroupsList;

@@ -3,10 +3,11 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
+  base: '/blocabrac-pwa/', // ✅ Chemin exact de votre dépôt GitHub (ex: https://Stfbrnl.github.io/blocabrac-pwa/)
   server: {
-    host: true, // ✅ Écoute sur toutes les interfaces (0.0.0.0)
+    host: true,
     port: 5173,
-    strictPort: true, // ✅ Force le port 5173
+    strictPort: true,
   },
   plugins: [react()],
 });
