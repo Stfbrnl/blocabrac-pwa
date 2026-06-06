@@ -119,11 +119,6 @@ const GroupForm: React.FC = () => {
     fetchGroup();
   }, [user, mode, groupId, allClients.length]);
 
-  // Gérer la sélection des clients
-  const handleClientChange = (newValue: User[]) => {
-    setSelectedClientUids(newValue.map(client => client.uid));
-  };
-
   // Soumission du formulaire
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -213,9 +208,10 @@ const GroupForm: React.FC = () => {
             <Autocomplete
               multiple
               options={allClients}
-              getOptionLabel={(option: User) => `${option.displayName} (${option.email})`}
-              value={allClients.filter((client: User) => selectedClientUids.includes(client.uid))}
-              onChange={(_: React.SyntheticEvent, newValue: User[]) => handleClientChange(newValue)}
+              getOptionLabel={(option) => `${option.displayName} (${option.email})`}
+              onChange={(_event, newValue: User[]) => {
+                setSelectedClientUids(newValue.map(client => client.uid));
+              }}
               renderInput={(params) => (
                 <TextField
                   {...params}
@@ -227,7 +223,7 @@ const GroupForm: React.FC = () => {
                 />
               )}
               filterSelectedOptions
-              isOptionEqualToValue={(option: User, value: User) => option.uid === value.uid}
+              isOptionEqualToValue={(option, value) => option.uid === value.uid}
               sx={{ width: '100%' }}
             />
           </FormControl>
