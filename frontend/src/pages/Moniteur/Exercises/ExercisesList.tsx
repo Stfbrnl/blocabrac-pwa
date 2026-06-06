@@ -27,30 +27,36 @@ import {
   DialogContent,
   DialogActions,
   CircularProgress,
+  Chip,
   Tooltip,
 } from '@mui/material';
 import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
-  Group as GroupIcon,
+  FitnessCenter as FitnessCenterIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 
-interface Group {
+interface Exercise {
   id: string;
   name: string;
   description: string;
-  students: string[];
-  moniteurId: string;
+  difficulty: string;
+  category: string;
+  createdBy: string;
+  createdAt: Date;
 }
 
-const GroupsList: React.FC = () => {
+const difficulties = ['Facile', 'Moyen', 'Difficile', 'Expert'];
+const categories = ['Échauffement', 'Bloc', 'Plyométrie', 'Renforcement', 'Équipement'];
+
+const ExercisesList: React.FC = () => {
   const [user, loadingAuth] = useAuthState(auth);
-  const [groups, setGroups] = useState<Group[]>([]);
+  const [exercises, setExercises] = useState<Exercise[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
-  const [groupToDelete, setGroupToDelete] = useState<string | null>(null);
+  const [exerciseToDelete, setExerciseToDelete] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
@@ -61,28 +67,26 @@ const GroupsList: React.FC = () => {
     setError(null);
 
     const q = query(
-      collection(db, 'Groups'),
-      where('moniteurId', '==', user.uid)
+      collection(db, 'exercises'),
+      where('createdBy', '==', user.uid)
     );
 
     const unsubscribe = onSnapshot(
       q,
       (querySnapshot) => {
-        const groupsData: Group[] = [];
+        const exercisesData: Exercise[] = [];
         querySnapshot.forEach((doc) => {
-          groupsData.push({
+          exercisesData.push({
             id: doc.id,
-            name: doc.data().name,
-            description: doc.data().description || '',
-            students: doc.data().students || [],
-            moniteurId: doc.data().moniteurId,
-          });
+            ...doc.data(),
+            createdAt: doc.data().createdAt?.toDate() || new Date(),
+          } as Exercise);
         });
-        setGroups(groupsData);
+        setExercises(exercisesData);
         setIsLoading(false);
       },
       (err) => {
-        setError(`Erreur lors de la récupération des groupes : ${err.message}`);
+        setError(`Erreur lors de la récupération des exercices : ${err.message}`);
         setIsLoading(false);
       }
     );
@@ -90,14 +94,14 @@ const GroupsList: React.FC = () => {
     return () => unsubscribe();
   }, [user]);
 
-  const handleDelete = async (groupId: string) => {
+  const handleDelete = async (exerciseId: string) => {
     if (!user) return;
     try {
-      await deleteDoc(doc(db, 'Groups', groupId));
+      await deleteDoc(doc(db, 'exercises', exerciseId));
       setOpenDeleteDialog(false);
-      setGroupToDelete(null);
+      setExerciseToDelete(null);
     } catch (error) {
-      setError(`Erreur lors de la suppression du groupe : ${error}`);
+      setError(`Erreur lors de la suppression de l\\'exercice : ${error}`);
       setOpenDeleteDialog(false);
     }
   };
@@ -115,17 +119,17 @@ const GroupsList: React.FC = () => {
       <Paper sx={{ p: 3, mt: 3 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <GroupIcon color="primary" sx={{ fontSize: 40 }} />
-            <Typography variant="h4">Gestion des groupes</Typography>
+            <FitnessCenterIcon color="primary" sx={{ fontSize: 40 }} />
+            <Typography variant="h4">Gestion des exercices</Typography>
           </Box>
           <Button
             variant="contained"
             color="primary"
             startIcon={<AddIcon />}
-            onClick={() => navigate('/moniteur/groups/new')}
+            onClick={() => navigate('/moniteur/exercises/new')}
             sx={{ height: '48px' }}
           >
-            Nouveau groupe
+            Nouvel exercice
           </Button>
         </Box>
 
@@ -140,38 +144,50 @@ const GroupsList: React.FC = () => {
             <TableHead>
               <TableRow>
                 <TableCell>Nom</TableCell>
-                <TableCell>Description</TableCell>
-                <TableCell>Nombre de clients</TableCell>
+                <TableCell>Catégorie</TableCell>
+                <TableCell>Difficulté</TableCell>
+                <TableCell>Créé le</TableCell>
                 <TableCell>Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {groups.length === 0 ? (
+              {exercises.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} align="center">
-                    Aucun groupe trouvé. Créez-en un !
+                  <TableCell colSpan={5} align="center">
+                    Aucun exercice trouvé. Créez-en un !
                   </TableCell>
                 </TableRow>
               ) : (
-                groups.map((group) => (
-                  <TableRow key={group.id} hover>
-                    <TableCell>{group.name}</TableCell>
-                    <TableCell>{group.description}</TableCell>
-                    <TableCell>{group.students.length}</TableCell>
+                exercises.map((exercise) => (
+                  <TableRow key={exercise.id} hover>
+                    <TableCell>{exercise.name}</TableCell>
+                    <TableCell>{exercise.category}</TableCell>
                     <TableCell>
-                      <Tooltip title="Modifier le groupe">
+                      <Chip
+                        label={exercise.difficulty}
+                        color={
+                          exercise.difficulty === 'Facile' ? 'success' :
+                          exercise.difficulty === 'Moyen' ? 'primary' :
+                          exercise.difficulty === 'Difficile' ? 'warning' : 'error'
+                        }
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell>{exercise.createdAt.toLocaleDateString('fr-FR')}</TableCell>
+                    <TableCell>
+                      <Tooltip title="Modifier l'exercice">
                         <IconButton
                           color="primary"
-                          onClick={() => navigate(`/moniteur/groups/edit/${group.id}`)}
+                          onClick={() => navigate(`/moniteur/exercises/edit/${exercise.id}`)}
                         >
                           <EditIcon />
                         </IconButton>
                       </Tooltip>
-                      <Tooltip title="Supprimer le groupe">
+                      <Tooltip title="Supprimer l'exercice">
                         <IconButton
                           color="error"
                           onClick={() => {
-                            setGroupToDelete(group.id);
+                            setExerciseToDelete(exercise.id);
                             setOpenDeleteDialog(true);
                           }}
                         >
@@ -190,16 +206,16 @@ const GroupsList: React.FC = () => {
           open={openDeleteDialog}
           onClose={() => setOpenDeleteDialog(false)}
         >
-          <DialogTitle>Supprimer le groupe</DialogTitle>
+          <DialogTitle>Supprimer l'exercice</DialogTitle>
           <DialogContent>
-            Êtes-vous sûr de vouloir supprimer ce groupe ?
+            Êtes-vous sûr de vouloir supprimer cet exercice ?
             <br />
             <strong>Cette action est irréversible.</strong>
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setOpenDeleteDialog(false)}>Annuler</Button>
             <Button
-              onClick={() => groupToDelete && handleDelete(groupToDelete)}
+              onClick={() => exerciseToDelete && handleDelete(exerciseToDelete)}
               color="error"
               variant="contained"
               autoFocus
@@ -213,4 +229,4 @@ const GroupsList: React.FC = () => {
   );
 };
 
-export default GroupsList;
+export default ExercisesList;

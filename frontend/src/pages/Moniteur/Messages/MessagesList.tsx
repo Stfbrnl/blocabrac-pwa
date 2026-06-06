@@ -8,6 +8,7 @@ import {
   onSnapshot,
   doc,
   deleteDoc,
+  updateDoc,
 } from 'firebase/firestore';
 import {
   Container,
@@ -27,46 +28,38 @@ import {
   DialogContent,
   DialogActions,
   CircularProgress,
+  Chip,
   Tooltip,
+  TextField,
+  Alert,
+  Snackbar,
 } from '@mui/material';
 import {
   Add as AddIcon,
-  Edit as EditIcon,
   Delete as DeleteIcon,
-  CalendarToday as CalendarIcon,
+  Mail as MailIcon,
+  Check as CheckIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 
-// ✅ Fonction utilitaire pour convertir les dates Firestore
-const convertFirestoreDate = (date: any): Date => {
-  if (!date) return new Date();
-  if (date instanceof Date) return date;
-  if (date?.toDate) return date.toDate();
-  if (typeof date === 'string') return new Date(date);
-  return new Date();
-};
-
-interface Course {
+interface Message {
   id: string;
   title: string;
-  description: string;
-  date: Date;
-  time: string;
-  level: string;
-  MaxParticipants: number;
-  Participants?: string[]; // ✅ Ajout de la propriété Participants
-  groupId: string;
-  createdBy: string;
+  content: string;
+  moniteurId: string;
+  client_ids: string[];
   createdAt: Date;
+  isRead: boolean;
 }
 
-const CoursesList: React.FC = () => {
+const MessagesList: React.FC = () => {
   const [user, loadingAuth] = useAuthState(auth);
-  const [courses, setCourses] = useState<Course[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
-  const [courseToDelete, setCourseToDelete] = useState<string | null>(null);
+  const [messageToDelete, setMessageToDelete] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -76,27 +69,26 @@ const CoursesList: React.FC = () => {
     setError(null);
 
     const q = query(
-      collection(db, 'courses'),
-      where('createdBy', '==', user.uid)
+      collection(db, 'messages'),
+      where('moniteurId', '==', user.uid)
     );
 
     const unsubscribe = onSnapshot(
       q,
       (querySnapshot) => {
-        const coursesData: Course[] = [];
+        const messagesData: Message[] = [];
         querySnapshot.forEach((doc) => {
-          coursesData.push({
+          messagesData.push({
             id: doc.id,
             ...doc.data(),
-            date: convertFirestoreDate(doc.data().date),
-            createdAt: convertFirestoreDate(doc.data().createdAt),
-          } as Course);
+            createdAt: doc.data().createdAt?.toDate() || new Date(),
+          } as Message);
         });
-        setCourses(coursesData);
+        setMessages(messagesData);
         setIsLoading(false);
       },
       (err) => {
-        setError(`Erreur lors de la récupération des séances : ${err.message}`);
+        setError(`Erreur lors de la récupération des messages : ${err.message}`);
         setIsLoading(false);
       }
     );
@@ -104,16 +96,32 @@ const CoursesList: React.FC = () => {
     return () => unsubscribe();
   }, [user]);
 
-  const handleDelete = async (courseId: string) => {
+  const handleDelete = async (messageId: string) => {
     if (!user) return;
     try {
-      await deleteDoc(doc(db, 'courses', courseId));
+      await deleteDoc(doc(db, 'messages', messageId));
+      setSuccess('Message supprimé avec succès !');
       setOpenDeleteDialog(false);
-      setCourseToDelete(null);
+      setMessageToDelete(null);
     } catch (error) {
-      setError(`Erreur lors de la suppression de la séance : ${error}`);
+      setError(`Erreur lors de la suppression du message : ${error}`);
       setOpenDeleteDialog(false);
     }
+  };
+
+  const handleMarkAsRead = async (messageId: string) => {
+    if (!user) return;
+    try {
+      await updateDoc(doc(db, 'messages', messageId), { isRead: true });
+      setSuccess('Message marqué comme lu !');
+    } catch (error) {
+      setError(`Erreur lors de la mise à jour : ${error}`);
+    }
+  };
+
+  const handleCloseSnackbar = () => {
+    setError(null);
+    setSuccess(null);
   };
 
   if (loadingAuth || isLoading) {
@@ -129,18 +137,9 @@ const CoursesList: React.FC = () => {
       <Paper sx={{ p: 3, mt: 3 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <CalendarIcon color="primary" sx={{ fontSize: 40 }} />
-            <Typography variant="h4">Gestion des séances</Typography>
+            <MailIcon color="primary" sx={{ fontSize: 40 }} />
+            <Typography variant="h4">Messagerie</Typography>
           </Box>
-          <Button
-            variant="contained"
-            color="primary"
-            startIcon={<AddIcon />}
-            onClick={() => navigate('/moniteur/courses/new')}
-            sx={{ height: '48px' }}
-          >
-            Nouvelle séance
-          </Button>
         </Box>
 
         {error && (
@@ -149,57 +148,59 @@ const CoursesList: React.FC = () => {
           </Box>
         )}
 
+        {success && (
+          <Box sx={{ mb: 2, p: 2, bgcolor: 'success.main', color: 'white', borderRadius: 1 }}>
+            {success}
+          </Box>
+        )}
+
         <TableContainer>
           <Table>
             <TableHead>
               <TableRow>
                 <TableCell>Titre</TableCell>
+                <TableCell>Destinataires</TableCell>
                 <TableCell>Date</TableCell>
-                <TableCell>Heure</TableCell>
-                <TableCell>Niveau</TableCell>
-                <TableCell>Participants</TableCell>
+                <TableCell>Statut</TableCell>
                 <TableCell>Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {courses.length === 0 ? (
+              {messages.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} align="center">
-                    Aucune séance trouvée. Créez-en une !
+                  <TableCell colSpan={5} align="center">
+                    Aucun message trouvé.
                   </TableCell>
                 </TableRow>
               ) : (
-                courses.map((course) => (
-                  <TableRow key={course.id} hover>
-                    <TableCell>{course.title}</TableCell>
-                    <TableCell>{course.date.toLocaleDateString('fr-FR')}</TableCell>
-                    <TableCell>{course.time}</TableCell>
-                    <TableCell>{course.level}</TableCell>
+                messages.map((message) => (
+                  <TableRow key={message.id} hover>
+                    <TableCell>{message.title}</TableCell>
+                    <TableCell>{message.client_ids?.length || 0} clients</TableCell>
+                    <TableCell>{message.createdAt.toLocaleDateString('fr-FR')}</TableCell>
                     <TableCell>
-                      {(course.Participants?.length || 0)}/{course.MaxParticipants}
+                      <Chip
+                        label={message.isRead ? 'Lu' : 'Non lu'}
+                        color={message.isRead ? 'success' : 'default'}
+                        size="small"
+                      />
                     </TableCell>
                     <TableCell>
-                      <Tooltip title="Voir les détails">
-                        <IconButton
-                          color="primary"
-                          onClick={() => navigate(`/moniteur/courses/${course.id}`)}
-                        >
-                          <EditIcon />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Modifier la séance">
-                        <IconButton
-                          color="primary"
-                          onClick={() => navigate(`/moniteur/courses/edit/${course.id}`)}
-                        >
-                          <EditIcon />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Supprimer la séance">
+                      {!message.isRead && (
+                        <Tooltip title="Marquer comme lu">
+                          <IconButton
+                            color="primary"
+                            onClick={() => handleMarkAsRead(message.id)}
+                          >
+                            <CheckIcon />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                      <Tooltip title="Supprimer le message">
                         <IconButton
                           color="error"
                           onClick={() => {
-                            setCourseToDelete(course.id);
+                            setMessageToDelete(message.id);
                             setOpenDeleteDialog(true);
                           }}
                         >
@@ -218,16 +219,16 @@ const CoursesList: React.FC = () => {
           open={openDeleteDialog}
           onClose={() => setOpenDeleteDialog(false)}
         >
-          <DialogTitle>Supprimer la séance</DialogTitle>
+          <DialogTitle>Supprimer le message</DialogTitle>
           <DialogContent>
-            Êtes-vous sûr de vouloir supprimer cette séance ?
+            Êtes-vous sûr de vouloir supprimer ce message ?
             <br />
             <strong>Cette action est irréversible.</strong>
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setOpenDeleteDialog(false)}>Annuler</Button>
             <Button
-              onClick={() => courseToDelete && handleDelete(courseToDelete)}
+              onClick={() => messageToDelete && handleDelete(messageToDelete)}
               color="error"
               variant="contained"
               autoFocus
@@ -237,8 +238,23 @@ const CoursesList: React.FC = () => {
           </DialogActions>
         </Dialog>
       </Paper>
+
+      <Snackbar
+        open={!!error || !!success}
+        autoHideDuration={6000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={handleCloseSnackbar}
+          severity={error ? 'error' : 'success'}
+          sx={{ width: '100%' }}
+        >
+          {error || success}
+        </Alert>
+      </Snackbar>
     </Container>
   );
 };
 
-export default CoursesList;
+export default MessagesList;

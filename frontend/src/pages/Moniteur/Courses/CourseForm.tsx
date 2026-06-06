@@ -1,285 +1,348 @@
-import React, { useState, useEffect, ChangeEvent, FormEvent } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useAuthState } from 'react-firebase-hooks/auth';
+import { auth, db } from '../../../services/firebaseConfig';
 import {
-  Typography, Paper, Container, Button, Box,
-  TextField, FormControl, InputLabel, Select, MenuItem,
-  Checkbox, ListItemText, OutlinedInput, Chip
+  collection,
+  doc,
+  addDoc,
+  updateDoc,
+  getDoc,
+  query,
+  where,
+  getDocs,
+} from 'firebase/firestore';
+import {
+  Container,
+  Typography,
+  Box,
+  Paper,
+  TextField,
+  Button,
+  CircularProgress,
+  FormControl,
+  FormLabel,
+  MenuItem,
+  Snackbar,
+  Alert,
 } from '@mui/material';
-import { collection, query, where, getDocs, doc, addDoc, updateDoc, getDoc } from 'firebase/firestore';
-import { db } from '../../../services/firebaseConfig';
-import { useAuth } from '../../../context/AuthContext';
-
-interface Exercise {
-  id: string;
-  name: string;
-  description?: string;
-}
+import { useNavigate, useParams } from 'react-router-dom';
 
 interface Course {
-  id: string;
-  name: string;
-  moniteur_id: string;
-  date: string;
-  description?: string;
-  group_id?: string;
-  exercise_ids?: string[];
-  max_participants?: number;
-  difficulty?: string;
-  is_active: boolean;
+  id?: string;
+  title: string;
+  description: string;
+  date: Date;
+  time: string;
+  level: string;
+  MaxParticipants: number;
+  groupId: string;
+  createdBy: string;
+  createdAt: Date;
 }
 
-interface MoniteurGroup {
-  id: string;
-  name: string;
-}
+const levels = ['Débutant', 'Intermédiaire', 'Avancé', 'Expert'];
 
-export default function CourseForm(): JSX.Element {
+const CourseForm: React.FC = () => {
+  const [user, loadingAuth] = useAuthState(auth);
+  const { mode, courseId } = useParams<{ mode: string; courseId?: string }>();
   const navigate = useNavigate();
-  const { courseId } = useParams<{ courseId?: string }>();
-  const { currentUser } = useAuth();
-  const [groups, setGroups] = useState<MoniteurGroup[]>([]);
-  const [exercises, setExercises] = useState<Exercise[]>([]);
-  const [formData, setFormData] = useState<{
-    name: string;
-    date: string;
-    description: string;
-    group_id: string;
-    exercise_ids: string[];
-    max_participants: number;
-    difficulty: string;
-  }>({
-    name: '',
-    date: new Date().toISOString().slice(0, 16),
+
+  const [course, setCourse] = useState<Course>({
+    title: '',
     description: '',
-    group_id: '',
-    exercise_ids: [],
-    max_participants: 10,
-    difficulty: 'Intermédiaire'
+    date: new Date(),
+    time: '18:00',
+    level: 'Débutant',
+    MaxParticipants: 10,
+    groupId: '',
+    createdBy: user?.uid || '',
+    createdAt: new Date(),
   });
+  const [groups, setGroups] = useState<{ id: string; name: string }[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!currentUser?.uid) return;
-    const fetchData = async (): Promise<void> => {
-      try {
-        const groupsQuery = query(
-          collection(db, 'moniteur_groups'),
-          where('moniteur_id', '==', currentUser.uid)
-        );
-        const groupsSnapshot = await getDocs(groupsQuery);
-        setGroups(groupsSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as MoniteurGroup[]);
+    if (!user) return;
 
-        const exercisesQuery = query(
-          collection(db, 'exercises'),
-          where('created_by', '==', currentUser.uid)
-        );
-        const exercisesSnapshot = await getDocs(exercisesQuery);
-        setExercises(exercisesSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as Exercise[]);
-      } catch (error: unknown) {
-        console.error('Erreur lors du chargement :', error);
-      }
-    };
-    fetchData();
-  }, [currentUser?.uid]);
-
-  useEffect(() => {
-    if (!courseId) return;
-    const fetchCourse = async (): Promise<void> => {
+    const fetchGroups = async () => {
       try {
-        const docSnap = await getDoc(doc(db, 'courses', courseId));
-        if (docSnap.exists()) {
-          const data = docSnap.data() as Course;
-          setFormData({
-            name: data.name,
-            date: data.date,
-            description: data.description || '',
-            group_id: data.group_id || '',
-            exercise_ids: data.exercise_ids || [],
-            max_participants: data.max_participants || 10,
-            difficulty: data.difficulty || 'Intermédiaire'
+        const q = query(
+          collection(db, 'Groups'), // ✅ Collection "Groups" avec majuscule
+          where('moniteurId', '==', user.uid)
+        );
+        const querySnapshot = await getDocs(q);
+        const groupsData: { id: string; name: string }[] = [];
+        querySnapshot.forEach((doc) => {
+          groupsData.push({
+            id: doc.id,
+            name: doc.data().name,
           });
+        });
+        setGroups(groupsData);
+        if (groupsData.length > 0 && !course.groupId && mode !== 'edit') {
+          setCourse({ ...course, groupId: groupsData[0].id });
         }
-      } catch (error: unknown) {
-        console.error('Erreur lors du chargement du cours :', error);
+        setIsLoading(false);
+      } catch (err) {
+        setError(`Erreur lors du chargement des groupes : ${err}`);
+        setIsLoading(false);
       }
     };
-    fetchCourse();
-  }, [courseId]);
 
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
+    const fetchCourse = async () => {
+      if (mode !== 'edit' || !courseId) return;
+      try {
+        const docRef = doc(db, 'courses', courseId);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          setCourse({
+            id: docSnap.id,
+            ...docSnap.data(),
+            date: docSnap.data().date?.toDate() || new Date(),
+            createdAt: docSnap.data().createdAt?.toDate() || new Date(),
+          } as Course);
+        }
+      } catch (err) {
+        setError(`Erreur lors du chargement de la séance : ${err}`);
+      }
+    };
+
+    fetchGroups();
+    fetchCourse();
+  }, [user, mode, courseId, course.groupId]);
+
+  const handleMaxParticipantsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = Math.max(1, Number(e.target.value));
+    setCourse({ ...course, MaxParticipants: value });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name) {
-      alert('Veuillez saisir un nom pour le cours.');
+    if (!user) return;
+
+    if (!course.groupId) {
+      setError('Veuillez sélectionner un groupe.');
       return;
     }
-    if (!formData.date) {
-      alert('Veuillez sélectionner une date.');
-      return;
-    }
+
+    setIsSubmitting(true);
+    setError(null);
 
     try {
       const courseData = {
-        name: formData.name,
-        moniteur_id: currentUser?.uid,
-        date: formData.date,
-        description: formData.description,
-        group_id: formData.group_id || null,
-        exercise_ids: formData.exercise_ids,
-        max_participants: formData.max_participants,
-        difficulty: formData.difficulty,
-        is_active: true,
-        created_at: new Date().toISOString()
+        title: course.title,
+        description: course.description,
+        date: course.date,
+        time: course.time,
+        level: course.level,
+        MaxParticipants: course.MaxParticipants,
+        groupId: course.groupId,
+        createdBy: user.uid,
+        createdAt: course.createdAt || new Date(),
+        Participants: [],
       };
 
-      if (courseId) {
+      if (mode === 'edit' && courseId) {
         await updateDoc(doc(db, 'courses', courseId), courseData);
+        setSuccess('Séance mise à jour avec succès !');
       } else {
         await addDoc(collection(db, 'courses'), courseData);
+        setSuccess('Séance créée avec succès !');
       }
-      navigate('/moniteur/courses');
-    } catch (error: unknown) {
-      console.error('Erreur lors de la sauvegarde :', error);
-      alert(`Une erreur est survenue : ${error instanceof Error ? error.message : String(error)}`);
+
+      setTimeout(() => navigate('/moniteur/courses'), 1500);
+    } catch (err) {
+      setError(`Erreur lors de l'enregistrement : ${err}`);
+    } finally {
+      setIsSubmitting(false);
     }
   };
+
+  const handleCloseSnackbar = () => {
+    setError(null);
+    setSuccess(null);
+  };
+
+  if (loadingAuth) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4, alignItems: 'center' }}>
+        <CircularProgress />
+        <Typography sx={{ ml: 2 }}>Chargement des groupes...</Typography>
+      </Box>
+    );
+  }
+
+  if (groups.length === 0) {
+    return (
+      <Container maxWidth="md">
+        <Paper sx={{ p: 3, mt: 3 }}>
+          <Typography variant="h6" color="error" align="center" gutterBottom>
+            Aucun groupe disponible. Veuillez d'abord créer un groupe dans l'onglet "Groupes".
+          </Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={() => navigate('/moniteur/groups')}
+            >
+              Créer un groupe
+            </Button>
+          </Box>
+        </Paper>
+      </Container>
+    );
+  }
 
   return (
     <Container maxWidth="md">
       <Paper sx={{ p: 3, mt: 3 }}>
-        <Typography variant="h5" gutterBottom>
-          {courseId ? 'Modifier la séance' : 'Créer une nouvelle séance'}
+        <Typography variant="h4" gutterBottom>
+          {mode === 'edit' ? 'Modifier la séance' : 'Nouvelle séance'}
         </Typography>
 
-        <Box component="form" onSubmit={handleSubmit}>
-          <TextField
-            label="Nom de la séance"
-            value={formData.name}
-            onChange={(e: ChangeEvent<HTMLInputElement>) =>
-              setFormData({ ...formData, name: e.target.value })}
-            fullWidth
-            margin="normal"
-            required
-          />
-
-          {/* ✅ Correction définitive pour MUI 9.0.1 : slotProps pour inputLabel */}
-          <TextField
-            label="Date et heure"
-            type="datetime-local"
-            value={formData.date}
-            onChange={(e: ChangeEvent<HTMLInputElement>) =>
-              setFormData({ ...formData, date: e.target.value })}
-            fullWidth
-            margin="normal"
-            required
-            slotProps={{ inputLabel: { shrink: true } }}
-          />
+        <form onSubmit={handleSubmit}>
+          <FormControl fullWidth margin="normal">
+            <FormLabel>Titre *</FormLabel>
+            <TextField
+              name="title"
+              value={course.title}
+              onChange={(e) => setCourse({ ...course, title: e.target.value })}
+              required
+              variant="outlined"
+              placeholder="Ex: Séance débutants - Lundi"
+            />
+          </FormControl>
 
           <FormControl fullWidth margin="normal">
-            <InputLabel>Groupe (optionnel)</InputLabel>
-            <Select
-              value={formData.group_id}
-              onChange={(e) =>
-                setFormData({ ...formData, group_id: e.target.value as string })}
-              label="Groupe"
+            <FormLabel>Description</FormLabel>
+            <TextField
+              name="description"
+              value={course.description}
+              onChange={(e) => setCourse({ ...course, description: e.target.value })}
+              variant="outlined"
+              multiline
+              rows={4}
+              placeholder="Description de la séance..."
+            />
+          </FormControl>
+
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            <FormControl fullWidth margin="normal">
+              <FormLabel>Date *</FormLabel>
+              <TextField
+                type="date"
+                value={course.date.toISOString().split('T')[0]}
+                onChange={(e) => setCourse({ ...course, date: new Date(e.target.value) })}
+                required
+                variant="outlined"
+                sx={{ pt: 1 }}
+              />
+            </FormControl>
+            <FormControl fullWidth margin="normal">
+              <FormLabel>Heure *</FormLabel>
+              <TextField
+                type="time"
+                value={course.time}
+                onChange={(e) => setCourse({ ...course, time: e.target.value })}
+                required
+                variant="outlined"
+                sx={{ pt: 1 }}
+              />
+            </FormControl>
+          </Box>
+
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            <FormControl fullWidth margin="normal">
+              <FormLabel>Niveau *</FormLabel>
+              <TextField
+                select
+                value={course.level}
+                onChange={(e) => setCourse({ ...course, level: e.target.value })}
+                required
+                variant="outlined"
+              >
+                {levels.map((level) => (
+                  <MenuItem key={level} value={level}>
+                    {level}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </FormControl>
+            <FormControl fullWidth margin="normal">
+              <FormLabel>Participants max *</FormLabel>
+              <TextField
+                type="number"
+                value={course.MaxParticipants}
+                onChange={handleMaxParticipantsChange}
+                required
+                variant="outlined"
+              />
+            </FormControl>
+          </Box>
+
+          <FormControl fullWidth margin="normal">
+            <FormLabel>Groupe *</FormLabel>
+            <TextField
+              select
+              value={course.groupId}
+              onChange={(e) => setCourse({ ...course, groupId: e.target.value })}
+              required
+              variant="outlined"
+              error={!course.groupId}
+              helperText={!course.groupId ? 'Veuillez sélectionner un groupe' : ''}
             >
-              <MenuItem value="">Aucun groupe (séance individuelle)</MenuItem>
-              {groups.map((group: MoniteurGroup) => (
+              {groups.map((group) => (
                 <MenuItem key={group.id} value={group.id}>
                   {group.name}
                 </MenuItem>
               ))}
-            </Select>
+            </TextField>
           </FormControl>
 
-          <FormControl fullWidth margin="normal">
-            <InputLabel>Niveau de difficulté</InputLabel>
-            <Select
-              value={formData.difficulty}
-              onChange={(e) =>
-                setFormData({ ...formData, difficulty: e.target.value as string })}
-              label="Niveau de difficulté"
+          <Box sx={{ mt: 4, display: 'flex', gap: 2 }}>
+            <Button
+              type="button"
+              variant="outlined"
+              onClick={() => navigate('/moniteur/courses')}
+              disabled={isSubmitting}
             >
-              {['Débutant', 'Intermédiaire', 'Avancé', 'Expert'].map((level) => (
-                <MenuItem key={level} value={level}>{level}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-
-          {/* ✅ Solution ultime pour MUI 9.0.1 : Utiliser `sx` pour min */}
-          <TextField
-            label="Nombre maximum de participants"
-            type="number"
-            value={formData.max_participants}
-            onChange={(e: ChangeEvent<HTMLInputElement>) =>
-              setFormData({ ...formData, max_participants: parseInt(e.target.value) || 0 })}
-            fullWidth
-            margin="normal"
-            sx={{ '& input[type=number]': { min: 1 } }} // ✅ Solution alternative via CSS
-          />
-
-          <TextField
-            label="Description"
-            multiline
-            rows={4}
-            value={formData.description}
-            onChange={(e: ChangeEvent<HTMLInputElement>) =>
-              setFormData({ ...formData, description: e.target.value })}
-            fullWidth
-            margin="normal"
-          />
-
-          <FormControl fullWidth margin="normal">
-            <InputLabel>Exercices</InputLabel>
-            <Select
-              multiple
-              value={formData.exercise_ids}
-              onChange={(e) =>
-                setFormData({ ...formData, exercise_ids: e.target.value as string[] })}
-              input={<OutlinedInput label="Exercices" />}
-              renderValue={(selected: string[]) => (
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                  {selected.map((id: string) => {
-                    const exercise = exercises.find(e => e.id === id);
-                    return exercise ? (
-                      <Chip key={id} label={exercise.name} />
-                    ) : null;
-                  })}
-                </Box>
-              )}
-            >
-              {exercises.map((exercise: Exercise) => (
-                <MenuItem key={exercise.id} value={exercise.id}>
-                  <Checkbox
-                    checked={formData.exercise_ids.indexOf(exercise.id) > -1}
-                  />
-                  <ListItemText primary={exercise.name} />
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-
-          <Box sx={{ display: 'flex', gap: 2, mt: 3 }}>
+              Annuler
+            </Button>
             <Button
               type="submit"
               variant="contained"
               color="primary"
+              disabled={isSubmitting || !course.title || !course.groupId}
             >
-              {courseId ? 'Modifier' : 'Créer'}
-            </Button>
-            <Button
-              variant="outlined"
-              onClick={() => navigate('/moniteur/courses')}
-            >
-              Annuler
+              {isSubmitting ? <CircularProgress size={24} /> : mode === 'edit' ? 'Mettre à jour' : 'Créer'}
             </Button>
           </Box>
-        </Box>
+        </form>
       </Paper>
+
+      <Snackbar
+        open={!!error || !!success}
+        autoHideDuration={6000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={handleCloseSnackbar} severity={error ? 'error' : 'success'} sx={{ width: '100%' }}>
+          {error || success}
+        </Alert>
+      </Snackbar>
     </Container>
   );
-}
+};
+
+export default CourseForm;
