@@ -44,7 +44,11 @@ const levels = ['Débutant', 'Intermédiaire', 'Avancé', 'Expert'];
 
 const CourseForm: React.FC = () => {
   const [user, loadingAuth] = useAuthState(auth);
-  const { mode, courseId } = useParams<{ mode: string; courseId?: string }>();
+
+  // ✅ Détection du mode via la présence ou non de courseId dans l'URL
+  const { courseId } = useParams<{ courseId?: string }>();
+  const isEditMode = !!courseId;
+
   const navigate = useNavigate();
 
   const [course, setCourse] = useState<Course>({
@@ -70,30 +74,29 @@ const CourseForm: React.FC = () => {
     const fetchGroups = async () => {
       try {
         const q = query(
-          collection(db, 'Groups'), // ✅ Collection "Groups" avec majuscule
+          collection(db, 'Groups'),
           where('moniteurId', '==', user.uid)
         );
         const querySnapshot = await getDocs(q);
         const groupsData: { id: string; name: string }[] = [];
         querySnapshot.forEach((doc) => {
-          groupsData.push({
-            id: doc.id,
-            name: doc.data().name,
-          });
+          groupsData.push({ id: doc.id, name: doc.data().name });
         });
         setGroups(groupsData);
-        if (groupsData.length > 0 && !course.groupId && mode !== 'edit') {
-          setCourse({ ...course, groupId: groupsData[0].id });
+        // Pré-sélectionner le premier groupe si création
+        if (groupsData.length > 0 && !isEditMode) {
+          setCourse((prev) => ({ ...prev, groupId: groupsData[0].id }));
         }
-        setIsLoading(false);
       } catch (err) {
         setError(`Erreur lors du chargement des groupes : ${err}`);
-        setIsLoading(false);
       }
     };
 
     const fetchCourse = async () => {
-      if (mode !== 'edit' || !courseId) return;
+      if (!isEditMode || !courseId) {
+        setIsLoading(false);
+        return;
+      }
       try {
         const docRef = doc(db, 'courses', courseId);
         const docSnap = await getDoc(docRef);
@@ -107,17 +110,13 @@ const CourseForm: React.FC = () => {
         }
       } catch (err) {
         setError(`Erreur lors du chargement de la séance : ${err}`);
+      } finally {
+        setIsLoading(false);
       }
     };
 
-    fetchGroups();
-    fetchCourse();
-  }, [user, mode, courseId, course.groupId]);
-
-  const handleMaxParticipantsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = Math.max(1, Number(e.target.value));
-    setCourse({ ...course, MaxParticipants: value });
-  };
+    fetchGroups().then(fetchCourse);
+  }, [user, isEditMode, courseId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -141,11 +140,11 @@ const CourseForm: React.FC = () => {
         MaxParticipants: course.MaxParticipants,
         groupId: course.groupId,
         createdBy: user.uid,
-        createdAt: course.createdAt || new Date(),
+        createdAt: isEditMode ? course.createdAt : new Date(),
         Participants: [],
       };
 
-      if (mode === 'edit' && courseId) {
+      if (isEditMode && courseId) {
         await updateDoc(doc(db, 'courses', courseId), courseData);
         setSuccess('Séance mise à jour avec succès !');
       } else {
@@ -166,19 +165,10 @@ const CourseForm: React.FC = () => {
     setSuccess(null);
   };
 
-  if (loadingAuth) {
+  if (loadingAuth || isLoading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
         <CircularProgress />
-      </Box>
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4, alignItems: 'center' }}>
-        <CircularProgress />
-        <Typography sx={{ ml: 2 }}>Chargement des groupes...</Typography>
       </Box>
     );
   }
@@ -188,14 +178,10 @@ const CourseForm: React.FC = () => {
       <Container maxWidth="md">
         <Paper sx={{ p: 3, mt: 3 }}>
           <Typography variant="h6" color="error" align="center" gutterBottom>
-            Aucun groupe disponible. Veuillez d'abord créer un groupe dans l'onglet "Groupes".
+            Aucun groupe disponible. Veuillez d'abord créer un groupe.
           </Typography>
           <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-            <Button
-              variant="contained"
-              color="primary"
-              onClick={() => navigate('/moniteur/groups')}
-            >
+            <Button variant="contained" color="primary" onClick={() => navigate('/moniteur/groups')}>
               Créer un groupe
             </Button>
           </Box>
@@ -208,17 +194,18 @@ const CourseForm: React.FC = () => {
     <Container maxWidth="md">
       <Paper sx={{ p: 3, mt: 3 }}>
         <Typography variant="h4" gutterBottom>
-          {mode === 'edit' ? 'Modifier la séance' : 'Nouvelle séance'}
+          {isEditMode ? 'Modifier la séance' : 'Nouvelle séance'}
         </Typography>
 
-        <form onSubmit={handleSubmit}>
+        {/* ✅ noValidate désactive la validation HTML native */}
+        <Box component="form" onSubmit={handleSubmit} noValidate>
+
           <FormControl fullWidth margin="normal">
             <FormLabel>Titre *</FormLabel>
             <TextField
               name="title"
               value={course.title}
               onChange={(e) => setCourse({ ...course, title: e.target.value })}
-              required
               variant="outlined"
               placeholder="Ex: Séance débutants - Lundi"
             />
@@ -242,11 +229,9 @@ const CourseForm: React.FC = () => {
               <FormLabel>Date *</FormLabel>
               <TextField
                 type="date"
-                value={course.date.toISOString().split('T')[0]}
+                value={course.date instanceof Date ? course.date.toISOString().split('T')[0] : ''}
                 onChange={(e) => setCourse({ ...course, date: new Date(e.target.value) })}
-                required
                 variant="outlined"
-                sx={{ pt: 1 }}
               />
             </FormControl>
             <FormControl fullWidth margin="normal">
@@ -255,9 +240,7 @@ const CourseForm: React.FC = () => {
                 type="time"
                 value={course.time}
                 onChange={(e) => setCourse({ ...course, time: e.target.value })}
-                required
                 variant="outlined"
-                sx={{ pt: 1 }}
               />
             </FormControl>
           </Box>
@@ -269,13 +252,10 @@ const CourseForm: React.FC = () => {
                 select
                 value={course.level}
                 onChange={(e) => setCourse({ ...course, level: e.target.value })}
-                required
                 variant="outlined"
               >
                 {levels.map((level) => (
-                  <MenuItem key={level} value={level}>
-                    {level}
-                  </MenuItem>
+                  <MenuItem key={level} value={level}>{level}</MenuItem>
                 ))}
               </TextField>
             </FormControl>
@@ -284,8 +264,7 @@ const CourseForm: React.FC = () => {
               <TextField
                 type="number"
                 value={course.MaxParticipants}
-                onChange={handleMaxParticipantsChange}
-                required
+                onChange={(e) => setCourse({ ...course, MaxParticipants: Math.max(1, Number(e.target.value)) })}
                 variant="outlined"
               />
             </FormControl>
@@ -297,15 +276,12 @@ const CourseForm: React.FC = () => {
               select
               value={course.groupId}
               onChange={(e) => setCourse({ ...course, groupId: e.target.value })}
-              required
               variant="outlined"
-              error={!course.groupId}
-              helperText={!course.groupId ? 'Veuillez sélectionner un groupe' : ''}
+              error={!course.groupId && isSubmitting}
+              helperText={!course.groupId && isSubmitting ? 'Veuillez sélectionner un groupe' : ''}
             >
               {groups.map((group) => (
-                <MenuItem key={group.id} value={group.id}>
-                  {group.name}
-                </MenuItem>
+                <MenuItem key={group.id} value={group.id}>{group.name}</MenuItem>
               ))}
             </TextField>
           </FormControl>
@@ -323,12 +299,14 @@ const CourseForm: React.FC = () => {
               type="submit"
               variant="contained"
               color="primary"
-              disabled={isSubmitting || !course.title || !course.groupId}
+              disabled={isSubmitting}
             >
-              {isSubmitting ? <CircularProgress size={24} /> : mode === 'edit' ? 'Mettre à jour' : 'Créer'}
+              {isSubmitting
+                ? <CircularProgress size={24} />
+                : isEditMode ? 'Mettre à jour' : 'Créer'}
             </Button>
           </Box>
-        </form>
+        </Box>
       </Paper>
 
       <Snackbar

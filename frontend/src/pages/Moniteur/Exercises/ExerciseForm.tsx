@@ -21,8 +21,6 @@ import {
   MenuItem,
   Snackbar,
   Alert,
-  Tab,
-  Tabs,
 } from '@mui/material';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -32,8 +30,8 @@ interface Exercise {
   description: string;
   difficulty: string;
   category: string;
-  equipment?: string; // ✅ Champ optionnel pour l'équipement
-  block?: string;     // ✅ Champ optionnel pour le bloc
+  equipment?: string;
+  block?: string;
   createdBy: string;
   createdAt: Date;
 }
@@ -43,7 +41,11 @@ const categories = ['Échauffement', 'Bloc', 'Plyométrie', 'Renforcement muscul
 
 const ExerciseForm: React.FC = () => {
   const [user, loadingAuth] = useAuthState(auth);
-  const { mode, exerciseId } = useParams<{ mode: string; exerciseId?: string }>();
+
+  // ✅ Détection du mode via la présence ou non de exerciseId dans l'URL
+  const { exerciseId } = useParams<{ exerciseId?: string }>();
+  const isEditMode = !!exerciseId;
+
   const navigate = useNavigate();
 
   const [exercise, setExercise] = useState<Exercise>({
@@ -58,22 +60,12 @@ const ExerciseForm: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState(0); // ✅ Onglet actif (0 = Équipement, 1 = Bloc)
-
-  // ✅ Mise à jour de l'onglet actif quand la catégorie change
-  useEffect(() => {
-    if (exercise.category === 'Renforcement musculaire' || exercise.category === 'Équipement') {
-      setActiveTab(0);
-    } else if (exercise.category === 'Bloc') {
-      setActiveTab(1);
-    }
-  }, [exercise.category]);
 
   useEffect(() => {
     if (!user) return;
 
     const fetchExercise = async () => {
-      if (mode !== 'edit' || !exerciseId) {
+      if (!isEditMode || !exerciseId) {
         setIsLoading(false);
         return;
       }
@@ -95,28 +87,33 @@ const ExerciseForm: React.FC = () => {
     };
 
     fetchExercise();
-  }, [user, mode, exerciseId]);
+  }, [user, isEditMode, exerciseId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+
+    if (!exercise.name.trim()) {
+      setError('Veuillez renseigner le nom de l\'exercice.');
+      return;
+    }
 
     setIsSubmitting(true);
     setError(null);
 
     try {
       const exerciseData = {
-        name: exercise.name,
+        name: exercise.name.trim(),
         description: exercise.description,
         difficulty: exercise.difficulty,
         category: exercise.category,
-        equipment: exercise.equipment,
-        block: exercise.block,
+        equipment: exercise.equipment || '',
+        block: exercise.block || '',
         createdBy: user.uid,
-        createdAt: exercise.createdAt || new Date(),
+        createdAt: isEditMode ? exercise.createdAt : new Date(),
       };
 
-      if (mode === 'edit' && exerciseId) {
+      if (isEditMode && exerciseId) {
         await updateDoc(doc(db, 'exercises', exerciseId), exerciseData);
         setSuccess('Exercice mis à jour avec succès !');
       } else {
@@ -124,9 +121,7 @@ const ExerciseForm: React.FC = () => {
         setSuccess('Exercice créé avec succès !');
       }
 
-      setTimeout(() => {
-        navigate('/moniteur/exercises');
-      }, 1500);
+      setTimeout(() => navigate('/moniteur/exercises'), 1500);
     } catch (err) {
       setError(`Erreur lors de l'enregistrement : ${err}`);
     } finally {
@@ -137,10 +132,6 @@ const ExerciseForm: React.FC = () => {
   const handleCloseSnackbar = () => {
     setError(null);
     setSuccess(null);
-  };
-
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
-    setActiveTab(newValue);
   };
 
   if (loadingAuth || isLoading) {
@@ -155,19 +146,22 @@ const ExerciseForm: React.FC = () => {
     <Container maxWidth="md">
       <Paper sx={{ p: 3, mt: 3 }}>
         <Typography variant="h4" gutterBottom>
-          {mode === 'edit' ? 'Modifier l\'exercice' : 'Nouvel exercice'}
+          {isEditMode ? "Modifier l'exercice" : 'Nouvel exercice'}
         </Typography>
 
-        <form onSubmit={handleSubmit}>
+        {/* ✅ noValidate désactive la validation HTML native */}
+        <Box component="form" onSubmit={handleSubmit} noValidate>
+
           <FormControl fullWidth margin="normal">
             <FormLabel>Nom *</FormLabel>
             <TextField
               name="name"
               value={exercise.name}
               onChange={(e) => setExercise({ ...exercise, name: e.target.value })}
-              required
               variant="outlined"
               placeholder="Ex: Traction à une main"
+              error={!exercise.name.trim() && isSubmitting}
+              helperText={!exercise.name.trim() && isSubmitting ? 'Ce champ est obligatoire' : ''}
             />
           </FormControl>
 
@@ -191,13 +185,10 @@ const ExerciseForm: React.FC = () => {
                 select
                 value={exercise.difficulty}
                 onChange={(e) => setExercise({ ...exercise, difficulty: e.target.value })}
-                required
                 variant="outlined"
               >
-                {difficulties.map((difficulty) => (
-                  <MenuItem key={difficulty} value={difficulty}>
-                    {difficulty}
-                  </MenuItem>
+                {difficulties.map((d) => (
+                  <MenuItem key={d} value={d}>{d}</MenuItem>
                 ))}
               </TextField>
             </FormControl>
@@ -207,20 +198,17 @@ const ExerciseForm: React.FC = () => {
                 select
                 value={exercise.category}
                 onChange={(e) => setExercise({ ...exercise, category: e.target.value })}
-                required
                 variant="outlined"
               >
-                {categories.map((category) => (
-                  <MenuItem key={category} value={category}>
-                    {category}
-                  </MenuItem>
+                {categories.map((c) => (
+                  <MenuItem key={c} value={c}>{c}</MenuItem>
                 ))}
               </TextField>
             </FormControl>
           </Box>
 
-          {/* ✅ Onglets dynamiques selon la catégorie */}
-          {(exercise.category === 'Renforcement musculaire' || exercise.category === 'Équipement') && (
+          {/* Champ conditionnel selon la catégorie */}
+          {(exercise.category === 'Renforcement musculaire' || exercise.category === 'Plyométrie') && (
             <FormControl fullWidth margin="normal">
               <FormLabel>Équipement</FormLabel>
               <TextField
@@ -259,12 +247,14 @@ const ExerciseForm: React.FC = () => {
               type="submit"
               variant="contained"
               color="primary"
-              disabled={isSubmitting || !exercise.name}
+              disabled={isSubmitting}
             >
-              {isSubmitting ? <CircularProgress size={24} /> : mode === 'edit' ? 'Mettre à jour' : 'Créer'}
+              {isSubmitting
+                ? <CircularProgress size={24} />
+                : isEditMode ? 'Mettre à jour' : 'Créer'}
             </Button>
           </Box>
-        </form>
+        </Box>
       </Paper>
 
       <Snackbar
@@ -273,11 +263,7 @@ const ExerciseForm: React.FC = () => {
         onClose={handleCloseSnackbar}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
-        <Alert
-          onClose={handleCloseSnackbar}
-          severity={error ? 'error' : 'success'}
-          sx={{ width: '100%' }}
-        >
+        <Alert onClose={handleCloseSnackbar} severity={error ? 'error' : 'success'} sx={{ width: '100%' }}>
           {error || success}
         </Alert>
       </Snackbar>

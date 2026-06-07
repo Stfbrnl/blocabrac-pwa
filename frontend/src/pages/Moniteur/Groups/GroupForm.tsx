@@ -44,7 +44,11 @@ interface User {
 
 const GroupForm: React.FC = () => {
   const [user, loadingAuth] = useAuthState(auth);
-  const { mode, groupId } = useParams<{ mode: string; groupId?: string }>();
+
+  // ✅ On détecte le mode via la présence ou non de groupId dans l'URL
+  const { groupId } = useParams<{ groupId?: string }>();
+  const isEditMode = !!groupId;
+
   const navigate = useNavigate();
 
   const [group, setGroup] = useState<Group>({
@@ -57,13 +61,13 @@ const GroupForm: React.FC = () => {
   });
 
   const [allClients, setAllClients] = useState<User[]>([]);
-  const [selectedClientUids, setSelectedClientUids] = useState<string[]>([]);
+  const [selectedClients, setSelectedClients] = useState<User[]>([]); // ✅ On stocke les objets User complets
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Charger les clients
+  // Charger tous les clients
   useEffect(() => {
     if (!user) return;
 
@@ -80,9 +84,9 @@ const GroupForm: React.FC = () => {
           });
         });
         setAllClients(clients);
-        setIsLoading(false);
       } catch (err) {
         setError(`Erreur lors du chargement des clients : ${err}`);
+      } finally {
         setIsLoading(false);
       }
     };
@@ -90,9 +94,9 @@ const GroupForm: React.FC = () => {
     fetchClients();
   }, [user]);
 
-  // Charger le groupe existant (si mode edit)
+  // Charger le groupe existant si on est en mode édition
   useEffect(() => {
-    if (!user || mode !== 'edit' || !groupId || allClients.length === 0) return;
+    if (!user || !isEditMode || !groupId || allClients.length === 0) return;
 
     const fetchGroup = async () => {
       try {
@@ -100,16 +104,21 @@ const GroupForm: React.FC = () => {
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           const data = docSnap.data();
+          const studentIds: string[] = data.students || [];
+
           setGroup({
             id: docSnap.id,
             name: data.name || '',
             description: data.description || '',
             createdBy: data.createdBy,
             createdAt: data.createdAt?.toDate() || new Date(),
-            students: data.students || [],
+            students: studentIds,
             moniteurId: data.moniteurId,
           });
-          setSelectedClientUids(data.students || []);
+
+          // ✅ Pré-sélectionner les clients déjà dans le groupe
+          const preSelected = allClients.filter((c) => studentIds.includes(c.uid));
+          setSelectedClients(preSelected);
         }
       } catch (err) {
         setError(`Erreur lors du chargement du groupe : ${err}`);
@@ -117,15 +126,20 @@ const GroupForm: React.FC = () => {
     };
 
     fetchGroup();
-  }, [user, mode, groupId, allClients.length]);
+  }, [user, isEditMode, groupId, allClients]);
 
-  // Soumission du formulaire
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
-    if (selectedClientUids.length === 0) {
+    // ✅ Validation React : on vérifie selectedClients, pas l'input HTML
+    if (selectedClients.length === 0) {
       setError('Veuillez sélectionner au moins un client.');
+      return;
+    }
+
+    if (!group.name.trim()) {
+      setError('Veuillez renseigner le nom du groupe.');
       return;
     }
 
@@ -134,15 +148,15 @@ const GroupForm: React.FC = () => {
 
     try {
       const groupData = {
-        name: group.name,
-        description: group.description,
+        name: group.name.trim(),
+        description: group.description.trim(),
         createdBy: user.uid,
-        createdAt: new Date(),
-        students: selectedClientUids,
+        createdAt: isEditMode ? group.createdAt : new Date(),
+        students: selectedClients.map((c) => c.uid), // ✅ On extrait les UIDs au moment de la sauvegarde
         moniteurId: user.uid,
       };
 
-      if (mode === 'edit' && groupId) {
+      if (isEditMode && groupId) {
         await updateDoc(doc(db, 'Groups', groupId), groupData);
         setSuccess('Groupe mis à jour avec succès !');
       } else {
@@ -174,19 +188,22 @@ const GroupForm: React.FC = () => {
     <Container maxWidth="md">
       <Paper sx={{ p: 3, mt: 3 }}>
         <Typography variant="h4" gutterBottom>
-          {mode === 'edit' ? 'Modifier le groupe' : 'Nouveau groupe'}
+          {isEditMode ? 'Modifier le groupe' : 'Nouveau groupe'}
         </Typography>
 
-        <form onSubmit={handleSubmit}>
+        <Box component="form" onSubmit={handleSubmit} noValidate>
+          {/* ✅ noValidate désactive la validation HTML native pour éviter le conflit */}
+
           <FormControl fullWidth margin="normal">
             <FormLabel>Nom du groupe *</FormLabel>
             <TextField
               name="name"
               value={group.name}
               onChange={(e) => setGroup({ ...group, name: e.target.value })}
-              required
               variant="outlined"
               placeholder="Ex: Groupe Débutants Lundi 18h"
+              error={!group.name.trim() && isSubmitting}
+              helperText={!group.name.trim() && isSubmitting ? 'Ce champ est obligatoire' : ''}
             />
           </FormControl>
 
@@ -208,22 +225,29 @@ const GroupForm: React.FC = () => {
             <Autocomplete
               multiple
               options={allClients}
+              value={selectedClients}
               getOptionLabel={(option) => `${option.displayName} (${option.email})`}
               onChange={(_event, newValue: User[]) => {
-                setSelectedClientUids(newValue.map(client => client.uid));
+                // ✅ On met à jour directement l'état avec les objets User complets
+                setSelectedClients(newValue);
               }}
               renderInput={(params) => (
                 <TextField
                   {...params}
                   variant="outlined"
-                  placeholder="Sélectionnez les clients"
-                  required
-                  error={selectedClientUids.length === 0}
-                  helperText={selectedClientUids.length === 0 ? 'Veuillez sélectionner au moins un client' : ''}
+                  placeholder={selectedClients.length === 0 ? 'Sélectionnez les clients' : ''}
+                  // ✅ PAS de "required" ici — la validation est gérée par React dans handleSubmit
+                  error={selectedClients.length === 0 && isSubmitting}
+                  helperText={
+                    selectedClients.length === 0 && isSubmitting
+                      ? 'Veuillez sélectionner au moins un client'
+                      : ''
+                  }
                 />
               )}
               filterSelectedOptions
               isOptionEqualToValue={(option, value) => option.uid === value.uid}
+              noOptionsText="Aucun client trouvé"
               sx={{ width: '100%' }}
             />
           </FormControl>
@@ -241,12 +265,14 @@ const GroupForm: React.FC = () => {
               type="submit"
               variant="contained"
               color="primary"
-              disabled={isSubmitting || !group.name || selectedClientUids.length === 0}
+              disabled={isSubmitting}
             >
-              {isSubmitting ? <CircularProgress size={24} /> : mode === 'edit' ? 'Mettre à jour' : 'Créer'}
+              {isSubmitting
+                ? <CircularProgress size={24} />
+                : isEditMode ? 'Mettre à jour' : 'Créer'}
             </Button>
           </Box>
-        </form>
+        </Box>
       </Paper>
 
       <Snackbar
@@ -255,7 +281,11 @@ const GroupForm: React.FC = () => {
         onClose={handleCloseSnackbar}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
-        <Alert onClose={handleCloseSnackbar} severity={error ? 'error' : 'success'} sx={{ width: '100%' }}>
+        <Alert
+          onClose={handleCloseSnackbar}
+          severity={error ? 'error' : 'success'}
+          sx={{ width: '100%' }}
+        >
           {error || success}
         </Alert>
       </Snackbar>
