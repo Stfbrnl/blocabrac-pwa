@@ -6,118 +6,216 @@ import {
   query,
   where,
   getDocs,
+  doc,
+  setDoc,
+  serverTimestamp,
 } from 'firebase/firestore';
 import {
   Container,
   Typography,
   Box,
   Paper,
-  CircularProgress,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
+  Button,
+  CircularProgress,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Select,
+  Snackbar,
+  Alert,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
   Chip,
-  Divider,
 } from '@mui/material';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip as ChartTooltip,
-  ResponsiveContainer,
-  Legend,
-} from 'recharts';
+import { useNavigate } from 'react-router-dom';
 
-interface GroupStats {
-  groupId: string;
-  groupName: string;
-  courseCount: number;
-  participantCount: number;
+interface UserResult {
+  id: string;
+  displayName: string;
+  email?: string;
+  results: {
+    exerciseId: string;
+    exerciseName: string;
+    success: boolean;
+    date: Date;
+    badgeAwarded?: boolean;
+    courseId?: string;
+  }[];
 }
 
-interface CourseStats {
-  courseId: string;
+interface Group {
+  id: string;
+  name: string;
+  students: string[];
+}
+
+interface Course {
+  id: string;
   title: string;
-  participantCount: number;
-  date: Date;
 }
 
 const StatsList: React.FC = () => {
   const [user, loadingAuth] = useAuthState(auth);
-  const [groupStats, setGroupStats] = useState<GroupStats[]>([]);
-  const [courseStats, setCourseStats] = useState<CourseStats[]>([]);
+  const [userResults, setUserResults] = useState<UserResult[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<'user' | 'group' | 'course'>('user');
+  const [selectedUser, setSelectedUser] = useState<string>('');
+  const [selectedGroup, setSelectedGroup] = useState<string>('');
+  const [selectedCourse, setSelectedCourse] = useState<string>('');
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [users, setUsers] = useState<{ id: string; displayName: string; email?: string }[]>([]);
+  const [openBadgeDialog, setOpenBadgeDialog] = useState(false);
+  const [selectedResult, setSelectedResult] = useState<{
+    userId: string;
+    exerciseId: string;
+    exerciseName: string;
+  } | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!user) return;
 
-    const fetchStats = async () => {
+    const fetchData = async () => {
       try {
-        // 1. Récupérer les groupes du moniteur
-        const groupsQuery = query(
-          collection(db, 'groups'),
-          where('moniteurId', '==', user.uid)
-        );
+        setIsLoading(true);
+
+        // Charger les utilisateurs
+        const usersQuery = query(collection(db, 'users'));
+        const usersSnapshot = await getDocs(usersQuery);
+        const usersList = usersSnapshot.docs.map((doc) => ({
+          id: doc.id,
+          displayName: doc.data().displayName || doc.data().email?.split('@')[0] || doc.id,
+          email: doc.data().email || '',
+        }));
+        setUsers(usersList);
+
+        // Charger les groupes
+        const groupsQuery = query(collection(db, 'Groups'), where('moniteurId', '==', user.uid));
         const groupsSnapshot = await getDocs(groupsQuery);
-        const groups = groupsSnapshot.docs.map((doc) => ({
+        const groupsList = groupsSnapshot.docs.map((doc) => ({
           id: doc.id,
           name: doc.data().name,
           students: doc.data().students || [],
         }));
+        setGroups(groupsList);
 
-        // 2. Calculer les stats par groupe
-        const groupStatsPromises = groups.map(async (group) => {
-          const coursesQuery = query(
-            collection(db, 'courses'),
-            where('groupId', '==', group.id)
-          );
-          const coursesSnapshot = await getDocs(coursesQuery);
-          const courseCount = coursesSnapshot.size;
+        // Charger les séances
+        const coursesQuery = query(collection(db, 'courses'), where('createdBy', '==', user.uid));
+        const coursesSnapshot = await getDocs(coursesQuery);
+        const coursesList = coursesSnapshot.docs.map((doc) => ({
+          id: doc.id,
+          title: doc.data().title,
+        }));
+        setCourses(coursesList);
 
-          let participantCount = 0;
-          coursesSnapshot.forEach((courseDoc) => {
-            participantCount += (courseDoc.data().Participants || []).length;
-          });
+        // Charger les résultats
+        const resultsQuery = query(collection(db, 'client_course_results'));
+        const resultsSnapshot = await getDocs(resultsQuery);
+        const resultsData: UserResult[] = [];
 
-          return {
-            groupId: group.id,
-            groupName: group.name,
-            courseCount,
-            participantCount,
-          };
+        resultsSnapshot.forEach((doc) => {
+          const data = doc.data();
+          const userResult = resultsData.find((ur) => ur.id === data.userId);
+          if (userResult) {
+            userResult.results.push({
+              exerciseId: data.exerciseId,
+              exerciseName: data.exerciseName || 'Exercice inconnu',
+              success: data.success || false,
+              date: data.date?.toDate() || new Date(),
+              badgeAwarded: data.badgeAwarded || false,
+              courseId: data.courseId || '',
+            });
+          } else {
+            resultsData.push({
+              id: data.userId,
+              displayName: usersList.find((u) => u.id === data.userId)?.displayName || 'Utilisateur inconnu',
+              email: usersList.find((u) => u.id === data.userId)?.email || '',
+              results: [
+                {
+                  exerciseId: data.exerciseId,
+                  exerciseName: data.exerciseName || 'Exercice inconnu',
+                  success: data.success || false,
+                  date: data.date?.toDate() || new Date(),
+                  badgeAwarded: data.badgeAwarded || false,
+                  courseId: data.courseId || '',
+                },
+              ],
+            });
+          }
         });
 
-        const resolvedGroupStats = await Promise.all(groupStatsPromises);
-        setGroupStats(resolvedGroupStats);
-
-        // 3. Récupérer les stats par séance
-        const coursesQuery = query(
-          collection(db, 'courses'),
-          where('createdBy', '==', user.uid)
-        );
-        const coursesSnapshot = await getDocs(coursesQuery);
-        const resolvedCourseStats = coursesSnapshot.docs.map((doc) => ({
-          courseId: doc.id,
-          title: doc.data().title,
-          participantCount: (doc.data().Participants || []).length,
-          date: doc.data().date?.toDate() || new Date(),
-        }));
-        setCourseStats(resolvedCourseStats);
+        setUserResults(resultsData);
+        setIsLoading(false);
       } catch (err) {
         setError(`Erreur lors du chargement des statistiques : ${err}`);
-      } finally {
         setIsLoading(false);
       }
     };
 
-    fetchStats();
+    fetchData();
   }, [user]);
+
+  const handleAwardBadge = (userId: string, exerciseId: string, exerciseName: string) => {
+    setSelectedResult({ userId, exerciseId, exerciseName });
+    setOpenBadgeDialog(true);
+  };
+
+  const confirmAwardBadge = async () => {
+    if (!selectedResult || !user) return;
+
+    if (!selectedResult.userId || !selectedResult.exerciseId) {
+      setError('Données manquantes pour attribuer le badge.');
+      setOpenBadgeDialog(false);
+      return;
+    }
+
+    try {
+      const badgeId = `${selectedResult.userId}_${selectedResult.exerciseId}`;
+      await setDoc(doc(db, 'client_badges', badgeId), {
+        userId: selectedResult.userId,
+        exerciseId: selectedResult.exerciseId,
+        exerciseName: selectedResult.exerciseName,
+        awardedAt: serverTimestamp(),
+        awardedBy: user.uid,
+      });
+
+      setSuccess('Badge attribué avec succès !');
+      setOpenBadgeDialog(false);
+    } catch (err) {
+      setError(`Erreur lors de l'attribution du badge : ${err}`);
+    }
+  };
+
+  const filteredResults = () => {
+    if (filter === 'user' && selectedUser) {
+      return userResults.filter((ur) => ur.id === selectedUser);
+    } else if (filter === 'group' && selectedGroup) {
+      const group = groups.find((g) => g.id === selectedGroup);
+      if (!group) return [];
+      return userResults.filter((ur) => group.students.includes(ur.id));
+    } else if (filter === 'course' && selectedCourse) {
+      return userResults.filter((ur) =>
+        ur.results.some((r) => r.courseId === selectedCourse)
+      );
+    }
+    return userResults;
+  };
+
+  const handleCloseSnackbar = () => {
+    setError(null);
+    setSuccess(null);
+  };
 
   if (loadingAuth || isLoading) {
     return (
@@ -127,130 +225,175 @@ const StatsList: React.FC = () => {
     );
   }
 
-  // Préparer les données pour le graphique
-  const chartData = groupStats.map((stat) => ({
-    name: stat.groupName,
-    Séances: stat.courseCount,
-    Participants: stat.participantCount,
-  }));
-
   return (
     <Container maxWidth="lg">
       <Paper sx={{ p: 3, mt: 3 }}>
         <Typography variant="h4" gutterBottom>
-          Statistiques
+          Statistiques des exercices
         </Typography>
 
-        {error && (
-          <Box sx={{ mb: 2, p: 2, bgcolor: 'error.main', color: 'white', borderRadius: 1 }}>
-            {error}
-          </Box>
-        )}
+        <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
+          <FormControl sx={{ minWidth: 120 }}>
+            <InputLabel>Trier par</InputLabel>
+            <Select
+              value={filter}
+              onChange={(e) => {
+                setFilter(e.target.value as 'user' | 'group' | 'course');
+                setSelectedUser('');
+                setSelectedGroup('');
+                setSelectedCourse('');
+              }}
+              label="Trier par"
+            >
+              <MenuItem value="user">Utilisateur</MenuItem>
+              <MenuItem value="group">Groupe</MenuItem>
+              <MenuItem value="course">Séance</MenuItem>
+            </Select>
+          </FormControl>
 
-        {/* Graphique : Séances et participants par groupe */}
-        <Box sx={{ mb: 4 }}>
-          <Typography variant="h6" gutterBottom>
-            Séances et participants par groupe
-          </Typography>
-          <Box sx={{ height: 300 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <ChartTooltip />
-                <Legend />
-                <Bar dataKey="Séances" fill="#3f51b5" name="Séances" />
-                <Bar dataKey="Participants" fill="#4caf50" name="Participants" />
-              </BarChart>
-            </ResponsiveContainer>
-          </Box>
+          {filter === 'user' && (
+            <FormControl sx={{ minWidth: 200 }}>
+              <InputLabel>Utilisateur</InputLabel>
+              <Select
+                value={selectedUser}
+                onChange={(e) => setSelectedUser(e.target.value)}
+                label="Utilisateur"
+              >
+                <MenuItem value="">Tous</MenuItem>
+                {users.map((u) => (
+                  <MenuItem key={u.id} value={u.id}>
+                    {u.displayName}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
+
+          {filter === 'group' && (
+            <FormControl sx={{ minWidth: 200 }}>
+              <InputLabel>Groupe</InputLabel>
+              <Select
+                value={selectedGroup}
+                onChange={(e) => setSelectedGroup(e.target.value)}
+                label="Groupe"
+              >
+                <MenuItem value="">Tous</MenuItem>
+                {groups.map((g) => (
+                  <MenuItem key={g.id} value={g.id}>
+                    {g.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
+
+          {filter === 'course' && (
+            <FormControl sx={{ minWidth: 200 }}>
+              <InputLabel>Séance</InputLabel>
+              <Select
+                value={selectedCourse}
+                onChange={(e) => setSelectedCourse(e.target.value)}
+                label="Séance"
+              >
+                <MenuItem value="">Toutes</MenuItem>
+                {courses.map((c) => (
+                  <MenuItem key={c.id} value={c.id}>
+                    {c.title}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
         </Box>
 
-        <Divider sx={{ my: 3 }} />
-
-        {/* Tableau : Détails par groupe */}
-        <Box sx={{ mb: 4 }}>
-          <Typography variant="h6" gutterBottom>
-            Détails par groupe
-          </Typography>
-          <TableContainer>
-            <Table>
-              <TableHead>
+        <TableContainer>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>Utilisateur</TableCell>
+                <TableCell>Exercice</TableCell>
+                <TableCell>Réussite</TableCell>
+                <TableCell>Date</TableCell>
+                <TableCell>Badge</TableCell>
+                <TableCell>Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {filteredResults().length === 0 ? (
                 <TableRow>
-                  <TableCell>Groupe</TableCell>
-                  <TableCell>Séances</TableCell>
-                  <TableCell>Participants</TableCell>
-                  <TableCell>Moyenne</TableCell>
+                  <TableCell colSpan={6} align="center">
+                    Aucun résultat trouvé.
+                  </TableCell>
                 </TableRow>
-              </TableHead>
-              <TableBody>
-                {groupStats.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={4} align="center">
-                      Aucun groupe trouvé.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  groupStats.map((stat) => (
-                    <TableRow key={stat.groupId}>
-                      <TableCell>{stat.groupName}</TableCell>
-                      <TableCell>{stat.courseCount}</TableCell>
-                      <TableCell>{stat.participantCount}</TableCell>
+              ) : (
+                filteredResults().map((userResult) =>
+                  userResult.results.map((result, index) => (
+                    <TableRow key={`${userResult.id}-${result.exerciseId}-${index}`}>
+                      <TableCell>{userResult.displayName}</TableCell>
+                      <TableCell>{result.exerciseName}</TableCell>
                       <TableCell>
-                        <Chip
-                          label="Intermédiaire"
-                          color="primary"
-                          size="small"
-                        />
+                        {result.success ? (
+                          <Chip label="Réussi" color="success" />
+                        ) : (
+                          <Chip label="Échoué" color="error" />
+                        )}
+                      </TableCell>
+                      <TableCell>{result.date.toLocaleDateString('fr-FR')}</TableCell>
+                      <TableCell>
+                        {result.badgeAwarded ? (
+                          <Chip label="Badge attribué" color="primary" />
+                        ) : (
+                          <Chip label="Aucun badge" color="default" />
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {!result.badgeAwarded && (
+                          <Button
+                            variant="outlined"
+                            color="primary"
+                            size="small"
+                            onClick={() =>
+                              handleAwardBadge(userResult.id, result.exerciseId, result.exerciseName)
+                            }
+                          >
+                            Attribuer un badge
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Box>
+                )
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
 
-        <Divider sx={{ my: 3 }} />
+        <Dialog
+          open={openBadgeDialog}
+          onClose={() => setOpenBadgeDialog(false)}
+        >
+          <DialogTitle>Attribuer un badge</DialogTitle>
+          <DialogContent>
+            Êtes-vous sûr de vouloir attribuer un badge pour l'exercice "{selectedResult?.exerciseName}" ?
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setOpenBadgeDialog(false)}>Annuler</Button>
+            <Button onClick={confirmAwardBadge} color="primary" variant="contained">
+              Confirmer
+            </Button>
+          </DialogActions>
+        </Dialog>
 
-        {/* Tableau : Séances les plus populaires */}
-        <Box>
-          <Typography variant="h6" gutterBottom>
-            Séances les plus populaires
-          </Typography>
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Titre</TableCell>
-                  <TableCell>Date</TableCell>
-                  <TableCell>Participants</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {courseStats.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={3} align="center">
-                      Aucune séance trouvée.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  [...courseStats]
-                    .sort((a, b) => b.participantCount - a.participantCount)
-                    .slice(0, 5)
-                    .map((stat) => (
-                      <TableRow key={stat.courseId}>
-                        <TableCell>{stat.title}</TableCell>
-                        <TableCell>{stat.date.toLocaleDateString('fr-FR')}</TableCell>
-                        <TableCell>{stat.participantCount}</TableCell>
-                      </TableRow>
-                    ))
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Box>
+        <Snackbar
+          open={!!error || !!success}
+          autoHideDuration={6000}
+          onClose={handleCloseSnackbar}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        >
+          <Alert onClose={handleCloseSnackbar} severity={error ? 'error' : 'success'} sx={{ width: '100%' }}>
+            {error || success}
+          </Alert>
+        </Snackbar>
       </Paper>
     </Container>
   );

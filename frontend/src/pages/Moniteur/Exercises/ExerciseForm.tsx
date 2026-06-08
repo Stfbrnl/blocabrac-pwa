@@ -7,6 +7,8 @@ import {
   addDoc,
   updateDoc,
   getDoc,
+  query,
+  getDocs,
 } from 'firebase/firestore';
 import {
   Container,
@@ -18,9 +20,11 @@ import {
   CircularProgress,
   FormControl,
   FormLabel,
-  MenuItem,
   Snackbar,
   Alert,
+  Autocomplete,
+  Chip,
+  MenuItem,
 } from '@mui/material';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -30,10 +34,18 @@ interface Exercise {
   description: string;
   difficulty: string;
   category: string;
-  equipment?: string;
+  equipment?: string[];
   block?: string;
   createdBy: string;
   createdAt: Date;
+}
+
+interface Equipment {
+  id?: string;
+  name: string;
+  description?: string;
+  number?: number;
+  type?: string;
 }
 
 const difficulties = ['Facile', 'Moyen', 'Difficile', 'Expert'];
@@ -41,11 +53,8 @@ const categories = ['Échauffement', 'Bloc', 'Plyométrie', 'Renforcement muscul
 
 const ExerciseForm: React.FC = () => {
   const [user, loadingAuth] = useAuthState(auth);
-
-  // ✅ Détection du mode via la présence ou non de exerciseId dans l'URL
   const { exerciseId } = useParams<{ exerciseId?: string }>();
   const isEditMode = !!exerciseId;
-
   const navigate = useNavigate();
 
   const [exercise, setExercise] = useState<Exercise>({
@@ -56,38 +65,96 @@ const ExerciseForm: React.FC = () => {
     createdBy: user?.uid || '',
     createdAt: new Date(),
   });
+
+  const [equipmentOptions, setEquipmentOptions] = useState<Equipment[]>([]);
+  const [selectedEquipment, setSelectedEquipment] = useState<string[]>([]);
+  const [newEquipment, setNewEquipment] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  // Charger les équipements existants
   useEffect(() => {
     if (!user) return;
 
-    const fetchExercise = async () => {
-      if (!isEditMode || !exerciseId) {
+    const fetchEquipment = async () => {
+      try {
+        const querySnapshot = await getDocs(query(collection(db, 'equipment')));
+        const equipmentList: Equipment[] = [];
+        querySnapshot.forEach((doc) => {
+          equipmentList.push({ id: doc.id, ...doc.data() } as Equipment);
+        });
+        setEquipmentOptions(equipmentList);
         setIsLoading(false);
-        return;
+      } catch (err) {
+        setError(`Erreur lors du chargement des équipements : ${err}`);
+        setIsLoading(false);
       }
+    };
+
+    fetchEquipment();
+  }, [user]);
+
+  // Charger l'exercice existant (si mode édition)
+  useEffect(() => {
+    if (!user || !isEditMode || !exerciseId) return;
+
+    const fetchExercise = async () => {
       try {
         const docRef = doc(db, 'exercises', exerciseId);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
+          const data = docSnap.data();
           setExercise({
             id: docSnap.id,
-            ...docSnap.data(),
-            createdAt: docSnap.data().createdAt?.toDate() || new Date(),
+            ...data,
+            createdAt: data.createdAt?.toDate() || new Date(),
           } as Exercise);
+          setSelectedEquipment(data.equipment || []);
         }
       } catch (err) {
         setError(`Erreur lors du chargement de l'exercice : ${err}`);
-      } finally {
-        setIsLoading(false);
       }
     };
 
     fetchExercise();
   }, [user, isEditMode, exerciseId]);
+
+  // Ajouter un nouvel équipement à Firestore
+  const handleAddEquipment = async () => {
+    if (!newEquipment.trim()) return;
+
+    // Vérifier si l'équipement existe déjà (par nom)
+    const existingEquipment = equipmentOptions.find(eq => eq.name === newEquipment.trim());
+    if (existingEquipment) {
+      setSelectedEquipment([...selectedEquipment, newEquipment.trim()]);
+      setNewEquipment('');
+      return;
+    }
+
+    try {
+      const newEquipmentDoc = {
+        name: newEquipment.trim(),
+        description: `Équipement ajouté via l'interface Moniteur`,
+        number: equipmentOptions.length + 1,
+        type: 'autre',
+      };
+
+      await addDoc(collection(db, 'equipment'), newEquipmentDoc);
+      // ✅ Recharger les équipements pour avoir l'ID du nouveau document
+      const updatedSnapshot = await getDocs(query(collection(db, 'equipment')));
+      const updatedEquipmentList: Equipment[] = [];
+      updatedSnapshot.forEach((doc) => {
+        updatedEquipmentList.push({ id: doc.id, ...doc.data() } as Equipment);
+      });
+      setEquipmentOptions(updatedEquipmentList);
+      setSelectedEquipment([...selectedEquipment, newEquipment.trim()]);
+      setNewEquipment('');
+    } catch (err) {
+      setError(`Erreur lors de l'ajout de l'équipement : ${err}`);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -107,8 +174,8 @@ const ExerciseForm: React.FC = () => {
         description: exercise.description,
         difficulty: exercise.difficulty,
         category: exercise.category,
-        equipment: exercise.equipment || '',
-        block: exercise.block || '',
+        equipment: selectedEquipment.length > 0 ? selectedEquipment : undefined,
+        block: exercise.block || null,
         createdBy: user.uid,
         createdAt: isEditMode ? exercise.createdAt : new Date(),
       };
@@ -149,9 +216,7 @@ const ExerciseForm: React.FC = () => {
           {isEditMode ? "Modifier l'exercice" : 'Nouvel exercice'}
         </Typography>
 
-        {/* ✅ noValidate désactive la validation HTML native */}
         <Box component="form" onSubmit={handleSubmit} noValidate>
-
           <FormControl fullWidth margin="normal">
             <FormLabel>Nom *</FormLabel>
             <TextField
@@ -207,19 +272,51 @@ const ExerciseForm: React.FC = () => {
             </FormControl>
           </Box>
 
-          {/* Champ conditionnel selon la catégorie */}
-          {(exercise.category === 'Renforcement musculaire' || exercise.category === 'Plyométrie') && (
-            <FormControl fullWidth margin="normal">
-              <FormLabel>Équipement</FormLabel>
-              <TextField
-                value={exercise.equipment || ''}
-                onChange={(e) => setExercise({ ...exercise, equipment: e.target.value })}
-                variant="outlined"
-                placeholder="Ex: Haltères, Élastiques, etc."
-              />
-            </FormControl>
-          )}
+          {/* ✅ Champ Équipement : Avec vérification de chargement */}
+          <FormControl fullWidth margin="normal">
+            <FormLabel>Équipements</FormLabel>
+            {equipmentOptions.length === 0 ? (
+              <Typography color="error" sx={{ mt: 1 }}>
+                Aucun équipement disponible. Ajoutez-en un ci-dessous.
+              </Typography>
+            ) : (
+              <>
+                <Autocomplete
+                  multiple
+                  freeSolo
+                  options={equipmentOptions.map(eq => eq.name)}
+                  value={selectedEquipment}
+                  onChange={(_event, newValue: string[]) => {
+                    setSelectedEquipment(newValue);
+                  }}
+                  onInputChange={(_, newInputValue) => {
+                    setNewEquipment(newInputValue);
+                  }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      variant="outlined"
+                      placeholder="Ajoutez un ou plusieurs équipements (ex: Poutre 1, Poutre 2)"
+                    />
+                  )}
+                  filterSelectedOptions
+                  sx={{ width: '100%' }}
+                />
+                {newEquipment.trim() && !equipmentOptions.some(eq => eq.name === newEquipment.trim()) && (
+                  <Button
+                    variant="outlined"
+                    color="primary"
+                    onClick={handleAddEquipment}
+                    sx={{ mt: 1 }}
+                  >
+                    Ajouter "{newEquipment}" aux équipements
+                  </Button>
+                )}
+              </>
+            )}
+          </FormControl>
 
+          {/* Champ Bloc (optionnel) */}
           {exercise.category === 'Bloc' && (
             <FormControl fullWidth margin="normal">
               <FormLabel>Description du bloc</FormLabel>
@@ -249,9 +346,7 @@ const ExerciseForm: React.FC = () => {
               color="primary"
               disabled={isSubmitting}
             >
-              {isSubmitting
-                ? <CircularProgress size={24} />
-                : isEditMode ? 'Mettre à jour' : 'Créer'}
+              {isSubmitting ? <CircularProgress size={24} /> : isEditMode ? 'Mettre à jour' : 'Créer'}
             </Button>
           </Box>
         </Box>

@@ -24,6 +24,8 @@ import {
   MenuItem,
   Snackbar,
   Alert,
+  Autocomplete,
+  Chip,
 } from '@mui/material';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -36,6 +38,7 @@ interface Course {
   level: string;
   MaxParticipants: number;
   groupId: string;
+  exercises?: string[]; // ✅ Ajout du tableau d'IDs d'exercices
   createdBy: string;
   createdAt: Date;
 }
@@ -44,11 +47,8 @@ const levels = ['Débutant', 'Intermédiaire', 'Avancé', 'Expert'];
 
 const CourseForm: React.FC = () => {
   const [user, loadingAuth] = useAuthState(auth);
-
-  // ✅ Détection du mode via la présence ou non de courseId dans l'URL
   const { courseId } = useParams<{ courseId?: string }>();
   const isEditMode = !!courseId;
-
   const navigate = useNavigate();
 
   const [course, setCourse] = useState<Course>({
@@ -63,6 +63,8 @@ const CourseForm: React.FC = () => {
     createdAt: new Date(),
   });
   const [groups, setGroups] = useState<{ id: string; name: string }[]>([]);
+  const [exercises, setExercises] = useState<{ id: string; name: string }[]>([]); // ✅ État pour les exercices
+  const [selectedExercises, setSelectedExercises] = useState<{ id: string; name: string }[]>([]); // ✅ Exercices sélectionnés
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -80,15 +82,34 @@ const CourseForm: React.FC = () => {
         const querySnapshot = await getDocs(q);
         const groupsData: { id: string; name: string }[] = [];
         querySnapshot.forEach((doc) => {
-          groupsData.push({ id: doc.id, name: doc.data().name });
+          groupsData.push({
+            id: doc.id,
+            name: doc.data().name,
+          });
         });
         setGroups(groupsData);
-        // Pré-sélectionner le premier groupe si création
-        if (groupsData.length > 0 && !isEditMode) {
-          setCourse((prev) => ({ ...prev, groupId: groupsData[0].id }));
+        if (groupsData.length > 0 && !course.groupId && !isEditMode) {
+          setCourse({ ...course, groupId: groupsData[0].id });
         }
       } catch (err) {
         setError(`Erreur lors du chargement des groupes : ${err}`);
+      }
+    };
+
+    const fetchExercises = async () => {
+      try {
+        const q = query(collection(db, 'exercises'));
+        const querySnapshot = await getDocs(q);
+        const exercisesData: { id: string; name: string }[] = [];
+        querySnapshot.forEach((doc) => {
+          exercisesData.push({
+            id: doc.id,
+            name: doc.data().name,
+          });
+        });
+        setExercises(exercisesData);
+      } catch (err) {
+        setError(`Erreur lors du chargement des exercices : ${err}`);
       }
     };
 
@@ -101,12 +122,18 @@ const CourseForm: React.FC = () => {
         const docRef = doc(db, 'courses', courseId);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
+          const data = docSnap.data();
           setCourse({
             id: docSnap.id,
-            ...docSnap.data(),
-            date: docSnap.data().date?.toDate() || new Date(),
-            createdAt: docSnap.data().createdAt?.toDate() || new Date(),
+            ...data,
+            date: data.date?.toDate() || new Date(),
+            createdAt: data.createdAt?.toDate() || new Date(),
           } as Course);
+          // ✅ Charger les exercices sélectionnés pour cette séance
+          if (data.exercises && data.exercises.length > 0) {
+            const selectedExercisesData = exercises.filter(ex => data.exercises.includes(ex.id));
+            setSelectedExercises(selectedExercisesData);
+          }
         }
       } catch (err) {
         setError(`Erreur lors du chargement de la séance : ${err}`);
@@ -115,8 +142,11 @@ const CourseForm: React.FC = () => {
       }
     };
 
-    fetchGroups().then(fetchCourse);
-  }, [user, isEditMode, courseId]);
+    // ✅ Charger les groupes et exercices en parallèle
+    Promise.all([fetchGroups(), fetchExercises()]).then(() => {
+      fetchCourse();
+    });
+  }, [user, isEditMode, courseId, course.groupId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -139,6 +169,7 @@ const CourseForm: React.FC = () => {
         level: course.level,
         MaxParticipants: course.MaxParticipants,
         groupId: course.groupId,
+        exercises: selectedExercises.map(ex => ex.id), // ✅ Ajout des IDs des exercices sélectionnés
         createdBy: user.uid,
         createdAt: isEditMode ? course.createdAt : new Date(),
         Participants: [],
@@ -181,7 +212,11 @@ const CourseForm: React.FC = () => {
             Aucun groupe disponible. Veuillez d'abord créer un groupe.
           </Typography>
           <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-            <Button variant="contained" color="primary" onClick={() => navigate('/moniteur/groups')}>
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={() => navigate('/moniteur/groups')}
+            >
               Créer un groupe
             </Button>
           </Box>
@@ -197,9 +232,7 @@ const CourseForm: React.FC = () => {
           {isEditMode ? 'Modifier la séance' : 'Nouvelle séance'}
         </Typography>
 
-        {/* ✅ noValidate désactive la validation HTML native */}
         <Box component="form" onSubmit={handleSubmit} noValidate>
-
           <FormControl fullWidth margin="normal">
             <FormLabel>Titre *</FormLabel>
             <TextField
@@ -277,13 +310,43 @@ const CourseForm: React.FC = () => {
               value={course.groupId}
               onChange={(e) => setCourse({ ...course, groupId: e.target.value })}
               variant="outlined"
-              error={!course.groupId && isSubmitting}
-              helperText={!course.groupId && isSubmitting ? 'Veuillez sélectionner un groupe' : ''}
+              error={!course.groupId}
+              helperText={!course.groupId ? 'Veuillez sélectionner un groupe' : ''}
             >
               {groups.map((group) => (
                 <MenuItem key={group.id} value={group.id}>{group.name}</MenuItem>
               ))}
             </TextField>
+          </FormControl>
+
+          {/* ✅ Champ Exercices : Sélection multiple */}
+          <FormControl fullWidth margin="normal">
+            <FormLabel>Exercices</FormLabel>
+            {exercises.length === 0 ? (
+              <Typography color="error" sx={{ mt: 1 }}>
+                Aucun exercice disponible. Veuillez d'abord créer des exercices.
+              </Typography>
+            ) : (
+              <Autocomplete
+                multiple
+                options={exercises}
+                getOptionLabel={(option) => option.name}
+                value={selectedExercises}
+                onChange={(_event, newValue) => {
+                  setSelectedExercises(newValue);
+                }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    variant="outlined"
+                    placeholder="Sélectionnez les exercices pour cette séance"
+                  />
+                )}
+                isOptionEqualToValue={(option, value) => option.id === value.id}
+                filterSelectedOptions
+                sx={{ width: '100%' }}
+              />
+            )}
           </FormControl>
 
           <Box sx={{ mt: 4, display: 'flex', gap: 2 }}>
@@ -301,9 +364,7 @@ const CourseForm: React.FC = () => {
               color="primary"
               disabled={isSubmitting}
             >
-              {isSubmitting
-                ? <CircularProgress size={24} />
-                : isEditMode ? 'Mettre à jour' : 'Créer'}
+              {isSubmitting ? <CircularProgress size={24} /> : isEditMode ? 'Mettre à jour' : 'Créer'}
             </Button>
           </Box>
         </Box>

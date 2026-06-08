@@ -3,9 +3,12 @@ import { Typography, Container, Box } from '@mui/material';
 import { db } from '../services/firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
 
-const logo = '/src/assets/logo-blocabrac.png';
+// ✅ Import du logo depuis /src/assets/
+// TypeScript may not have image module declarations in this project; ignore the import type check.
+// @ts-ignore
+import logo from '../assets/logo-blocabrac.png';
 
-export default function Home() {
+const Home = () => {
   const [content, setContent] = useState({
     title: "Bienvenue sur BLOCABRAC",
     description: "Connectez-vous pour accéder à votre espace personnel.",
@@ -45,11 +48,12 @@ export default function Home() {
         alignItems: 'center',
         textAlign: 'center'
       }}>
+        {/* ✅ Logo avec import direct depuis /src/assets/ */}
         <img
           src={logo}
           alt="Logo BLOCABRAC"
           style={{
-            height: '80px',
+            height: '100px',
             marginBottom: '20px',
             filter: 'drop-shadow(2px 2px 4px rgba(0, 0, 0, 0.5))'
           }}
@@ -71,4 +75,6 @@ export default function Home() {
       </Box>
     </Container>
   );
-}
+};
+
+export default Home;
