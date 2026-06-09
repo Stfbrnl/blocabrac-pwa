@@ -63,7 +63,7 @@ export default function Register() {
         throw new Error("La création de l'utilisateur a échoué.");
       }
 
-      // 2. Créer le document dans Firestore avec tous les champs
+      // 2. Créer le document dans Firestore avec TOUS les champs + les nouveaux
       await setDoc(doc(db, 'users', user.uid), {
         uid: user.uid,
         email: user.email,
@@ -74,6 +74,8 @@ export default function Register() {
         level: level,
         role: 'client',
         roles: ['client'],
+        inscritAuxCours: false, // ✅ NOUVEAU CHAMP : Créé automatiquement à false
+        inscritAuxCompetitions: false, // ✅ NOUVEAU CHAMP : Créé automatiquement à false
         created_at: new Date().toISOString()
       });
 

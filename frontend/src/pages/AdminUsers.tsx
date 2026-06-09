@@ -27,6 +27,8 @@ interface User {
   gender?: string;
   level?: Level;
   created_at?: string;
+  inscritAuxCours?: boolean; // ✅ Champ ajouté
+  inscritAuxCompetitions?: boolean; // ✅ Champ ajouté
 }
 
 const AdminUsers: React.FC = () => {
@@ -44,7 +46,9 @@ const AdminUsers: React.FC = () => {
     roles: [],
     age: undefined,
     gender: undefined,
-    level: undefined
+    level: undefined,
+    inscritAuxCours: false, // ✅ Champ ajouté
+    inscritAuxCompetitions: false, // ✅ Champ ajouté
   });
   const [createForm, setCreateForm] = useState<Omit<User, 'uid' | 'created_at'>>({
     email: '',
@@ -53,7 +57,9 @@ const AdminUsers: React.FC = () => {
     roles: [],
     age: undefined,
     gender: undefined,
-    level: undefined
+    level: undefined,
+    inscritAuxCours: false, // ✅ Champ ajouté
+    inscritAuxCompetitions: false, // ✅ Champ ajouté
   });
 
   useEffect(() => {
@@ -77,7 +83,6 @@ const AdminUsers: React.FC = () => {
     fetchUsers();
   }, []);
 
-  // ✅ Fonction pour mettre à jour un utilisateur
   const handleUpdateUser = async () => {
     if (!selectedUser) return;
     try {
@@ -85,10 +90,12 @@ const AdminUsers: React.FC = () => {
         email: editForm.email,
         first_name: editForm.first_name,
         last_name: editForm.last_name,
-        roles: editForm.roles as UserRole[], // ✅ Casting explicite
+        roles: editForm.roles as UserRole[],
         age: editForm.age,
         gender: editForm.gender,
-        level: editForm.level
+        level: editForm.level,
+        inscritAuxCours: editForm.inscritAuxCours, // ✅ Champ ajouté
+        inscritAuxCompetitions: editForm.inscritAuxCompetitions, // ✅ Champ ajouté
       });
       const querySnapshot = await getDocs(collection(db, 'users'));
       setUsers(querySnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as User)));
@@ -102,7 +109,6 @@ const AdminUsers: React.FC = () => {
     }
   };
 
-  // ✅ Fonction pour créer un utilisateur (NOUVELLE)
   const handleCreateUser = async () => {
     if (!createForm.email || !createForm.first_name || !createForm.last_name || createForm.roles.length === 0) {
       setSnackbarMessage("Veuillez remplir tous les champs obligatoires et sélectionner au moins un rôle.");
@@ -111,7 +117,6 @@ const AdminUsers: React.FC = () => {
     }
 
     try {
-      // 1. Créer le compte Firebase Auth
       const tempPassword = Math.random().toString(36).slice(-12);
       const userCredential = await createUserWithEmailAndPassword(
         auth,
@@ -120,26 +125,23 @@ const AdminUsers: React.FC = () => {
       );
       const user = userCredential.user;
 
-      // 2. Créer le document dans Firestore
       await addDoc(collection(db, 'users'), {
         uid: user.uid,
         email: createForm.email,
         first_name: createForm.first_name,
         last_name: createForm.last_name,
-        roles: createForm.roles as UserRole[], // ✅ Casting explicite
+        roles: createForm.roles as UserRole[],
         age: createForm.age,
         gender: createForm.gender,
         level: createForm.level,
+        inscritAuxCours: false, // ✅ Champ ajouté
+        inscritAuxCompetitions: false, // ✅ Champ ajouté
         created_at: new Date().toISOString()
       });
 
-      // 3. Envoyer un email de réinitialisation
       await sendPasswordResetEmail(auth, createForm.email);
-
-      // 4. Rafraîchir la liste des utilisateurs
       const querySnapshot = await getDocs(collection(db, 'users'));
       setUsers(querySnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as User)));
-
       setOpenCreateDialog(false);
       setSnackbarMessage("Utilisateur créé avec succès ! Un email de réinitialisation a été envoyé.");
       setOpenSnackbar(true);
@@ -163,7 +165,9 @@ const AdminUsers: React.FC = () => {
       roles: user.roles || [],
       age: user.age,
       gender: user.gender,
-      level: user.level
+      level: user.level,
+      inscritAuxCours: user.inscritAuxCours ?? false, // ✅ Champ ajouté
+      inscritAuxCompetitions: user.inscritAuxCompetitions ?? false, // ✅ Champ ajouté
     });
     setOpenEditDialog(true);
   };
@@ -213,6 +217,8 @@ const AdminUsers: React.FC = () => {
                 <TableCell>Niveau</TableCell>
                 <TableCell>Âge</TableCell>
                 <TableCell>Genre</TableCell>
+                <TableCell>Cours</TableCell>
+                <TableCell>Compétitions</TableCell>
                 <TableCell>Actions</TableCell>
               </TableRow>
             </TableHead>
@@ -230,6 +236,12 @@ const AdminUsers: React.FC = () => {
                   <TableCell>{user.level || 'N/A'}</TableCell>
                   <TableCell>{user.age || 'N/A'}</TableCell>
                   <TableCell>{user.gender || 'N/A'}</TableCell>
+                  <TableCell>
+                    {user.inscritAuxCours ? <Chip label="Oui" color="success" /> : <Chip label="Non" color="error" />}
+                  </TableCell>
+                  <TableCell>
+                    {user.inscritAuxCompetitions ? <Chip label="Oui" color="success" /> : <Chip label="Non" color="error" />}
+                  </TableCell>
                   <TableCell>
                     <IconButton
                       color="primary"
@@ -325,6 +337,29 @@ const AdminUsers: React.FC = () => {
                   <MenuItem value="autre">Autre</MenuItem>
                 </Select>
               </FormControl>
+              {/* ✅ Champs ajoutés pour l'admin */}
+              <FormControl fullWidth>
+                <InputLabel>Inscrit aux cours</InputLabel>
+                <Select
+                  value={editForm.inscritAuxCours ? 'true' : 'false'}
+                  onChange={(e) => setEditForm({...editForm, inscritAuxCours: e.target.value === 'true'})}
+                  label="Inscrit aux cours"
+                >
+                  <MenuItem value="true">Oui</MenuItem>
+                  <MenuItem value="false">Non</MenuItem>
+                </Select>
+              </FormControl>
+              <FormControl fullWidth>
+                <InputLabel>Inscrit aux compétitions</InputLabel>
+                <Select
+                  value={editForm.inscritAuxCompetitions ? 'true' : 'false'}
+                  onChange={(e) => setEditForm({...editForm, inscritAuxCompetitions: e.target.value === 'true'})}
+                  label="Inscrit aux compétitions"
+                >
+                  <MenuItem value="true">Oui</MenuItem>
+                  <MenuItem value="false">Non</MenuItem>
+                </Select>
+              </FormControl>
             </Box>
           </DialogContent>
           <DialogActions>
@@ -414,7 +449,7 @@ const AdminUsers: React.FC = () => {
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setOpenCreateDialog(false)}>Annuler</Button>
-            <Button onClick={handleCreateUser} color="primary">  {/* ✅ Appel à handleCreateUser */}
+            <Button onClick={handleCreateUser} color="primary">
               Créer
             </Button>
           </DialogActions>
