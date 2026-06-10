@@ -40,15 +40,13 @@ interface User {
   uid: string;
   displayName: string;
   email: string;
+  inscritAuxCours?: boolean; // ✅ Champ ajouté pour le filtre
 }
 
 const GroupForm: React.FC = () => {
   const [user, loadingAuth] = useAuthState(auth);
-
-  // ✅ On détecte le mode via la présence ou non de groupId dans l'URL
   const { groupId } = useParams<{ groupId?: string }>();
   const isEditMode = !!groupId;
-
   const navigate = useNavigate();
 
   const [group, setGroup] = useState<Group>({
@@ -61,13 +59,13 @@ const GroupForm: React.FC = () => {
   });
 
   const [allClients, setAllClients] = useState<User[]>([]);
-  const [selectedClients, setSelectedClients] = useState<User[]>([]); // ✅ On stocke les objets User complets
+  const [selectedClients, setSelectedClients] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Charger tous les clients
+  // Charger tous les clients (filtrés : inscritAuxCours === true)
   useEffect(() => {
     if (!user) return;
 
@@ -77,11 +75,15 @@ const GroupForm: React.FC = () => {
         const querySnapshot = await getDocs(usersQuery);
         const clients: User[] = [];
         querySnapshot.forEach((doc) => {
-          clients.push({
-            uid: doc.id,
-            displayName: doc.data().displayName || doc.data().email?.split('@')[0] || doc.id,
-            email: doc.data().email || '',
-          });
+          const data = doc.data();
+          // ✅ Filtrer : seuls les clients avec inscritAuxCours === true
+          if (data.inscritAuxCours === true && data.roles?.includes('client')) {
+            clients.push({
+              uid: doc.id,
+              displayName: `${data.first_name || ''} ${data.last_name || ''}`.trim() || data.email?.split('@')[0] || doc.id,
+              email: data.email || '',
+            });
+          }
         });
         setAllClients(clients);
       } catch (err) {
@@ -116,7 +118,6 @@ const GroupForm: React.FC = () => {
             moniteurId: data.moniteurId,
           });
 
-          // ✅ Pré-sélectionner les clients déjà dans le groupe
           const preSelected = allClients.filter((c) => studentIds.includes(c.uid));
           setSelectedClients(preSelected);
         }
@@ -132,7 +133,6 @@ const GroupForm: React.FC = () => {
     e.preventDefault();
     if (!user) return;
 
-    // ✅ Validation React : on vérifie selectedClients, pas l'input HTML
     if (selectedClients.length === 0) {
       setError('Veuillez sélectionner au moins un client.');
       return;
@@ -152,7 +152,7 @@ const GroupForm: React.FC = () => {
         description: group.description.trim(),
         createdBy: user.uid,
         createdAt: isEditMode ? group.createdAt : new Date(),
-        students: selectedClients.map((c) => c.uid), // ✅ On extrait les UIDs au moment de la sauvegarde
+        students: selectedClients.map((c) => c.uid),
         moniteurId: user.uid,
       };
 
@@ -192,8 +192,6 @@ const GroupForm: React.FC = () => {
         </Typography>
 
         <Box component="form" onSubmit={handleSubmit} noValidate>
-          {/* ✅ noValidate désactive la validation HTML native pour éviter le conflit */}
-
           <FormControl fullWidth margin="normal">
             <FormLabel>Nom du groupe *</FormLabel>
             <TextField
@@ -222,34 +220,38 @@ const GroupForm: React.FC = () => {
 
           <FormControl fullWidth margin="normal">
             <FormLabel>Clients *</FormLabel>
-            <Autocomplete
-              multiple
-              options={allClients}
-              value={selectedClients}
-              getOptionLabel={(option) => `${option.displayName} (${option.email})`}
-              onChange={(_event, newValue: User[]) => {
-                // ✅ On met à jour directement l'état avec les objets User complets
-                setSelectedClients(newValue);
-              }}
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  variant="outlined"
-                  placeholder={selectedClients.length === 0 ? 'Sélectionnez les clients' : ''}
-                  // ✅ PAS de "required" ici — la validation est gérée par React dans handleSubmit
-                  error={selectedClients.length === 0 && isSubmitting}
-                  helperText={
-                    selectedClients.length === 0 && isSubmitting
-                      ? 'Veuillez sélectionner au moins un client'
-                      : ''
-                  }
-                />
-              )}
-              filterSelectedOptions
-              isOptionEqualToValue={(option, value) => option.uid === value.uid}
-              noOptionsText="Aucun client trouvé"
-              sx={{ width: '100%' }}
-            />
+            {allClients.length === 0 ? (
+              <Typography color="error" sx={{ mt: 1 }}>
+                Aucun client inscrit aux cours disponible. Impossible de créer un groupe.
+              </Typography>
+            ) : (
+              <Autocomplete
+                multiple
+                options={allClients}
+                value={selectedClients}
+                getOptionLabel={(option) => `${option.displayName} (${option.email})`}
+                onChange={(_event, newValue: User[]) => {
+                  setSelectedClients(newValue);
+                }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    variant="outlined"
+                    placeholder={selectedClients.length === 0 ? 'Sélectionnez les clients' : ''}
+                    error={selectedClients.length === 0 && isSubmitting}
+                    helperText={
+                      selectedClients.length === 0 && isSubmitting
+                        ? 'Veuillez sélectionner au moins un client'
+                        : ''
+                    }
+                  />
+                )}
+                filterSelectedOptions
+                isOptionEqualToValue={(option, value) => option.uid === value.uid}
+                noOptionsText="Aucun client inscrit aux cours trouvé"
+                sx={{ width: '100%' }}
+              />
+            )}
           </FormControl>
 
           <Box sx={{ mt: 4, display: 'flex', gap: 2 }}>
@@ -265,7 +267,7 @@ const GroupForm: React.FC = () => {
               type="submit"
               variant="contained"
               color="primary"
-              disabled={isSubmitting}
+              disabled={isSubmitting || allClients.length === 0} // ✅ Désactiver si aucun client disponible
             >
               {isSubmitting
                 ? <CircularProgress size={24} />

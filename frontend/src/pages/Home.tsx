@@ -1,39 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { Typography, Container, Box } from '@mui/material';
-import { db } from '../services/firebaseConfig';
-import { doc, getDoc } from 'firebase/firestore';
+import { useNavigate } from 'react-router-dom';
+import { useAuthState } from 'react-firebase-hooks/auth';
+import { auth } from '../services/firebaseConfig';
 
-// ✅ Import du logo depuis /src/assets/
-// TypeScript may not have image module declarations in this project; ignore the import type check.
-// @ts-ignore
+// @ts-ignore (pour éviter les erreurs TypeScript sur l'import d'images)
 import logo from '../assets/logo-blocabrac.png';
 
 const Home = () => {
-  const [content, setContent] = useState({
-    title: "Bienvenue sur BLOCABRAC",
-    description: "Connectez-vous pour accéder à votre espace personnel.",
-    additionalInfo: "Notre salle d'escalade est ouverte tous les jours de la semaine de 12h à 22h et le week-end de 10h à 20h. Coordonnées : 43 rue Saint-Just, 42000 Saint-Étienne. Tél : 04 77 21 55 03"
-  });
-  const [loading, setLoading] = useState(true);
+  const [user, loading] = useAuthState(auth);
+  const navigate = useNavigate();
 
+  // Rediriger vers l'espace correspondant si connecté
   useEffect(() => {
-    const fetchContent = async () => {
-      try {
-        const docRef = doc(db, 'homeContent', 'main');
-        const docSnap = await getDoc(docRef);
-
-        if (docSnap.exists()) {
-          setContent(docSnap.data() as typeof content);
-        }
-      } catch (err) {
-        console.error("Erreur lors du chargement du contenu :", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchContent();
-  }, []);
+    if (!loading && user) {
+      navigate('/client/screen');
+    }
+  }, [user, loading, navigate]);
 
   if (loading) {
     return <Typography>Chargement...</Typography>;
@@ -48,7 +31,6 @@ const Home = () => {
         alignItems: 'center',
         textAlign: 'center'
       }}>
-        {/* ✅ Logo avec import direct depuis /src/assets/ */}
         <img
           src={logo}
           alt="Logo BLOCABRAC"
@@ -60,18 +42,17 @@ const Home = () => {
         />
 
         <Typography variant="h4" sx={{ mt: 2 }}>
-          {content.title}
+          Bienvenue sur BLOCABRAC
         </Typography>
 
         <Typography sx={{ mt: 2, maxWidth: '600px' }}>
-          {content.description}
+          Connectez-vous pour accéder à votre espace personnel.
         </Typography>
 
-        {content.additionalInfo && (
-          <Typography sx={{ mt: 2, maxWidth: '600px' }}>
-            {content.additionalInfo}
-          </Typography>
-        )}
+        <Typography sx={{ mt: 2, maxWidth: '600px' }}>
+          Notre salle d'escalade est ouverte tous les jours de la semaine de 12h à 22h et le week-end de 10h à 20h.
+          Coordonnées : 43 rue Saint-Just, 42000 Saint-Étienne. Tél : 04 77 21 55 03
+        </Typography>
       </Box>
     </Container>
   );

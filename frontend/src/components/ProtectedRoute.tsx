@@ -1,14 +1,13 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuthState } from 'react-firebase-hooks/auth';
-import { auth } from '../services/firebaseConfig';
+import { auth, db } from '../services/firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../services/firebaseConfig';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
   allowedRoles?: string[];
-  role?: string; // ✅ Ajout pour compatibilité ascendante
+  role?: string;
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles, role }) => {
@@ -51,10 +50,12 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles,
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // ✅ Gestion des deux props : `role` (string) ou `allowedRoles` (array)
-  const requiredRole = role || allowedRoles?.[0];
-  if (requiredRole && !userRoles.includes(requiredRole)) {
-    return <Navigate to="/" replace />;
+  const requiredRoles = role ? [role] : allowedRoles;
+  if (requiredRoles && requiredRoles.length > 0) {
+    const hasRequiredRole = requiredRoles.some(r => userRoles.includes(r));
+    if (!hasRequiredRole) {
+      return <Navigate to="/" replace />;
+    }
   }
 
   return <>{children}</>;
