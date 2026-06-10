@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '../../../services/firebaseConfig';
-import { collection, query, where, getDocs, addDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, setDoc, doc } from 'firebase/firestore';
 import {
   Container, Typography, Box, Button, CircularProgress, Alert,
   Dialog, DialogTitle, DialogContent, DialogActions,
@@ -15,7 +15,6 @@ const levelColors: Record<string, string> = {
   rouge: '#FF0000', noir: '#000000', blanc: '#FFFFFF', rose: '#FFC0CB',
 };
 
-// Liste des murs
 const wallList = [
   "Dalle", "Grotte Adultes", "Güllich", "Réta Adultes", "Grande Face",
   "Dévers à 15°", "Dévers à 30°", "Dévers à 40°",
@@ -34,11 +33,9 @@ const ClientDaily: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Modales
   const [openWallDialog, setOpenWallDialog] = useState(false);
   const [openBoulderDialog, setOpenBoulderDialog] = useState(false);
 
-  // Charger tous les blocs actifs de type "daily"
   useEffect(() => {
     if (!user || loadingAuth) return;
 
@@ -68,31 +65,31 @@ const ClientDaily: React.FC = () => {
     fetchBoulders();
   }, [user, loadingAuth]);
 
-  // Filtrer les blocs par mur
   const getBouldersByWall = (wall: string) => {
     return boulders.filter(boulder => boulder.wall === wall);
   };
 
-  // Ouvrir la modale des blocs d'un mur
   const handleOpenWall = (wall: string) => {
     setSelectedWall(wall);
     setOpenWallDialog(true);
   };
 
-  // Ouvrir la modale des détails d'un bloc
   const handleOpenBoulder = (boulder: any) => {
     setSelectedBoulder(boulder);
     setOpenBoulderDialog(true);
   };
 
-  // Valider la réussite d'un bloc
+  // ✅ Correction : Utilisation de setDoc avec un ID unique pour éviter les doublons
   const handleValidateSuccess = async (boulderId: string, success: boolean) => {
     if (!user) return;
     try {
-      await addDoc(collection(db, 'client_boulder_results'), {
+      const resultId = `${user.uid}_${boulderId}`;
+      await setDoc(doc(db, 'client_boulder_results', resultId), {
         userId: user.uid,
         boulderId,
         success,
+        rating: ratings[boulderId] || 0, // ✅ Fusion avec la note existante
+        comment: comments[boulderId] || '',
         attempts: 1,
         createdAt: new Date().toISOString()
       });
@@ -104,15 +101,18 @@ const ClientDaily: React.FC = () => {
     }
   };
 
-  // Noter un bloc
+  // ✅ Correction : Utilisation de setDoc pour la note aussi
   const handleRate = async (boulderId: string, rating: number | null, comment: string) => {
     if (!rating || !user) return;
     try {
-      await addDoc(collection(db, 'client_boulder_results'), {
+      const resultId = `${user.uid}_${boulderId}`;
+      await setDoc(doc(db, 'client_boulder_results', resultId), {
         userId: user.uid,
         boulderId,
+        success: successResults[boulderId] || false, // ✅ Fusion avec la validation existante
         rating,
         comment,
+        attempts: 1,
         createdAt: new Date().toISOString()
       });
       setRatings(prev => ({ ...prev, [boulderId]: rating }));
@@ -143,7 +143,6 @@ const ClientDaily: React.FC = () => {
       {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
 
       <Typography variant="h6" sx={{ mb: 2 }}>Sélectionnez un mur :</Typography>
-      {/* ✅ Correction MUI v9 : suppression de `item` et `component` */}
       <Grid container spacing={2} sx={{ mb: 4 }}>
         {wallList.map((wall) => {
           const boulderCount = getBouldersByWall(wall).length;
@@ -164,16 +163,14 @@ const ClientDaily: React.FC = () => {
         })}
       </Grid>
 
-      {/* Modale 1 : Liste des blocs d'un mur (miniatures + numéros) */}
+      {/* Modale 1 : Liste des blocs d'un mur */}
       <Dialog
         open={openWallDialog}
         onClose={() => setOpenWallDialog(false)}
         maxWidth="md"
         fullWidth
       >
-        <DialogTitle>
-          Blocs sur le mur : {selectedWall}
-        </DialogTitle>
+        <DialogTitle>Blocs sur le mur : {selectedWall}</DialogTitle>
         <DialogContent>
           {selectedWall && getBouldersByWall(selectedWall).length === 0 ? (
             <Typography>Aucun bloc disponible sur ce mur.</Typography>
@@ -205,7 +202,7 @@ const ClientDaily: React.FC = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Modale 2 : Détails d'un bloc (toutes les infos + actions) */}
+      {/* Modale 2 : Détails d'un bloc */}
       <Dialog
         open={openBoulderDialog}
         onClose={() => setOpenBoulderDialog(false)}
@@ -214,9 +211,7 @@ const ClientDaily: React.FC = () => {
       >
         {selectedBoulder && (
           <>
-            <DialogTitle>
-              Bloc n°{selectedBoulder.number} - {selectedBoulder.wall}
-            </DialogTitle>
+            <DialogTitle>Bloc n°{selectedBoulder.number} - {selectedBoulder.wall}</DialogTitle>
             <DialogContent>
               <CardMedia
                 component="img"
@@ -228,20 +223,30 @@ const ClientDaily: React.FC = () => {
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                 <Typography variant="body2">Niveau: </Typography>
                 <Box sx={{
-                  backgroundColor: levelColors[selectedBoulder.difficulty_level] || '#CCCCCC',
-                  color: ['noir', 'blanc'].includes(selectedBoulder.difficulty_level) ? 'black' : 'white',
+                  backgroundColor: levelColors[selectedBoulder.color || selectedBoulder.difficulty] || '#CCCCCC',
+                  color: ['noir', 'blanc'].includes(selectedBoulder.color || selectedBoulder.difficulty) ? 'black' : 'white',
                   padding: '2px 8px',
                   borderRadius: '4px',
                   marginLeft: '8px'
                 }}>
-                  {selectedBoulder.difficulty_level}
+                  {selectedBoulder.difficulty_level || selectedBoulder.difficulty}
                 </Box>
+                {selectedBoulder.difficulty_types && selectedBoulder.difficulty_types.length > 0 && (
+                  <Chip
+                    label={selectedBoulder.difficulty_types[0]}
+                    size="small"
+                    sx={{ ml: 1, backgroundColor: 'rgba(0,0,0,0.1)' }}
+                  />
+                )}
               </Box>
               <Typography variant="body2" sx={{ mb: 2 }}>
-                <strong>Conseils:</strong> {selectedBoulder.instructions || selectedBoulder.constraints || 'Aucun'}
+                <strong>Conseils:</strong> {selectedBoulder.instructions || 'Aucun'}
               </Typography>
               <Typography variant="body2" sx={{ mb: 2 }}>
-                <strong>Contraintes:</strong> {selectedBoulder.constraints || 'Aucune'}
+                <strong>Créé le:</strong> {selectedBoulder.created_at ? new Date(selectedBoulder.created_at).toLocaleDateString() : 'Inconnu'}
+              </Typography>
+              <Typography variant="body2" sx={{ mb: 2 }}>
+                <strong>Créé par:</strong> {selectedBoulder.created_by || 'Inconnu'}
               </Typography>
 
               <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
