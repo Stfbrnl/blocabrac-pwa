@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import {
   Typography, Paper, Box, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Chip, Select, MenuItem,
-  InputLabel, FormControl, IconButton
+  InputLabel, FormControl, IconButton, Button, Dialog, DialogTitle,
+  DialogContent, DialogActions
 } from '@mui/material';
-import { Check as CheckIcon } from '@mui/icons-material';
-import { collection, query, where, onSnapshot, updateDoc, doc } from 'firebase/firestore';
+import { Check as CheckIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import { collection, query, where, onSnapshot, updateDoc, doc, deleteDoc, getDocs } from 'firebase/firestore';
 import { db } from '../../../services/firebaseConfig';
 
 type ReportType = 'défaillance_prisede' | 'morphologie' | 'trop_difficile' | 'trop_simple' | 'autre';
@@ -26,6 +27,7 @@ interface Report {
 export default function ReportsList(): JSX.Element {
   const [reports, setReports] = useState<Report[]>([]);
   const [filterType, setFilterType] = useState<ReportType | 'all'>('all');
+  const [openResetDialog, setOpenResetDialog] = useState(false);
 
   useEffect(() => {
     const q = query(collection(db, 'boulder_reports'), where('status', '!=', 'ignored'));
@@ -43,6 +45,27 @@ export default function ReportsList(): JSX.Element {
       await updateDoc(doc(db, 'boulder_reports', reportId), { status: 'resolved' });
     } catch (error: unknown) {
       console.error('Erreur lors de la mise à jour :', error);
+    }
+  };
+
+  const handleIgnoreReport = async (reportId: string): Promise<void> => {
+    try {
+      await updateDoc(doc(db, 'boulder_reports', reportId), { status: 'ignored' });
+    } catch (error: unknown) {
+      console.error('Erreur lors de la mise à jour :', error);
+    }
+  };
+
+  const handleResetReports = async (): Promise<void> => {
+    try {
+      const q = query(collection(db, 'boulder_reports'));
+      const snapshot = await getDocs(q);
+      for (const doc of snapshot.docs) {
+        await deleteDoc(doc.ref);
+      }
+      setOpenResetDialog(false);
+    } catch (error: unknown) {
+      console.error('Erreur lors de la réinitialisation :', error);
     }
   };
 
@@ -69,21 +92,31 @@ export default function ReportsList(): JSX.Element {
 
   return (
     <Box sx={{ mt: 2 }}>
-      <FormControl sx={{ minWidth: 200, mb: 2 }}>
-        <InputLabel>Filtrer par type</InputLabel>
-        <Select
-          value={filterType}
-          onChange={(e: any): void => setFilterType(e.target.value as ReportType | 'all')}
-          label="Filtrer par type"
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <FormControl sx={{ minWidth: 200 }}>
+          <InputLabel>Filtrer par type</InputLabel>
+          <Select
+            value={filterType}
+            onChange={(e: any): void => setFilterType(e.target.value as ReportType | 'all')}
+            label="Filtrer par type"
+          >
+            <MenuItem value="all">Tous les signalements</MenuItem>
+            <MenuItem value="défaillance_prisede">Défaillance de prise</MenuItem>
+            <MenuItem value="morphologie">Morphologie</MenuItem>
+            <MenuItem value="trop_difficile">Trop difficile</MenuItem>
+            <MenuItem value="trop_simple">Trop simple</MenuItem>
+            <MenuItem value="autre">Autre</MenuItem>
+          </Select>
+        </FormControl>
+        <Button
+          variant="outlined"
+          color="error"
+          onClick={() => setOpenResetDialog(true)}
+          disabled={reports.length === 0}
         >
-          <MenuItem value="all">Tous les signalements</MenuItem>
-          <MenuItem value="défaillance_prisede">Défaillance de prise</MenuItem>
-          <MenuItem value="morphologie">Morphologie</MenuItem>
-          <MenuItem value="trop_difficile">Trop difficile</MenuItem>
-          <MenuItem value="trop_simple">Trop simple</MenuItem>
-          <MenuItem value="autre">Autre</MenuItem>
-        </Select>
-      </FormControl>
+          Réinitialiser les signalements
+        </Button>
+      </Box>
 
       <TableContainer component={Paper}>
         <Table>
@@ -121,13 +154,22 @@ export default function ReportsList(): JSX.Element {
                 </TableCell>
                 <TableCell>
                   {report.status === 'pending' && (
-                    <IconButton
-                      color="primary"
-                      onClick={() => handleMarkAsResolved(report.id)}
-                      title="Marquer comme résolu"
-                    >
-                      <CheckIcon />
-                    </IconButton>
+                    <>
+                      <IconButton
+                        color="primary"
+                        onClick={() => handleMarkAsResolved(report.id)}
+                        title="Marquer comme résolu"
+                      >
+                        <CheckIcon />
+                      </IconButton>
+                      <IconButton
+                        color="error"
+                        onClick={() => handleIgnoreReport(report.id)}
+                        title="Ignorer"
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </>
                   )}
                 </TableCell>
               </TableRow>
@@ -135,6 +177,29 @@ export default function ReportsList(): JSX.Element {
           </TableBody>
         </Table>
       </TableContainer>
+
+      <Dialog
+        open={openResetDialog}
+        onClose={() => setOpenResetDialog(false)}
+      >
+        <DialogTitle>Réinitialiser les signalements</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Êtes-vous sûr de vouloir supprimer tous les signalements ?
+            Cette action est irréversible.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenResetDialog(false)}>Annuler</Button>
+          <Button
+            onClick={handleResetReports}
+            color="error"
+            variant="contained"
+          >
+            Réinitialiser
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

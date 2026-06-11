@@ -2,28 +2,23 @@ import React, { useState, useEffect } from 'react';
 import {
   Typography, Paper, Box, MenuItem, Select, InputLabel, FormControl,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  LinearProgress, Chip
+  LinearProgress, Chip, Button, Dialog, DialogTitle, DialogContent,
+  DialogActions, Grid, TextField
 } from '@mui/material';
-import { collection, query, where, getDocs, DocumentData } from 'firebase/firestore';
+import { collection, query, where, getDocs, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../../../services/firebaseConfig';
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer
-} from 'recharts';
-
-interface Boulder {
-  id: string;
-  number?: number;
-  wall?: string;
-  image_data?: ArrayBuffer;
-  image_type?: string;
-  [key: string]: any;
-}
 
 const walls: string[] = [
   'Caverne des petits', 'Réta d\'initiation', 'Réta Adultes', 'Grande Face',
   'Dalle', 'Dévers 15°', 'Dévers 30°', 'Dévers 40°', 'Grotte Adultes', 'Güllich'
 ];
+
+interface Boulder {
+  id: string;
+  number: number;
+  wall: string;
+  difficulty?: string;
+}
 
 interface StatsData {
   boulderId: string;
@@ -31,12 +26,20 @@ interface StatsData {
   wall: string;
   averageRating: number;
   ratingCount: number;
+  successCount: number;
+  totalAttempts: number;
+  averageAttempts: number;
+  validatedBy: string[]; // ✅ Nouveau : Liste des utilisateurs ayant validé
 }
 
 export default function BoulderStats(): JSX.Element {
   const [selectedWall, setSelectedWall] = useState<string>('');
   const [stats, setStats] = useState<StatsData[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
+  const [openResetDialog, setOpenResetDialog] = useState(false);
+  const [period, setPeriod] = useState<'day' | 'week' | 'month' | 'year' | 'custom'>('week');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
 
   useEffect(() => {
     if (!selectedWall) return;
@@ -44,6 +47,38 @@ export default function BoulderStats(): JSX.Element {
     const fetchStats = async (): Promise<void> => {
       setLoading(true);
       try {
+        // Calculer les dates en fonction de la période
+        const now = new Date();
+        let startDateFilter: Date | null = null;
+        let endDateFilter: Date | null = null;
+
+        switch (period) {
+          case 'day':
+            startDateFilter = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            endDateFilter = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+            break;
+          case 'week':
+            startDateFilter = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
+            endDateFilter = new Date(now.getFullYear(), now.getMonth(), now.getDate() + (6 - now.getDay()) + 1);
+            break;
+          case 'month':
+            startDateFilter = new Date(now.getFullYear(), now.getMonth(), 1);
+            endDateFilter = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+            break;
+          case 'year':
+            startDateFilter = new Date(now.getFullYear(), 0, 1);
+            endDateFilter = new Date(now.getFullYear() + 1, 0, 1);
+            break;
+          case 'custom':
+            if (startDate && endDate) {
+              startDateFilter = new Date(startDate);
+              endDateFilter = new Date(endDate);
+              endDateFilter.setDate(endDateFilter.getDate() + 1);
+            }
+            break;
+        }
+
+        // Charger les blocs du mur sélectionné
         const bouldersQuery = query(
           collection(db, 'boulders'),
           where('wall', '==', selectedWall),
@@ -57,34 +92,46 @@ export default function BoulderStats(): JSX.Element {
 
         const statsData: StatsData[] = [];
         for (const boulder of boulders) {
-          const ratingsQuery = query(
-            collection(db, 'boulder_ratings'),
-            where('boulder_id', '==', boulder.id)
+          const resultsQuery = query(
+            collection(db, 'client_boulder_results'),
+            where('boulderId', '==', boulder.id)
           );
-          const ratingsSnapshot = await getDocs(ratingsQuery);
-          const ratings: number[] = ratingsSnapshot.docs.map((doc: DocumentData) => doc.data().rating);
+          const resultsSnapshot = await getDocs(resultsQuery);
+          const results = resultsSnapshot.docs.map(doc => doc.data());
 
-          const boulderNumber: number = boulder.number || 0;
-          const boulderWall: string = boulder.wall || 'Inconnu';
+          // Filtrer par période
+          const filteredResults = results.filter((result: any) => {
+            const resultDate = new Date(result.createdAt);
+            if (startDateFilter && resultDate < startDateFilter) return false;
+            if (endDateFilter && resultDate >= endDateFilter) return false;
+            return true;
+          });
 
-          if (ratings.length > 0) {
-            const average: number = ratings.reduce((sum: number, r: number) => sum + r, 0) / ratings.length;
-            statsData.push({
-              boulderId: boulder.id,
-              boulderNumber: boulderNumber,
-              wall: boulderWall,
-              averageRating: parseFloat(average.toFixed(2)),
-              ratingCount: ratings.length
-            });
-          } else {
-            statsData.push({
-              boulderId: boulder.id,
-              boulderNumber: boulderNumber,
-              wall: boulderWall,
-              averageRating: 0,
-              ratingCount: 0
-            });
-          }
+          // Calculer les notes
+          const ratings: number[] = filteredResults
+            .filter((result: any) => result.rating !== undefined)
+            .map((result: any) => result.rating);
+
+          // Calculer les validations réussies et les utilisateurs
+          const successResults: any[] = filteredResults.filter((result: any) => result.success === true);
+          const validatedBy: string[] = successResults.map((result: any) => result.userId);
+
+          // Calculer les essais
+          const allAttempts: number[] = filteredResults
+            .filter((result: any) => result.attempts !== undefined)
+            .map((result: any) => result.attempts);
+
+          statsData.push({
+            boulderId: boulder.id,
+            boulderNumber: boulder.number || 0,
+            wall: boulder.wall || 'Inconnu',
+            averageRating: ratings.length > 0 ? parseFloat((ratings.reduce((sum: number, r: number) => sum + r, 0) / ratings.length).toFixed(2)) : 0,
+            ratingCount: ratings.length,
+            successCount: successResults.length,
+            totalAttempts: allAttempts.reduce((sum: number, a: number) => sum + a, 0),
+            averageAttempts: allAttempts.length > 0 ? parseFloat((allAttempts.reduce((sum: number, a: number) => sum + a, 0) / allAttempts.length).toFixed(1)) : 0,
+            validatedBy: validatedBy
+          });
         }
 
         setStats(statsData);
@@ -96,26 +143,89 @@ export default function BoulderStats(): JSX.Element {
     };
 
     fetchStats();
-  }, [selectedWall]);
+  }, [selectedWall, period, startDate, endDate]);
 
-  const chartData = stats.map((s: StatsData) => ({
-    name: `Bloc ${s.boulderNumber}`,
-    'Note moyenne': s.averageRating,
-    'Nombre de notes': s.ratingCount
-  }));
+  // Réinitialiser les stats pour un mur
+  const handleResetStats = async (): Promise<void> => {
+    try {
+      setLoading(true);
+      const resultsQuery = query(
+        collection(db, 'client_boulder_results'),
+        where('boulderId', 'in', stats.map(s => s.boulderId))
+      );
+      const resultsSnapshot = await getDocs(resultsQuery);
+      for (const resultDoc of resultsSnapshot.docs) {
+        await deleteDoc(doc(db, 'client_boulder_results', resultDoc.id));
+      }
+      setStats([]);
+      setOpenResetDialog(false);
+    } catch (error: unknown) {
+      console.error('Erreur lors de la réinitialisation :', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const wallAverage: number = stats.length > 0
+  // Sélecteur de période
+  const periodSelector = (
+    <Paper sx={{ p: 2, mb: 2 }}>
+      <Typography variant="h6" sx={{ mb: 2 }}>Filtrer par période:</Typography>
+      <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2 }}>
+        <FormControl sx={{ minWidth: 120 }}>
+          <InputLabel>Période</InputLabel>
+          <Select
+            value={period}
+            onChange={(e) => setPeriod(e.target.value as 'day' | 'week' | 'month' | 'year' | 'custom')}
+            label="Période"
+          >
+            <MenuItem value="day">Aujourd'hui</MenuItem>
+            <MenuItem value="week">Cette semaine</MenuItem>
+            <MenuItem value="month">Ce mois</MenuItem>
+            <MenuItem value="year">Cette année</MenuItem>
+            <MenuItem value="custom">Période personnalisée</MenuItem>
+          </Select>
+        </FormControl>
+
+        {period === 'custom' && (
+          <>
+            <TextField
+              label="Date de début"
+              type="date"
+              slotProps={{ inputLabel: { shrink: true } }}
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              sx={{ minWidth: 150 }}
+            />
+            <TextField
+              label="Date de fin"
+              type="date"
+              slotProps={{ inputLabel: { shrink: true } }}
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              sx={{ minWidth: 150 }}
+            />
+          </>
+        )}
+      </Box>
+    </Paper>
+  );
+
+  // Calcul des moyennes pour le mur
+  const wallAverageRating = stats.length > 0
     ? stats.reduce((sum: number, s: StatsData) => sum + s.averageRating, 0) / stats.length
     : 0;
 
-  const getImageUrlFromBinary = (boulder: Boulder): string => {
-    if (!boulder.image_data || !boulder.image_type) return '';
-    const blob = new Blob([boulder.image_data], { type: boulder.image_type });
-    return URL.createObjectURL(blob);
-  };
+  const wallAverageAttempts = stats.length > 0
+    ? stats.reduce((sum: number, s: StatsData) => sum + s.averageAttempts, 0) / stats.length
+    : 0;
+
+  const wallSuccessRate = stats.length > 0
+    ? (stats.reduce((sum: number, s: StatsData) => sum + s.successCount, 0) / stats.reduce((sum: number, s: StatsData) => sum + s.ratingCount, 0)) * 100
+    : 0;
 
   return (
     <Box sx={{ mt: 2 }}>
+      {/* Sélecteur de mur */}
       <FormControl fullWidth sx={{ mb: 3 }}>
         <InputLabel>Sélectionnez un mur</InputLabel>
         <Select
@@ -135,72 +245,121 @@ export default function BoulderStats(): JSX.Element {
         <>
           {stats.length > 0 ? (
             <>
+              {/* Résumé du mur */}
               <Paper sx={{ p: 2, mb: 3, backgroundColor: '#f5f5f5' }}>
-                <Typography variant="h6">
-                  Moyenne générale du mur: {wallAverage.toFixed(2)}/5
-                </Typography>
-                <Chip
-                  label={wallAverage >= 4 ? 'Excellent' : wallAverage >= 3 ? 'Bon' : 'À améliorer'}
-                  color={wallAverage >= 4 ? 'success' : wallAverage >= 3 ? 'primary' : 'error'}
-                  sx={{ mt: 1 }}
-                />
-              </Paper>
-
-              <Paper sx={{ p: 2, mb: 3 }}>
-                <Typography variant="h6" gutterBottom>
-                  Notes par bloc
-                </Typography>
-                <Box sx={{ height: 400 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" />
-                      <YAxis domain={[0, 5]} />
-                      <Tooltip />
-                      <Legend />
-                      <Bar dataKey="Note moyenne" fill="#8884d8" name="Note moyenne (1-5)" />
-                      <Bar dataKey="Nombre de notes" fill="#82ca9d" name="Nombre de notes" />
-                    </BarChart>
-                  </ResponsiveContainer>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Box>
+                    <Typography variant="h6">
+                      Moyenne du mur: {wallAverageRating.toFixed(2)}/5
+                    </Typography>
+                    <Typography variant="body2">
+                      Taux de réussite: {isNaN(wallSuccessRate) ? '0' : wallSuccessRate.toFixed(1)}%
+                    </Typography>
+                    <Typography variant="body2">
+                      Essais moyens: {wallAverageAttempts.toFixed(1)} par bloc
+                    </Typography>
+                  </Box>
+                  <Button
+                    variant="outlined"
+                    color="error"
+                    onClick={() => setOpenResetDialog(true)}
+                    disabled={stats.length === 0}
+                  >
+                    Réinitialiser les stats
+                  </Button>
                 </Box>
               </Paper>
 
-              <TableContainer component={Paper}>
-                <Table>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Bloc n°</TableCell>
-                      <TableCell>Note moyenne</TableCell>
-                      <TableCell>Nombre de notes</TableCell>
-                      <TableCell>Appréciation</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {stats.map((stat: StatsData) => (
-                      <TableRow key={stat.boulderId}>
-                        <TableCell>{stat.boulderNumber}</TableCell>
-                        <TableCell>
-                          {stat.averageRating > 0 ? stat.averageRating.toFixed(2) : 'Aucune note'}
-                        </TableCell>
-                        <TableCell>{stat.ratingCount}</TableCell>
-                        <TableCell>
-                          {stat.ratingCount > 0 ? (
-                            <Chip
-                              label={`${stat.averageRating.toFixed(1)}/5`}
-                              color={
-                                stat.averageRating >= 4 ? 'success' :
-                                stat.averageRating >= 3 ? 'primary' : 'error'
-                              }
-                            />
-                          ) : (
-                            <Chip label="Aucune note" color="default" />
-                          )}
-                        </TableCell>
+              {periodSelector}
+
+              {/* ✅ TABLEAU 1 : Notes des blocs */}
+              <Paper sx={{ p: 2, mb: 3 }}>
+                <Typography variant="h6" gutterBottom>
+                  Notes des blocs
+                </Typography>
+                <TableContainer>
+                  <Table>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Bloc n°</TableCell>
+                        <TableCell>Note moyenne</TableCell>
+                        <TableCell>Nombre de notes</TableCell>
+                        <TableCell>Appréciation</TableCell>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
+                    </TableHead>
+                    <TableBody>
+                      {stats.map((stat: StatsData) => (
+                        <TableRow key={stat.boulderId}>
+                          <TableCell>Bloc {stat.boulderNumber}</TableCell>
+                          <TableCell>
+                            {stat.ratingCount > 0 ? stat.averageRating.toFixed(2) : 'Aucune note'}
+                          </TableCell>
+                          <TableCell>{stat.ratingCount}</TableCell>
+                          <TableCell>
+                            {stat.ratingCount > 0 ? (
+                              <Chip
+                                label={`${stat.averageRating.toFixed(1)}/5`}
+                                color={
+                                  stat.averageRating >= 4 ? 'success' :
+                                  stat.averageRating >= 3 ? 'primary' : 'error'
+                                }
+                              />
+                            ) : (
+                              <Chip label="Aucune note" color="default" />
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Paper>
+
+              {/* ✅ TABLEAU 2 : Essais et validations */}
+              <Paper sx={{ p: 2, mb: 3 }}>
+                <Typography variant="h6" gutterBottom>
+                  Essais et validations
+                </Typography>
+                <TableContainer>
+                  <Table>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Bloc n°</TableCell>
+                        <TableCell>Essais moyens</TableCell>
+                        <TableCell>Validations réussies</TableCell>
+                        <TableCell>Utilisateurs ayant validé</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {stats.map((stat: StatsData) => (
+                        <TableRow key={stat.boulderId}>
+                          <TableCell>Bloc {stat.boulderNumber}</TableCell>
+                          <TableCell>
+                            {stat.averageAttempts > 0 ? stat.averageAttempts.toFixed(1) : 'Aucun essai'}
+                          </TableCell>
+                          <TableCell>{stat.successCount}</TableCell>
+                          <TableCell>
+                            {stat.validatedBy.length > 0 ? (
+                              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                                {stat.validatedBy.map((userId: string, index: number) => (
+                                  <Chip
+                                    key={`${stat.boulderId}_${index}`}
+                                    label={userId}
+                                    size="small"
+                                    sx={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                                  />
+                                ))}
+                              </Box>
+                            ) : (
+                              <Chip label="Aucune validation" color="default" />
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Paper>
             </>
           ) : (
             <Typography>Aucun bloc trouvé pour ce mur.</Typography>
@@ -209,6 +368,30 @@ export default function BoulderStats(): JSX.Element {
       ) : (
         <Typography>Sélectionnez un mur pour afficher les statistiques.</Typography>
       )}
+
+      {/* Dialogue de confirmation pour la réinitialisation */}
+      <Dialog
+        open={openResetDialog}
+        onClose={() => setOpenResetDialog(false)}
+      >
+        <DialogTitle>Réinitialiser les statistiques</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Êtes-vous sûr de vouloir supprimer toutes les statistiques pour le mur "{selectedWall}" ?
+            Cette action est irréversible.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenResetDialog(false)}>Annuler</Button>
+          <Button
+            onClick={handleResetStats}
+            color="error"
+            variant="contained"
+          >
+            Réinitialiser
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

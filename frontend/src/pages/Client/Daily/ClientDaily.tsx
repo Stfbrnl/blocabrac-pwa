@@ -1,25 +1,47 @@
 import React, { useState, useEffect } from 'react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '../../../services/firebaseConfig';
-import { collection, query, where, getDocs, setDoc, doc } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, setDoc, doc } from 'firebase/firestore';
 import {
   Container, Typography, Box, Button, CircularProgress, Alert,
   Dialog, DialogTitle, DialogContent, DialogActions,
   Card, CardContent, CardMedia, Rating, TextField,
-  Grid, Chip
+  Grid, Chip, FormControl, InputLabel, Select, MenuItem
 } from '@mui/material';
 
 // Couleurs des niveaux
 const levelColors: Record<string, string> = {
-  jaune: '#FFFF00', vert: '#00FF00', bleu: '#0000FF', violet: '#800080',
-  rouge: '#FF0000', noir: '#000000', blanc: '#FFFFFF', rose: '#FFC0CB',
+  jaune: '#FFFF00',
+  vert: '#00FF00',
+  bleu: '#0000FF',
+  violet: '#800080',
+  rouge: '#FF0000',
+  noir: '#000000',
+  blanc: '#FFFFFF',
+  rose: '#FFC0CB',
 };
 
+// Liste des murs
 const wallList = [
   "Dalle", "Grotte Adultes", "Güllich", "Réta Adultes", "Grande Face",
   "Dévers à 15°", "Dévers à 30°", "Dévers à 40°",
   "Caverne des petits", "Réta d'initiation"
 ];
+
+// Types de signalements
+const reportTypes = [
+  { value: 'défaillance_prisede', label: 'Défaillance de prise' },
+  { value: 'morphologie', label: 'Morphologie' },
+  { value: 'trop_difficile', label: 'Trop difficile' },
+  { value: 'trop_simple', label: 'Trop simple' },
+  { value: 'autre', label: 'Autre' }
+];
+
+// Options pour le nombre d'essais (1 à 15+)
+const attemptOptions = Array.from({ length: 15 }, (_, i) => ({
+  value: i + 1,
+  label: `${i + 1} essai${i > 0 ? 's' : ''}`
+})).concat({ value: 16, label: '15+ essais' });
 
 const ClientDaily: React.FC = () => {
   const [user, loadingAuth] = useAuthState(auth);
@@ -28,14 +50,18 @@ const ClientDaily: React.FC = () => {
   const [selectedBoulder, setSelectedBoulder] = useState<any | null>(null);
   const [ratings, setRatings] = useState<Record<string, number>>({});
   const [comments, setComments] = useState<Record<string, string>>({});
+  const [attempts, setAttempts] = useState<Record<string, number>>({});
+  const [reportTypesSelected, setReportTypesSelected] = useState<Record<string, string>>({});
   const [successResults, setSuccessResults] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  // Modales
   const [openWallDialog, setOpenWallDialog] = useState(false);
   const [openBoulderDialog, setOpenBoulderDialog] = useState(false);
 
+  // Charger tous les blocs actifs de type "daily"
   useEffect(() => {
     if (!user || loadingAuth) return;
 
@@ -65,33 +91,37 @@ const ClientDaily: React.FC = () => {
     fetchBoulders();
   }, [user, loadingAuth]);
 
+  // Filtrer les blocs par mur
   const getBouldersByWall = (wall: string) => {
     return boulders.filter(boulder => boulder.wall === wall);
   };
 
+  // Ouvrir la modale des blocs d'un mur
   const handleOpenWall = (wall: string) => {
     setSelectedWall(wall);
     setOpenWallDialog(true);
   };
 
+  // Ouvrir la modale des détails d'un bloc
   const handleOpenBoulder = (boulder: any) => {
     setSelectedBoulder(boulder);
     setOpenBoulderDialog(true);
   };
 
-  // ✅ Correction : Utilisation de setDoc avec un ID unique pour éviter les doublons
+  // ✅ Valider la réussite d'un bloc (Option 1 : 1 résultat par utilisateur + bloc)
   const handleValidateSuccess = async (boulderId: string, success: boolean) => {
     if (!user) return;
     try {
-      const resultId = `${user.uid}_${boulderId}`;
+      const resultId = `${user.uid}_${boulderId}`; // ✅ ID unique par (userId + boulderId)
       await setDoc(doc(db, 'client_boulder_results', resultId), {
         userId: user.uid,
         boulderId,
         success,
-        rating: ratings[boulderId] || 0, // ✅ Fusion avec la note existante
+        rating: ratings[boulderId] || 0,
         comment: comments[boulderId] || '',
-        attempts: 1,
-        createdAt: new Date().toISOString()
+        attempts: attempts[boulderId] || 1,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString() // ✅ Champ pour suivre la mise à jour
       });
       setSuccessResults(prev => ({ ...prev, [boulderId]: success }));
       setSuccess('Réussite enregistrée!');
@@ -101,23 +131,48 @@ const ClientDaily: React.FC = () => {
     }
   };
 
-  // ✅ Correction : Utilisation de setDoc pour la note aussi
+  // ✅ Noter un bloc (Option 1 : 1 résultat par utilisateur + bloc)
   const handleRate = async (boulderId: string, rating: number | null, comment: string) => {
     if (!rating || !user) return;
     try {
-      const resultId = `${user.uid}_${boulderId}`;
+      const resultId = `${user.uid}_${boulderId}`; // ✅ Même ID unique
       await setDoc(doc(db, 'client_boulder_results', resultId), {
         userId: user.uid,
         boulderId,
-        success: successResults[boulderId] || false, // ✅ Fusion avec la validation existante
+        success: successResults[boulderId] || false,
         rating,
         comment,
-        attempts: 1,
-        createdAt: new Date().toISOString()
+        attempts: attempts[boulderId] || 1,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString() // ✅ Champ pour suivre la mise à jour
       });
       setRatings(prev => ({ ...prev, [boulderId]: rating }));
       setComments(prev => ({ ...prev, [boulderId]: comment }));
       setSuccess('Note enregistrée!');
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err: any) {
+      setError(`Erreur: ${err.message}`);
+    }
+  };
+
+  // ✅ Signaler un problème (création dans boulder_reports)
+  const handleReportIssue = async (boulderId: string, boulderNumber: number, wall: string) => {
+    if (!user || !comments[boulderId] || !reportTypesSelected[boulderId]) return;
+    try {
+      await addDoc(collection(db, 'boulder_reports'), {
+        boulder_id: boulderId,
+        boulder_number: boulderNumber,
+        wall: wall,
+        report_type: reportTypesSelected[boulderId],
+        message: comments[boulderId],
+        user_id: user.uid,
+        user_name: user.displayName || user.email || 'Anonyme',
+        created_at: new Date().toISOString(),
+        status: 'pending'
+      });
+      setSuccess('Signalement envoyé à l\'ouvreur!');
+      setComments(prev => ({ ...prev, [boulderId]: '' }));
+      setReportTypesSelected(prev => ({ ...prev, [boulderId]: '' }));
       setTimeout(() => setSuccess(null), 3000);
     } catch (err: any) {
       setError(`Erreur: ${err.message}`);
@@ -211,7 +266,9 @@ const ClientDaily: React.FC = () => {
       >
         {selectedBoulder && (
           <>
-            <DialogTitle>Bloc n°{selectedBoulder.number} - {selectedBoulder.wall}</DialogTitle>
+            <DialogTitle>
+              Bloc n°{selectedBoulder.number} - {selectedBoulder.wall}
+            </DialogTitle>
             <DialogContent>
               <CardMedia
                 component="img"
@@ -266,6 +323,25 @@ const ClientDaily: React.FC = () => {
                 </Button>
               </Box>
 
+              {/* Sélecteur du nombre d'essais */}
+              <FormControl fullWidth sx={{ mb: 2 }}>
+                <InputLabel>Nombre d'essais</InputLabel>
+                <Select
+                  value={attempts[selectedBoulder.id] || 1}
+                  onChange={(e) => setAttempts(prev => ({
+                    ...prev,
+                    [selectedBoulder.id]: e.target.value as number
+                  }))}
+                  label="Nombre d'essais"
+                >
+                  {attemptOptions.map((option) => (
+                    <MenuItem key={option.value} value={option.value}>
+                      {option.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
               <Typography variant="body2" sx={{ mb: 1 }}>
                 Note actuelle: {ratings[selectedBoulder.id] || 'Non noté'}
               </Typography>
@@ -274,6 +350,26 @@ const ClientDaily: React.FC = () => {
                 value={ratings[selectedBoulder.id] || 0}
                 onChange={(e, newValue) => setRatings(prev => ({ ...prev, [selectedBoulder.id]: newValue || 0 }))}
               />
+
+              {/* Sélecteur de type de signalement */}
+              <FormControl fullWidth sx={{ mt: 2, mb: 2 }}>
+                <InputLabel>Type de signalement</InputLabel>
+                <Select
+                  value={reportTypesSelected[selectedBoulder.id] || ''}
+                  onChange={(e) => setReportTypesSelected(prev => ({
+                    ...prev,
+                    [selectedBoulder.id]: e.target.value
+                  }))}
+                  label="Type de signalement"
+                >
+                  {reportTypes.map((type) => (
+                    <MenuItem key={type.value} value={type.value}>
+                      {type.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
               <TextField
                 label="Commentaire ou signalement"
                 value={comments[selectedBoulder.id] || ''}
@@ -281,9 +377,24 @@ const ClientDaily: React.FC = () => {
                 multiline
                 rows={2}
                 fullWidth
-                sx={{ mt: 2 }}
+                sx={{ mt: 1 }}
                 placeholder="Ex: Prise cassée, problème de sécurité..."
               />
+
+              {/* Bouton pour envoyer le signalement */}
+              <Button
+                variant="outlined"
+                color="error"
+                onClick={() => handleReportIssue(
+                  selectedBoulder.id,
+                  selectedBoulder.number,
+                  selectedBoulder.wall
+                )}
+                disabled={!comments[selectedBoulder.id] || !reportTypesSelected[selectedBoulder.id]}
+                sx={{ mt: 2, width: '100%' }}
+              >
+                Signaler un problème
+              </Button>
             </DialogContent>
             <DialogActions>
               <Button onClick={() => setOpenBoulderDialog(false)}>Annuler</Button>
