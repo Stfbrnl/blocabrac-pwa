@@ -8,6 +8,19 @@ import {
 import { collection, query, where, getDocs, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../../../services/firebaseConfig';
 
+// Couleurs des niveaux
+const levelColors: Record<string, string> = {
+  jaune: '#FFFF00',
+  vert: '#00FF00',
+  bleu: '#0000FF',
+  violet: '#800080',
+  rouge: '#FF0000',
+  noir: '#000000',
+  blanc: '#FFFFFF',
+  rose: '#FFC0CB',
+  mystère: '#808080' // ✅ Couleur pour les blocs mystère
+};
+
 const walls: string[] = [
   'Caverne des petits', 'Réta d\'initiation', 'Réta Adultes', 'Grande Face',
   'Dalle', 'Dévers 15°', 'Dévers 30°', 'Dévers 40°', 'Grotte Adultes', 'Güllich'
@@ -29,12 +42,22 @@ interface StatsData {
   successCount: number;
   totalAttempts: number;
   averageAttempts: number;
-  validatedBy: string[]; // ✅ Nouveau : Liste des utilisateurs ayant validé
+  validatedBy: string[];
+}
+
+interface MysteryRatingData {
+  boulderId: string;
+  boulderNumber: number;
+  wall: string;
+  proposedDifficulty: string;
+  count: number;
+  users: string[];
 }
 
 export default function BoulderStats(): JSX.Element {
   const [selectedWall, setSelectedWall] = useState<string>('');
   const [stats, setStats] = useState<StatsData[]>([]);
+  const [mysteryRatings, setMysteryRatings] = useState<MysteryRatingData[]>([]); // ✅ Nouveau : Cotations proposées
   const [loading, setLoading] = useState<boolean>(false);
   const [openResetDialog, setOpenResetDialog] = useState(false);
   const [period, setPeriod] = useState<'day' | 'week' | 'month' | 'year' | 'custom'>('week');
@@ -91,6 +114,8 @@ export default function BoulderStats(): JSX.Element {
         })) as Boulder[];
 
         const statsData: StatsData[] = [];
+        const mysteryRatingsData: MysteryRatingData[] = [];
+
         for (const boulder of boulders) {
           const resultsQuery = query(
             collection(db, 'client_boulder_results'),
@@ -107,16 +132,16 @@ export default function BoulderStats(): JSX.Element {
             return true;
           });
 
-          // Calculer les notes
+          // Calculer les stats générales
           const ratings: number[] = filteredResults
             .filter((result: any) => result.rating !== undefined)
             .map((result: any) => result.rating);
 
-          // Calculer les validations réussies et les utilisateurs
-          const successResults: any[] = filteredResults.filter((result: any) => result.success === true);
+          const successResults: any[] = filteredResults
+            .filter((result: any) => result.success === true);
+
           const validatedBy: string[] = successResults.map((result: any) => result.userId);
 
-          // Calculer les essais
           const allAttempts: number[] = filteredResults
             .filter((result: any) => result.attempts !== undefined)
             .map((result: any) => result.attempts);
@@ -132,9 +157,41 @@ export default function BoulderStats(): JSX.Element {
             averageAttempts: allAttempts.length > 0 ? parseFloat((allAttempts.reduce((sum: number, a: number) => sum + a, 0) / allAttempts.length).toFixed(1)) : 0,
             validatedBy: validatedBy
           });
+
+          // ✅ Calculer les cotations proposées pour les blocs mystère
+          const proposedDifficulties: any[] = filteredResults
+            .filter((result: any) => result.proposedDifficulty !== undefined && result.proposedDifficulty !== null);
+
+          if (proposedDifficulties.length > 0) {
+            // Grouper par cotation proposée
+            const difficultyGroups: Record<string, { count: number; users: string[] }> = {};
+            proposedDifficulties.forEach((result: any) => {
+              const difficulty = result.proposedDifficulty;
+              if (!difficultyGroups[difficulty]) {
+                difficultyGroups[difficulty] = { count: 0, users: [] };
+              }
+              difficultyGroups[difficulty].count++;
+              if (!difficultyGroups[difficulty].users.includes(result.userId)) {
+                difficultyGroups[difficulty].users.push(result.userId);
+              }
+            });
+
+            // Ajouter au tableau des cotations proposées
+            Object.entries(difficultyGroups).forEach(([difficulty, data]) => {
+              mysteryRatingsData.push({
+                boulderId: boulder.id,
+                boulderNumber: boulder.number || 0,
+                wall: boulder.wall || 'Inconnu',
+                proposedDifficulty: difficulty,
+                count: data.count,
+                users: data.users
+              });
+            });
+          }
         }
 
         setStats(statsData);
+        setMysteryRatings(mysteryRatingsData);
       } catch (error: unknown) {
         console.error('Erreur lors du chargement des statistiques :', error);
       } finally {
@@ -158,6 +215,7 @@ export default function BoulderStats(): JSX.Element {
         await deleteDoc(doc(db, 'client_boulder_results', resultDoc.id));
       }
       setStats([]);
+      setMysteryRatings([]);
       setOpenResetDialog(false);
     } catch (error: unknown) {
       console.error('Erreur lors de la réinitialisation :', error);
@@ -243,7 +301,7 @@ export default function BoulderStats(): JSX.Element {
         <LinearProgress />
       ) : selectedWall ? (
         <>
-          {stats.length > 0 ? (
+          {stats.length > 0 || mysteryRatings.length > 0 ? (
             <>
               {/* Résumé du mur */}
               <Paper sx={{ p: 2, mb: 3, backgroundColor: '#f5f5f5' }}>
@@ -272,7 +330,7 @@ export default function BoulderStats(): JSX.Element {
 
               {periodSelector}
 
-              {/* ✅ TABLEAU 1 : Notes des blocs */}
+              {/* TABLEAU 1 : Notes des blocs */}
               <Paper sx={{ p: 2, mb: 3 }}>
                 <Typography variant="h6" gutterBottom>
                   Notes des blocs
@@ -315,7 +373,7 @@ export default function BoulderStats(): JSX.Element {
                 </TableContainer>
               </Paper>
 
-              {/* ✅ TABLEAU 2 : Essais et validations */}
+              {/* TABLEAU 2 : Essais et validations */}
               <Paper sx={{ p: 2, mb: 3 }}>
                 <Typography variant="h6" gutterBottom>
                   Essais et validations
@@ -360,6 +418,63 @@ export default function BoulderStats(): JSX.Element {
                   </Table>
                 </TableContainer>
               </Paper>
+
+              {/* ✅ TABLEAU 3 : Cotations proposées pour les blocs mystère */}
+              {mysteryRatings.length > 0 && (
+                <Paper sx={{ p: 2, mb: 3 }}>
+                  <Typography variant="h6" gutterBottom>
+                    Cotations proposées pour les blocs mystère
+                  </Typography>
+                  <TableContainer>
+                    <Table>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Bloc n°</TableCell>
+                          <TableCell>Cotation proposée</TableCell>
+                          <TableCell>Nombre de propositions</TableCell>
+                          <TableCell>Utilisateurs</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {mysteryRatings.map((rating: MysteryRatingData) => (
+                          <TableRow key={`${rating.boulderId}_${rating.proposedDifficulty}`}>
+                            <TableCell>Bloc {rating.boulderNumber}</TableCell>
+                            <TableCell>
+                              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                <Box sx={{
+                                  width: 20,
+                                  height: 20,
+                                  backgroundColor: levelColors[rating.proposedDifficulty],
+                                  marginRight: 1,
+                                  border: '1px solid #ccc'
+                                }} />
+                                {rating.proposedDifficulty}
+                              </Box>
+                            </TableCell>
+                            <TableCell>{rating.count}</TableCell>
+                            <TableCell>
+                              {rating.users.length > 0 ? (
+                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                                  {rating.users.map((userId: string, index: number) => (
+                                    <Chip
+                                      key={`${rating.boulderId}_${rating.proposedDifficulty}_${index}`}
+                                      label={userId}
+                                      size="small"
+                                      sx={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                                    />
+                                  ))}
+                                </Box>
+                              ) : (
+                                <Chip label="Aucun utilisateur" color="default" />
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </Paper>
+              )}
             </>
           ) : (
             <Typography>Aucun bloc trouvé pour ce mur.</Typography>

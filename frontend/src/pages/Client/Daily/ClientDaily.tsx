@@ -19,13 +19,13 @@ const levelColors: Record<string, string> = {
   noir: '#000000',
   blanc: '#FFFFFF',
   rose: '#FFC0CB',
+  mystère: '#808080'
 };
 
-// Liste des murs
+// ✅ Liste des murs ALIGNÉE sur DailyBouldersList.tsx (Ouvreur)
 const wallList = [
-  "Dalle", "Grotte Adultes", "Güllich", "Réta Adultes", "Grande Face",
-  "Dévers à 15°", "Dévers à 30°", "Dévers à 40°",
-  "Caverne des petits", "Réta d'initiation"
+  'Caverne des petits', 'Réta d\'initiation', 'Réta Adultes', 'Grande Face',
+  'Dalle', 'Dévers 15°', 'Dévers 30°', 'Dévers 40°', 'Grotte Adultes', 'Güllich'
 ];
 
 // Types de signalements
@@ -43,6 +43,12 @@ const attemptOptions = Array.from({ length: 15 }, (_, i) => ({
   label: `${i + 1} essai${i > 0 ? 's' : ''}`
 })).concat({ value: 16, label: '15+ essais' });
 
+// Options pour la cotation proposée
+const difficultyOptions = Object.keys(levelColors).map(color => ({
+  value: color,
+  label: color.charAt(0).toUpperCase() + color.slice(1)
+}));
+
 const ClientDaily: React.FC = () => {
   const [user, loadingAuth] = useAuthState(auth);
   const [boulders, setBoulders] = useState<any[]>([]);
@@ -51,6 +57,7 @@ const ClientDaily: React.FC = () => {
   const [ratings, setRatings] = useState<Record<string, number>>({});
   const [comments, setComments] = useState<Record<string, string>>({});
   const [attempts, setAttempts] = useState<Record<string, number>>({});
+  const [proposedDifficulties, setProposedDifficulties] = useState<Record<string, string>>({});
   const [reportTypesSelected, setReportTypesSelected] = useState<Record<string, string>>({});
   const [successResults, setSuccessResults] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
@@ -96,6 +103,14 @@ const ClientDaily: React.FC = () => {
     return boulders.filter(boulder => boulder.wall === wall);
   };
 
+  // Fonction pour détecter les blocs mystère (vérifie color, difficulty, ou difficulty_level)
+  const isMysteryBoulder = (boulder: any): boolean => {
+    return boulder.color === 'mystère' ||
+           boulder.color === 'mystere' ||
+           boulder.difficulty === 'mystère' ||
+           boulder.difficulty_level === 'mystère';
+  };
+
   // Ouvrir la modale des blocs d'un mur
   const handleOpenWall = (wall: string) => {
     setSelectedWall(wall);
@@ -108,11 +123,11 @@ const ClientDaily: React.FC = () => {
     setOpenBoulderDialog(true);
   };
 
-  // ✅ Valider la réussite d'un bloc (Option 1 : 1 résultat par utilisateur + bloc)
+  // Valider la réussite d'un bloc
   const handleValidateSuccess = async (boulderId: string, success: boolean) => {
     if (!user) return;
     try {
-      const resultId = `${user.uid}_${boulderId}`; // ✅ ID unique par (userId + boulderId)
+      const resultId = `${user.uid}_${boulderId}`;
       await setDoc(doc(db, 'client_boulder_results', resultId), {
         userId: user.uid,
         boulderId,
@@ -120,8 +135,9 @@ const ClientDaily: React.FC = () => {
         rating: ratings[boulderId] || 0,
         comment: comments[boulderId] || '',
         attempts: attempts[boulderId] || 1,
+        proposedDifficulty: proposedDifficulties[boulderId] || null,
         createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString() // ✅ Champ pour suivre la mise à jour
+        updatedAt: new Date().toISOString()
       });
       setSuccessResults(prev => ({ ...prev, [boulderId]: success }));
       setSuccess('Réussite enregistrée!');
@@ -131,11 +147,11 @@ const ClientDaily: React.FC = () => {
     }
   };
 
-  // ✅ Noter un bloc (Option 1 : 1 résultat par utilisateur + bloc)
+  // Noter un bloc
   const handleRate = async (boulderId: string, rating: number | null, comment: string) => {
     if (!rating || !user) return;
     try {
-      const resultId = `${user.uid}_${boulderId}`; // ✅ Même ID unique
+      const resultId = `${user.uid}_${boulderId}`;
       await setDoc(doc(db, 'client_boulder_results', resultId), {
         userId: user.uid,
         boulderId,
@@ -143,8 +159,9 @@ const ClientDaily: React.FC = () => {
         rating,
         comment,
         attempts: attempts[boulderId] || 1,
+        proposedDifficulty: proposedDifficulties[boulderId] || null,
         createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString() // ✅ Champ pour suivre la mise à jour
+        updatedAt: new Date().toISOString()
       });
       setRatings(prev => ({ ...prev, [boulderId]: rating }));
       setComments(prev => ({ ...prev, [boulderId]: comment }));
@@ -155,7 +172,7 @@ const ClientDaily: React.FC = () => {
     }
   };
 
-  // ✅ Signaler un problème (création dans boulder_reports)
+  // Signaler un problème
   const handleReportIssue = async (boulderId: string, boulderNumber: number, wall: string) => {
     if (!user || !comments[boulderId] || !reportTypesSelected[boulderId]) return;
     try {
@@ -244,6 +261,9 @@ const ClientDaily: React.FC = () => {
                     <CardContent sx={{ p: 1 }}>
                       <Typography variant="body2" sx={{ textAlign: 'center' }}>
                         Bloc n°{boulder.number}
+                        {isMysteryBoulder(boulder) && (
+                          <Chip label="Mystère" size="small" sx={{ ml: 1, backgroundColor: levelColors.mystère }} />
+                        )}
                       </Typography>
                     </CardContent>
                   </Card>
@@ -268,6 +288,9 @@ const ClientDaily: React.FC = () => {
           <>
             <DialogTitle>
               Bloc n°{selectedBoulder.number} - {selectedBoulder.wall}
+              {isMysteryBoulder(selectedBoulder) && (
+                <Chip label="Mystère" size="small" sx={{ ml: 1, backgroundColor: levelColors.mystère }} />
+              )}
             </DialogTitle>
             <DialogContent>
               <CardMedia
@@ -281,12 +304,12 @@ const ClientDaily: React.FC = () => {
                 <Typography variant="body2">Niveau: </Typography>
                 <Box sx={{
                   backgroundColor: levelColors[selectedBoulder.color || selectedBoulder.difficulty] || '#CCCCCC',
-                  color: ['noir', 'blanc'].includes(selectedBoulder.color || selectedBoulder.difficulty) ? 'black' : 'white',
+                  color: ['noir', 'blanc', 'mystère', 'mystere'].includes(selectedBoulder.color || selectedBoulder.difficulty) ? 'black' : 'white',
                   padding: '2px 8px',
                   borderRadius: '4px',
                   marginLeft: '8px'
                 }}>
-                  {selectedBoulder.difficulty_level || selectedBoulder.difficulty}
+                  {isMysteryBoulder(selectedBoulder) ? 'Mystère' : (selectedBoulder.difficulty_level || selectedBoulder.difficulty || selectedBoulder.color)}
                 </Box>
                 {selectedBoulder.difficulty_types && selectedBoulder.difficulty_types.length > 0 && (
                   <Chip
@@ -342,6 +365,36 @@ const ClientDaily: React.FC = () => {
                 </Select>
               </FormControl>
 
+              {/* Sélecteur de cotation PROPOSÉE (uniquement pour les blocs mystère) */}
+              {isMysteryBoulder(selectedBoulder) && (
+                <FormControl fullWidth sx={{ mb: 2 }}>
+                  <InputLabel>Proposer une cotation</InputLabel>
+                  <Select
+                    value={proposedDifficulties[selectedBoulder.id] || ''}
+                    onChange={(e) => setProposedDifficulties(prev => ({
+                      ...prev,
+                      [selectedBoulder.id]: e.target.value
+                    }))}
+                    label="Proposer une cotation"
+                  >
+                    {difficultyOptions.map((option) => (
+                      <MenuItem key={option.value} value={option.value}>
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                          <Box sx={{
+                            width: 20,
+                            height: 20,
+                            backgroundColor: levelColors[option.value],
+                            marginRight: 1,
+                            border: '1px solid #ccc'
+                          }} />
+                          {option.label}
+                        </Box>
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
+
               <Typography variant="body2" sx={{ mb: 1 }}>
                 Note actuelle: {ratings[selectedBoulder.id] || 'Non noté'}
               </Typography>
@@ -381,7 +434,6 @@ const ClientDaily: React.FC = () => {
                 placeholder="Ex: Prise cassée, problème de sécurité..."
               />
 
-              {/* Bouton pour envoyer le signalement */}
               <Button
                 variant="outlined"
                 color="error"
