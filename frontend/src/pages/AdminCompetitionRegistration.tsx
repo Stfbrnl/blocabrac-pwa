@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import {
   Typography, Paper, Container, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Button, Box,
-  FormControl, InputLabel, Select, MenuItem, Snackbar, Alert
+  FormControl, InputLabel, Select, MenuItem, Snackbar, Alert,
+  Switch, Chip
 } from '@mui/material';
 import { db } from '../services/firebaseConfig';
 import { collection, getDocs, doc, addDoc, deleteDoc, query, where, updateDoc } from 'firebase/firestore';
@@ -11,6 +12,9 @@ import { useLocation, useNavigate } from 'react-router-dom';
 type UserRole = 'admin' | 'ouvreur' | 'moniteur' | 'client';
 type CompetitionStatus = 'à venir' | 'en cours' | 'terminée' | 'annulée';
 type Level = 'jaune' | 'vert' | 'bleu' | 'violet' | 'rouge' | 'noire' | 'blanc' | 'rose';
+
+// ✅ Liste des niveaux (pour les comparaisons)
+const levelOrder: Level[] = ['jaune', 'vert', 'bleu', 'violet', 'rouge', 'noire', 'blanc', 'rose'];
 
 interface User {
   uid: string;
@@ -21,7 +25,8 @@ interface User {
   age?: number;
   gender?: string;
   level?: Level;
-  created_at?: string;
+  inscritAuxCours?: boolean;
+  inscritAuxCompetitions: boolean;
 }
 
 interface Competition {
@@ -32,11 +37,13 @@ interface Competition {
   access_code: string;
   max_participants: number;
   registered_count: number;
+  minLevel?: Level; // ✅ Restrictions de niveau
+  maxLevel?: Level;
 }
 
 interface CompetitionParticipant {
   id: string;
-  user_id: string | null;
+  user_id: string;
   competition_id: string;
   email: string;
   first_name: string;
@@ -61,7 +68,52 @@ const AdminCompetitionRegistration: React.FC = () => {
 
   const competitionId = new URLSearchParams(location.search).get('competitionId');
 
+  // ✅ Fonction pour vérifier si un utilisateur peut s'inscrire à une compétition
+  const canUserRegister = (user: User, competition: Competition): boolean => {
+    if (!user.level) return true; // ✅ Si pas de niveau défini, autoriser
+    if (!competition.minLevel && !competition.maxLevel) return true; // ✅ Pas de restriction
+
+    const userLevelIndex = levelOrder.indexOf(user.level);
+    const minLevelIndex = competition.minLevel ? levelOrder.indexOf(competition.minLevel) : -1;
+    const maxLevelIndex = competition.maxLevel ? levelOrder.indexOf(competition.maxLevel) : levelOrder.length;
+
+    // ✅ Vérifier si le niveau de l'utilisateur est dans la plage
+    return (
+      (minLevelIndex === -1 || userLevelIndex >= minLevelIndex) &&
+      (maxLevelIndex === levelOrder.length || userLevelIndex <= maxLevelIndex)
+    );
+  };
+
+  // Charger les utilisateurs EN PREMIER
   useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const usersSnapshot = await getDocs(collection(db, 'users'));
+        const usersData: User[] = usersSnapshot.docs.map(doc => ({
+          uid: doc.id,
+          email: doc.data().email || '',
+          first_name: doc.data().first_name || '',
+          last_name: doc.data().last_name || '',
+          role: doc.data().role || 'client',
+          age: doc.data().age,
+          gender: doc.data().gender,
+          level: doc.data().level,
+          inscritAuxCours: doc.data().inscritAuxCours || false,
+          inscritAuxCompetitions: doc.data().inscritAuxCompetitions !== undefined ? doc.data().inscritAuxCompetitions : true
+        }));
+        setAllUsers(usersData);
+      } catch (error) {
+        console.error("Erreur :", error);
+        setSnackbarMessage("Erreur lors du chargement des utilisateurs.");
+        setOpenSnackbar(true);
+      }
+    };
+    fetchUsers();
+  }, []);
+
+  useEffect(() => {
+    if (allUsers.length === 0) return;
+
     const fetchData = async () => {
       try {
         setLoading(true);
@@ -74,42 +126,22 @@ const AdminCompetitionRegistration: React.FC = () => {
           status: doc.data().status || 'à venir',
           access_code: doc.data().access_code || '',
           max_participants: doc.data().max_participants || 50,
-          registered_count: doc.data().registered_count || 0
+          registered_count: doc.data().registered_count || 0,
+          minLevel: doc.data().minLevel,
+          maxLevel: doc.data().maxLevel
         }));
         setCompetitions(competitionsData);
-
-        const usersSnapshot = await getDocs(collection(db, 'users'));
-        const usersData: User[] = usersSnapshot.docs.map(doc => ({
-          uid: doc.id,
-          ...doc.data()
-        }));
-        setAllUsers(usersData);
 
         if (competitionId) {
           const selectedComp = competitionsData.find(c => c.id === competitionId);
           if (selectedComp) {
             setSelectedCompetition(selectedComp);
-            const participantsSnapshot = await getDocs(
-              query(collection(db, 'competition_participants'), where('competition_id', '==', competitionId))
-            );
-            const participantsData: CompetitionParticipant[] = participantsSnapshot.docs.map(doc => ({
-              id: doc.id,
-              ...doc.data()
-            }));
-            setParticipants(participantsData);
+            await loadParticipants(selectedComp.id);
           }
         } else if (competitionsData.length > 0) {
           setSelectedCompetition(competitionsData[0]);
-          const participantsSnapshot = await getDocs(
-            query(collection(db, 'competition_participants'), where('competition_id', '==', competitionsData[0].id))
-          );
-          const participantsData: CompetitionParticipant[] = participantsSnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          }));
-          setParticipants(participantsData);
+          await loadParticipants(competitionsData[0].id);
         }
-
       } catch (error) {
         console.error("Erreur :", error);
         setSnackbarMessage("Erreur lors du chargement des données.");
@@ -119,7 +151,7 @@ const AdminCompetitionRegistration: React.FC = () => {
       }
     };
     fetchData();
-  }, [competitionId, location.search]);
+  }, [competitionId, allUsers.length]);
 
   const loadParticipants = async (competitionId: string) => {
     try {
@@ -130,10 +162,24 @@ const AdminCompetitionRegistration: React.FC = () => {
         const participantsSnapshot = await getDocs(
           query(collection(db, 'competition_participants'), where('competition_id', '==', competitionId))
         );
-        const participantsData: CompetitionParticipant[] = participantsSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
+
+        // Fusionner avec les données users
+        const participantsData: CompetitionParticipant[] = participantsSnapshot.docs.map(doc => {
+          const user = allUsers.find(u => u.uid === doc.data().user_id);
+          return {
+            id: doc.id,
+            user_id: doc.data().user_id || '',
+            competition_id: doc.data().competition_id || '',
+            email: user?.email || doc.data().email || '',
+            first_name: user?.first_name || doc.data().first_name || '',
+            last_name: user?.last_name || doc.data().last_name || '',
+            age: user?.age,
+            gender: user?.gender,
+            level: user?.level,
+            registered_at: doc.data().registered_at || '',
+            is_client: doc.data().is_client || false
+          };
+        });
         setParticipants(participantsData);
       }
       setLoading(false);
@@ -145,10 +191,52 @@ const AdminCompetitionRegistration: React.FC = () => {
     }
   };
 
+  const handleToggleCompetitionAccess = async (user: User) => {
+    try {
+      await updateDoc(doc(db, 'users', user.uid), {
+        inscritAuxCompetitions: !user.inscritAuxCompetitions
+      });
+      const usersSnapshot = await getDocs(collection(db, 'users'));
+      const usersData: User[] = usersSnapshot.docs.map(doc => ({
+        uid: doc.id,
+        email: doc.data().email || '',
+        first_name: doc.data().first_name || '',
+        last_name: doc.data().last_name || '',
+        role: doc.data().role || 'client',
+        age: doc.data().age,
+        gender: doc.data().gender,
+        level: doc.data().level,
+        inscritAuxCours: doc.data().inscritAuxCours || false,
+        inscritAuxCompetitions: doc.data().inscritAuxCompetitions !== undefined ? doc.data().inscritAuxCompetitions : true
+      }));
+      setAllUsers(usersData);
+      setSnackbarMessage(`Accès aux compétitions ${!user.inscritAuxCompetitions ? 'activé' : 'désactivé'} pour ${user.first_name} ${user.last_name}.`);
+      setOpenSnackbar(true);
+    } catch (error) {
+      console.error("Erreur :", error);
+      setSnackbarMessage("Erreur lors de la mise à jour.");
+      setOpenSnackbar(true);
+    }
+  };
+
   const handleAddParticipant = async (user: User) => {
     if (!selectedCompetition) return;
+
+    // ✅ Vérifier si l'utilisateur a le droit de s'inscrire (niveau + accès général)
+    if (!user.inscritAuxCompetitions) {
+      setSnackbarMessage("Cet utilisateur n'est pas autorisé à participer aux compétitions (accès désactivé).");
+      setOpenSnackbar(true);
+      return;
+    }
+
+    if (!canUserRegister(user, selectedCompetition)) {
+      setSnackbarMessage(`Cet utilisateur (niveau: ${user.level}) ne correspond pas aux restrictions de niveau de cette compétition (${selectedCompetition.minLevel || 'aucun'} à ${selectedCompetition.maxLevel || 'aucun'}).`);
+      setOpenSnackbar(true);
+      return;
+    }
+
     try {
-      const existingParticipant = participants.find(p => p.email === user.email);
+      const existingParticipant = participants.find(p => p.user_id === user.uid);
       if (existingParticipant) {
         setSnackbarMessage("Cet utilisateur est déjà inscrit à cette compétition.");
         setOpenSnackbar(true);
@@ -201,7 +289,7 @@ const AdminCompetitionRegistration: React.FC = () => {
     }
   };
 
-  if (loading && !participants.length) {
+  if (loading && participants.length === 0) {
     return <Typography>Chargement...</Typography>;
   }
 
@@ -222,6 +310,13 @@ const AdminCompetitionRegistration: React.FC = () => {
             {competitions.map(comp => (
               <MenuItem key={comp.id} value={comp.id}>
                 {comp.name} - {new Date(comp.date).toLocaleDateString()}
+                {comp.minLevel || comp.maxLevel ? (
+                  <Chip
+                    label={comp.minLevel && comp.maxLevel ? `Niveaux: ${comp.minLevel}-${comp.maxLevel}` : comp.minLevel ? `Min: ${comp.minLevel}` : `Max: ${comp.maxLevel}`}
+                    size="small"
+                    sx={{ ml: 1 }}
+                  />
+                ) : null}
               </MenuItem>
             ))}
           </Select>
@@ -230,9 +325,23 @@ const AdminCompetitionRegistration: React.FC = () => {
         {selectedCompetition && (
           <>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h6" gutterBottom>
-                Participants inscrits ({participants.length} / {selectedCompetition.max_participants})
-              </Typography>
+              <Box>
+                <Typography variant="h6" gutterBottom>
+                  Participants inscrits ({participants.length} / {selectedCompetition.max_participants})
+                </Typography>
+                {/* ✅ Afficher les restrictions de niveau */}
+                {selectedCompetition.minLevel || selectedCompetition.maxLevel ? (
+                  <Typography variant="body2" color="text.secondary">
+                    Restrictions: {selectedCompetition.minLevel ? `Niveau minimum: ${selectedCompetition.minLevel}` : ''}
+                    {selectedCompetition.minLevel && selectedCompetition.maxLevel ? ' / ' : ''}
+                    {selectedCompetition.maxLevel ? `Niveau maximum: ${selectedCompetition.maxLevel}` : ''}
+                  </Typography>
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    Tous les niveaux autorisés
+                  </Typography>
+                )}
+              </Box>
               <Button
                 variant="outlined"
                 onClick={() => navigate('/admin/competitions/list')}
@@ -251,32 +360,53 @@ const AdminCompetitionRegistration: React.FC = () => {
                     <TableCell>Niveau</TableCell>
                     <TableCell>Âge</TableCell>
                     <TableCell>Genre</TableCell>
+                    <TableCell>Accès compétitions</TableCell>
                     <TableCell>Date d'inscription</TableCell>
                     <TableCell>Actions</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {participants.map(participant => (
-                    <TableRow key={participant.id}>
-                      <TableCell>{participant.email}</TableCell>
-                      <TableCell>{participant.first_name}</TableCell>
-                      <TableCell>{participant.last_name}</TableCell>
-                      <TableCell>{participant.level || 'N/A'}</TableCell>
-                      <TableCell>{participant.age || 'N/A'}</TableCell>
-                      <TableCell>{participant.gender || 'N/A'}</TableCell>
-                      <TableCell>{new Date(participant.registered_at).toLocaleString()}</TableCell>
-                      <TableCell>
-                        <Button
-                          variant="outlined"
-                          color="error"
-                          size="small"
-                          onClick={() => handleRemoveParticipant(participant.id)}
-                        >
-                          Retirer
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {participants.map(participant => {
+                    const user = allUsers.find(u => u.uid === participant.user_id);
+                    return (
+                      <TableRow key={participant.id}>
+                        <TableCell>{participant.email}</TableCell>
+                        <TableCell>{participant.first_name || 'N/A'}</TableCell>
+                        <TableCell>{participant.last_name || 'N/A'}</TableCell>
+                        <TableCell>
+                          {participant.level ? (
+                            <Chip
+                              label={participant.level}
+                              sx={{
+                                backgroundColor: levelColors[participant.level] || '#CCCCCC',
+                                color: ['noir', 'blanc'].includes(participant.level) ? 'black' : 'white'
+                              }}
+                            />
+                          ) : 'N/A'}
+                        </TableCell>
+                        <TableCell>{participant.age || 'N/A'}</TableCell>
+                        <TableCell>{participant.gender || 'N/A'}</TableCell>
+                        <TableCell>
+                          <Switch
+                            checked={user?.inscritAuxCompetitions || false}
+                            onChange={() => user && handleToggleCompetitionAccess(user)}
+                            color="primary"
+                          />
+                        </TableCell>
+                        <TableCell>{new Date(participant.registered_at).toLocaleString()}</TableCell>
+                        <TableCell>
+                          <Button
+                            variant="outlined"
+                            color="error"
+                            size="small"
+                            onClick={() => handleRemoveParticipant(participant.id)}
+                          >
+                            Retirer
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </TableContainer>
@@ -291,14 +421,26 @@ const AdminCompetitionRegistration: React.FC = () => {
                 defaultValue=""
               >
                 {allUsers
-                  .filter(user => !participants.some(p => p.email === user.email))
+                  .filter(user => {
+                    // ✅ Filtrer par niveau ET accès général
+                    if (!user.inscritAuxCompetitions) return false;
+                    if (!selectedCompetition) return true;
+                    return canUserRegister(user, selectedCompetition);
+                  })
                   .map(user => (
                     <MenuItem
                       key={user.uid}
                       value={user.uid}
                       onClick={() => handleAddParticipant(user)}
                     >
-                      {user.email} - {user.first_name} {user.last_name} (Niveau: {user.level || 'N/A'})
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                        <span>
+                          {user.email} - {user.first_name} {user.last_name} (Niveau: {user.level || 'N/A'})
+                        </span>
+                        {!user.inscritAuxCompetitions && (
+                          <Chip label="Accès désactivé" color="error" size="small" />
+                        )}
+                      </Box>
                     </MenuItem>
                   ))}
               </Select>
@@ -312,7 +454,7 @@ const AdminCompetitionRegistration: React.FC = () => {
           onClose={() => setOpenSnackbar(false)}
         >
           <Alert
-            severity={snackbarMessage.includes("succès") ? "success" : "error"}
+            severity={snackbarMessage.includes("succès") || snackbarMessage.includes("activé") || snackbarMessage.includes("désactivé") ? "success" : "error"}
             onClose={() => setOpenSnackbar(false)}
           >
             {snackbarMessage}
@@ -321,6 +463,12 @@ const AdminCompetitionRegistration: React.FC = () => {
       </Paper>
     </Container>
   );
+};
+
+// ✅ Couleurs des niveaux (pour les chips)
+const levelColors: Record<string, string> = {
+  jaune: '#FFFF00', vert: '#00FF00', bleu: '#0000FF', violet: '#800080',
+  rouge: '#FF0000', noir: '#000000', blanc: '#FFFFFF', rose: '#FFC0CB'
 };
 
 export default AdminCompetitionRegistration;

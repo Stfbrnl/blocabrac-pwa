@@ -3,7 +3,7 @@ import {
   Typography, Paper, Container, Button, TextField, Box,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   IconButton, Dialog, DialogTitle, DialogContent, DialogActions,
-  Snackbar, Alert, FormControl, InputLabel, Select, MenuItem
+  Snackbar, Alert, FormControl, InputLabel, Select, MenuItem, Chip
 } from '@mui/material';
 import { Delete as DeleteIcon, Edit as EditIcon, Add as AddIcon } from '@mui/icons-material';
 import { db } from '../services/firebaseConfig';
@@ -11,6 +11,10 @@ import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc } from 'firebase
 import { useNavigate } from 'react-router-dom';
 
 type CompetitionStatus = 'à venir' | 'en cours' | 'terminée' | 'annulée';
+type Level = 'jaune' | 'vert' | 'bleu' | 'violet' | 'rouge' | 'noire' | 'blanc' | 'rose';
+
+// ✅ Liste des niveaux (pour les sélecteurs)
+const levelOptions: Level[] = ['jaune', 'vert', 'bleu', 'violet', 'rouge', 'noire', 'blanc', 'rose'];
 
 interface Competition {
   id: string;
@@ -20,6 +24,8 @@ interface Competition {
   access_code: string;
   max_participants: number;
   registered_count: number;
+  minLevel?: Level; // ✅ Nouveau : Niveau minimum
+  maxLevel?: Level; // ✅ Nouveau : Niveau maximum
 }
 
 const AdminCompetitionManagement: React.FC = () => {
@@ -35,14 +41,18 @@ const AdminCompetitionManagement: React.FC = () => {
     date: new Date().toISOString().split('T')[0],
     status: 'à venir',
     access_code: '',
-    max_participants: 50
+    max_participants: 50,
+    minLevel: undefined, // ✅ Nouveau
+    maxLevel: undefined  // ✅ Nouveau
   });
   const [editForm, setEditForm] = useState<Omit<Competition, 'id' | 'registered_count'>>({
     name: '',
     date: '',
     status: 'à venir',
     access_code: '',
-    max_participants: 50
+    max_participants: 50,
+    minLevel: undefined, // ✅ Nouveau
+    maxLevel: undefined  // ✅ Nouveau
   });
   const navigate = useNavigate();
 
@@ -58,10 +68,12 @@ const AdminCompetitionManagement: React.FC = () => {
           status: doc.data().status || 'à venir',
           access_code: doc.data().access_code || '',
           max_participants: doc.data().max_participants || 50,
-          registered_count: doc.data().registered_count || 0
+          registered_count: doc.data().registered_count || 0,
+          minLevel: doc.data().minLevel, // ✅ Nouveau
+          maxLevel: doc.data().maxLevel  // ✅ Nouveau
         }));
         setCompetitions(competitionsData);
-      } catch (error) {
+      } catch (error: any) {
         console.error("Erreur :", error);
         setSnackbarMessage("Erreur lors du chargement des compétitions.");
         setOpenSnackbar(true);
@@ -86,7 +98,9 @@ const AdminCompetitionManagement: React.FC = () => {
         status: createForm.status,
         access_code: createForm.access_code,
         max_participants: createForm.max_participants,
-        registered_count: 0
+        registered_count: 0,
+        minLevel: createForm.minLevel, // ✅ Nouveau
+        maxLevel: createForm.maxLevel  // ✅ Nouveau
       });
       const querySnapshot = await getDocs(collection(db, 'competitions'));
       setCompetitions(querySnapshot.docs.map(doc => ({
@@ -96,12 +110,14 @@ const AdminCompetitionManagement: React.FC = () => {
         status: doc.data().status,
         access_code: doc.data().access_code,
         max_participants: doc.data().max_participants,
-        registered_count: doc.data().registered_count || 0
+        registered_count: doc.data().registered_count || 0,
+        minLevel: doc.data().minLevel, // ✅ Nouveau
+        maxLevel: doc.data().maxLevel  // ✅ Nouveau
       })));
       setOpenCreateDialog(false);
       setSnackbarMessage("Compétition créée avec succès !");
       setOpenSnackbar(true);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erreur :", error);
       setSnackbarMessage("Erreur lors de la création de la compétition.");
       setOpenSnackbar(true);
@@ -115,7 +131,9 @@ const AdminCompetitionManagement: React.FC = () => {
       date: competition.date,
       status: competition.status,
       access_code: competition.access_code,
-      max_participants: competition.max_participants
+      max_participants: competition.max_participants,
+      minLevel: competition.minLevel, // ✅ Nouveau
+      maxLevel: competition.maxLevel  // ✅ Nouveau
     });
     setOpenEditDialog(true);
   };
@@ -128,7 +146,9 @@ const AdminCompetitionManagement: React.FC = () => {
         date: editForm.date,
         status: editForm.status,
         access_code: editForm.access_code,
-        max_participants: editForm.max_participants
+        max_participants: editForm.max_participants,
+        minLevel: editForm.minLevel, // ✅ Nouveau
+        maxLevel: editForm.maxLevel  // ✅ Nouveau
       });
       const querySnapshot = await getDocs(collection(db, 'competitions'));
       setCompetitions(querySnapshot.docs.map(doc => ({
@@ -138,12 +158,14 @@ const AdminCompetitionManagement: React.FC = () => {
         status: doc.data().status,
         access_code: doc.data().access_code,
         max_participants: doc.data().max_participants,
-        registered_count: doc.data().registered_count || 0
+        registered_count: doc.data().registered_count || 0,
+        minLevel: doc.data().minLevel, // ✅ Nouveau
+        maxLevel: doc.data().maxLevel  // ✅ Nouveau
       })));
       setOpenEditDialog(false);
       setSnackbarMessage("Compétition mise à jour avec succès !");
       setOpenSnackbar(true);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erreur :", error);
       setSnackbarMessage("Erreur lors de la mise à jour de la compétition.");
       setOpenSnackbar(true);
@@ -156,7 +178,7 @@ const AdminCompetitionManagement: React.FC = () => {
       setCompetitions(competitions.filter(comp => comp.id !== competitionId));
       setSnackbarMessage("Compétition supprimée avec succès !");
       setOpenSnackbar(true);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erreur :", error);
       setSnackbarMessage("Erreur lors de la suppression de la compétition.");
       setOpenSnackbar(true);
@@ -191,6 +213,7 @@ const AdminCompetitionManagement: React.FC = () => {
                 <TableCell>Date</TableCell>
                 <TableCell>Statut</TableCell>
                 <TableCell>Code d'accès</TableCell>
+                <TableCell>Niveau requis</TableCell> {/* ✅ Nouvelle colonne */}
                 <TableCell>Participants</TableCell>
                 <TableCell>Actions</TableCell>
               </TableRow>
@@ -202,6 +225,22 @@ const AdminCompetitionManagement: React.FC = () => {
                   <TableCell>{new Date(competition.date).toLocaleDateString()}</TableCell>
                   <TableCell>{competition.status}</TableCell>
                   <TableCell>{competition.access_code}</TableCell>
+                  {/* ✅ Afficher les restrictions de niveau */}
+                  <TableCell>
+                    {competition.minLevel && competition.maxLevel ? (
+                      <Chip
+                        label={`De ${competition.minLevel} à ${competition.maxLevel}`}
+                        color="primary"
+                        size="small"
+                      />
+                    ) : competition.minLevel ? (
+                      <Chip label={`Min: ${competition.minLevel}`} color="success" size="small" />
+                    ) : competition.maxLevel ? (
+                      <Chip label={`Max: ${competition.maxLevel}`} color="error" size="small" />
+                    ) : (
+                      <Chip label="Tous les niveaux" color="default" size="small" />
+                    )}
+                  </TableCell>
                   <TableCell>{competition.registered_count} / {competition.max_participants}</TableCell>
                   <TableCell>
                     <IconButton
@@ -230,6 +269,7 @@ const AdminCompetitionManagement: React.FC = () => {
           </Table>
         </TableContainer>
 
+        {/* Dialogue de création */}
         <Dialog open={openCreateDialog} onClose={() => setOpenCreateDialog(false)}>
           <DialogTitle>Créer une compétition</DialogTitle>
           <DialogContent>
@@ -274,6 +314,40 @@ const AdminCompetitionManagement: React.FC = () => {
                   <MenuItem value="annulée">Annulée</MenuItem>
                 </Select>
               </FormControl>
+
+              {/* ✅ Sélecteurs de niveau minimum/maximum */}
+              <Box sx={{ display: 'flex', gap: 2 }}>
+                <FormControl fullWidth>
+                  <InputLabel>Niveau minimum (optionnel)</InputLabel>
+                  <Select
+                    value={createForm.minLevel || ''}
+                    onChange={(e) => setCreateForm({...createForm, minLevel: e.target.value as Level || undefined})}
+                    label="Niveau minimum"
+                  >
+                    <MenuItem value="">Aucun</MenuItem>
+                    {levelOptions.map(level => (
+                      <MenuItem key={level} value={level}>
+                        {level.charAt(0).toUpperCase() + level.slice(1)}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <FormControl fullWidth>
+                  <InputLabel>Niveau maximum (optionnel)</InputLabel>
+                  <Select
+                    value={createForm.maxLevel || ''}
+                    onChange={(e) => setCreateForm({...createForm, maxLevel: e.target.value as Level || undefined})}
+                    label="Niveau maximum"
+                  >
+                    <MenuItem value="">Aucun</MenuItem>
+                    {levelOptions.map(level => (
+                      <MenuItem key={level} value={level}>
+                        {level.charAt(0).toUpperCase() + level.slice(1)}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Box>
             </Box>
           </DialogContent>
           <DialogActions>
@@ -284,6 +358,7 @@ const AdminCompetitionManagement: React.FC = () => {
           </DialogActions>
         </Dialog>
 
+        {/* Dialogue d'édition */}
         <Dialog open={openEditDialog} onClose={() => setOpenEditDialog(false)}>
           <DialogTitle>Modifier la compétition</DialogTitle>
           <DialogContent>
@@ -328,6 +403,40 @@ const AdminCompetitionManagement: React.FC = () => {
                   <MenuItem value="annulée">Annulée</MenuItem>
                 </Select>
               </FormControl>
+
+              {/* ✅ Sélecteurs de niveau minimum/maximum */}
+              <Box sx={{ display: 'flex', gap: 2 }}>
+                <FormControl fullWidth>
+                  <InputLabel>Niveau minimum (optionnel)</InputLabel>
+                  <Select
+                    value={editForm.minLevel || ''}
+                    onChange={(e) => setEditForm({...editForm, minLevel: e.target.value as Level || undefined})}
+                    label="Niveau minimum"
+                  >
+                    <MenuItem value="">Aucun</MenuItem>
+                    {levelOptions.map(level => (
+                      <MenuItem key={level} value={level}>
+                        {level.charAt(0).toUpperCase() + level.slice(1)}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <FormControl fullWidth>
+                  <InputLabel>Niveau maximum (optionnel)</InputLabel>
+                  <Select
+                    value={editForm.maxLevel || ''}
+                    onChange={(e) => setEditForm({...editForm, maxLevel: e.target.value as Level || undefined})}
+                    label="Niveau maximum"
+                  >
+                    <MenuItem value="">Aucun</MenuItem>
+                    {levelOptions.map(level => (
+                      <MenuItem key={level} value={level}>
+                        {level.charAt(0).toUpperCase() + level.slice(1)}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Box>
             </Box>
           </DialogContent>
           <DialogActions>

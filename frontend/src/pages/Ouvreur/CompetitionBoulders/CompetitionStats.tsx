@@ -2,11 +2,10 @@ import React, { useState, useEffect } from 'react';
 import {
   Typography, Paper, Box, MenuItem, Select, InputLabel, FormControl,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  LinearProgress, Chip, Button, Dialog, DialogTitle, DialogContent,
-  DialogActions, TextField, Alert
+  LinearProgress, Chip
 } from '@mui/material';
-import { collection, query, where, getDocs, doc, addDoc } from 'firebase/firestore';
-import { db } from '../services/firebaseConfig';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '../../../services/firebaseConfig';
 
 // ✅ Points par couleur (comme demandé)
 const basePoints: Record<string, number> = {
@@ -73,10 +72,9 @@ interface User {
   first_name?: string;
   last_name?: string;
   email?: string;
-  level?: string;
 }
 
-const AdminCompetitionStats: React.FC = () => {
+const CompetitionStats: React.FC = () => {
   const [competitions, setCompetitions] = useState<Competition[]>([]);
   const [selectedCompetition, setSelectedCompetition] = useState<string>('');
   const [results, setResults] = useState<CompetitionResult[]>([]);
@@ -84,10 +82,6 @@ const AdminCompetitionStats: React.FC = () => {
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [users, setUsers] = useState<User[]>([]); // ✅ Nouveau : Stockage des utilisateurs
   const [loading, setLoading] = useState(true);
-  const [openPublishDialog, setOpenPublishDialog] = useState(false);
-  const [messageTitle, setMessageTitle] = useState('');
-  const [messageContent, setMessageContent] = useState('');
-  const [success, setSuccess] = useState<string | null>(null);
 
   // ✅ Charger tous les utilisateurs une fois
   useEffect(() => {
@@ -186,7 +180,7 @@ const AdminCompetitionStats: React.FC = () => {
             email: user?.email || doc.data().email || '',
             age: user?.age || doc.data().age, // ✅ Prendre age depuis users
             gender: user?.gender || doc.data().gender, // ✅ Prendre gender depuis users
-            level: user?.level || doc.data().level
+            level: (user as any)?.level || doc.data().level
           };
         });
         setParticipants(participantsData);
@@ -285,66 +279,11 @@ const AdminCompetitionStats: React.FC = () => {
     }
   };
 
-  const handlePublishResults = async () => {
-    if (!selectedCompetition || !messageTitle || !messageContent) return;
-
-    try {
-      await addDoc(collection(db, 'messages'), {
-        title: messageTitle,
-        content: messageContent,
-        createdAt: new Date().toISOString(),
-        createdBy: 'admin',
-        recipientIds: participants.map(p => p.user_id),
-        type: 'competition_results',
-        competitionId: selectedCompetition
-      });
-      setSuccess("Classement publié avec succès !");
-      setOpenPublishDialog(false);
-      setMessageTitle('');
-      setMessageContent('');
-      setTimeout(() => setSuccess(null), 3000);
-    } catch (err: any) {
-      console.error("Erreur:", err);
-    }
-  };
-
-  const generateClassementMessage = () => {
-    const globalClassement = getClassementByCategory('global');
-    const competition = competitions.find(c => c.id === selectedCompetition);
-    let message = `🏆 **Classement Global - ${competition?.name}** 🏆\n\n`;
-
-    globalClassement.forEach((item, index) => {
-      message += `${index + 1}. **${item.participant.first_name} ${item.participant.last_name}** - ${item.score} pts (${item.boulders} blocs validés)\n`;
-    });
-
-    // ✅ Ajouter les classements par âge et genre
-    message += `\n📊 **Classement par âge :**\n`;
-    getClassementByCategory('age').forEach(category => {
-      message += `\n**${category.category}** :\n`;
-      category.participants.forEach((item: any, index: number) => {
-        message += `${index + 1}. ${item.participant.first_name} ${item.participant.last_name} - ${item.score} pts\n`;
-      });
-    });
-
-    message += `\n📊 **Classement par genre :**\n`;
-    getClassementByCategory('gender').forEach(gender => {
-      message += `\n**${gender.category}** :\n`;
-      gender.participants.forEach((item: any, index: number) => {
-        message += `${index + 1}. ${item.participant.first_name} ${item.participant.last_name} - ${item.score} pts\n`;
-      });
-    });
-
-    setMessageTitle(`Classement - ${competition?.name}`);
-    setMessageContent(message);
-    setOpenPublishDialog(true);
-  };
-
   return (
     <Box sx={{ p: 3 }}>
       <Typography variant="h4" gutterBottom>
-        Classement et Statistiques des Compétitions
+        Statistiques des Compétitions
       </Typography>
-      {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
 
       <FormControl fullWidth sx={{ mb: 3 }}>
         <InputLabel>Sélectionnez une compétition</InputLabel>
@@ -365,16 +304,6 @@ const AdminCompetitionStats: React.FC = () => {
         <LinearProgress />
       ) : selectedCompetition ? (
         <>
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
-            <Button
-              variant="contained"
-              color="primary"
-              onClick={generateClassementMessage}
-            >
-              Publier le classement
-            </Button>
-          </Box>
-
           <Paper sx={{ p: 2, mb: 3 }}>
             <Typography variant="h6">Classement Global</Typography>
             <TableContainer>
@@ -393,12 +322,8 @@ const AdminCompetitionStats: React.FC = () => {
                   {getClassementByCategory('global').map((item, index) => (
                     <TableRow key={index}>
                       <TableCell>{index + 1}</TableCell>
-                      <TableCell>
-                        <strong>{item.participant.first_name} {item.participant.last_name}</strong>
-                      </TableCell>
-                      <TableCell>
-                        <Chip label={item.score} color="primary" />
-                      </TableCell>
+                      <TableCell>{item.participant.first_name} {item.participant.last_name}</TableCell>
+                      <TableCell>{item.score}</TableCell>
                       <TableCell>{item.boulders}</TableCell>
                       <TableCell>{getAgeCategory(item.participant.age)}</TableCell>
                       <TableCell>{item.participant.gender || 'Inconnu'}</TableCell>
@@ -476,46 +401,10 @@ const AdminCompetitionStats: React.FC = () => {
           </Paper>
         </>
       ) : (
-        <Typography>Sélectionnez une compétition pour voir les classements.</Typography>
+        <Typography>Sélectionnez une compétition pour voir les statistiques.</Typography>
       )}
-
-      <Dialog
-        open={openPublishDialog}
-        onClose={() => setOpenPublishDialog(false)}
-        maxWidth="md"
-        fullWidth
-      >
-        <DialogTitle>Publier le classement</DialogTitle>
-        <DialogContent>
-          <TextField
-            label="Titre du message"
-            value={messageTitle}
-            onChange={(e) => setMessageTitle(e.target.value)}
-            fullWidth
-            sx={{ mb: 2 }}
-          />
-          <TextField
-            label="Contenu du message"
-            value={messageContent}
-            onChange={(e) => setMessageContent(e.target.value)}
-            multiline
-            rows={10}
-            fullWidth
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenPublishDialog(false)}>Annuler</Button>
-          <Button
-            variant="contained"
-            color="primary"
-            onClick={handlePublishResults}
-          >
-            Publier
-          </Button>
-        </DialogActions>
-      </Dialog>
     </Box>
   );
 };
 
-export default AdminCompetitionStats;
+export default CompetitionStats;
