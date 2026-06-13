@@ -10,24 +10,28 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
 
-// Pages Client (chemins mis à jour)
+// Pages Client
 import Client from './pages/Client';
 import ClientScreen from './pages/Client/ClientScreen';
 import ClientDaily from './pages/Client/Daily/ClientDaily';
 import ClientCompetitions from './pages/Client/Competitions/ClientCompetitions';
+import ClientCompetitionStats from './pages/Client/Competitions/ClientCompetitionStats';
 import ClientCourses from './pages/Client/Courses/ClientCourses';
+import ClientCourseSession from './pages/Client/Courses/ClientCourseSession';
 import ClientProfile from './pages/Client/Profile/ClientProfile';
-import ClientStats from './pages/Client/Stats/ClientStats'; // ✅ NOUVEAU
+import ClientStats from './pages/Client/Stats/ClientStats';
 
-// Pages Ouvreur (inchangées)
+// Pages Ouvreur
 import OuvreurScreen from './pages/Ouvreur/OuvreurScreen';
 import DailyBouldersList from './pages/Ouvreur/DailyBoulders/DailyBouldersList';
 import DailyBoulderForm from './pages/Ouvreur/DailyBoulders/DailyBoulderForm';
 import CompetitionBouldersList from './pages/Ouvreur/CompetitionBoulders/CompetitionBouldersList';
 import CompetitionBoulderForm from './pages/Ouvreur/CompetitionBoulders/CompetitionBoulderForm';
 import ReportsAndStats from './pages/Ouvreur/ReportsAndStats/ReportsAndStats';
+import BoulderStats from './pages/Ouvreur/ReportsAndStats/BoulderStats';
+import CompetitionBoulderStats from './pages/Ouvreur/ReportsAndStats/CompetitionBoulderStats'; // ✅ CORRIGÉ : CompetitionBoulderStats
 
-// Pages Moniteur (inchangées)
+// Pages Moniteur
 import MoniteurScreen from './pages/Moniteur/MoniteurScreen';
 import GroupsList from './pages/Moniteur/Groups/GroupsList';
 import GroupForm from './pages/Moniteur/Groups/GroupForm';
@@ -39,7 +43,7 @@ import ExerciseForm from './pages/Moniteur/Exercises/ExerciseForm';
 import StatsList from './pages/Moniteur/Stats/StatsList';
 import MessagesList from './pages/Moniteur/Messages/MessagesList';
 
-// Pages Admin (inchangées)
+// Pages Admin
 import Admin from './pages/Admin';
 import AdminUsers from './pages/AdminUsers';
 import AdminHomeContent from './pages/AdminHomeContent';
@@ -72,9 +76,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             <Route path="/client/screen" element={<ProtectedRoute role="client"><ClientScreen /></ProtectedRoute>} />
             <Route path="/client/daily" element={<ProtectedRoute role="client"><ClientDaily /></ProtectedRoute>} />
             <Route path="/client/competitions" element={<ProtectedRoute role="client"><ClientCompetitions /></ProtectedRoute>} />
+            <Route path="/client/competitions/stats" element={<ProtectedRoute role="client"><ClientCompetitionStats /></ProtectedRoute>} />
             <Route path="/client/courses" element={<ProtectedRoute role="client"><ClientCourses /></ProtectedRoute>} />
+            <Route path="/client/courses/session/:sessionId" element={<ProtectedRoute role="client"><ClientCourseSession /></ProtectedRoute>} />
             <Route path="/client/profile" element={<ProtectedRoute role="client"><ClientProfile /></ProtectedRoute>} />
-            <Route path="/client/stats" element={<ProtectedRoute role="client"><ClientStats /></ProtectedRoute>} /> {/* ✅ NOUVELLE ROUTE */}
+            <Route path="/client/stats" element={<ProtectedRoute role="client"><ClientStats /></ProtectedRoute>} />
 
             {/* ========== ROUTES OUVREUR ========== */}
             <Route path="/ouvreur" element={<ProtectedRoute role="ouvreur"><OuvreurScreen /></ProtectedRoute>} />
@@ -84,6 +90,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             <Route path="/ouvreur/competition-boulders/:competitionId/add" element={<ProtectedRoute role="ouvreur"><CompetitionBoulderForm /></ProtectedRoute>} />
             <Route path="/ouvreur/competition-boulders/:competitionId/edit/:boulderId" element={<ProtectedRoute role="ouvreur"><CompetitionBoulderForm /></ProtectedRoute>} />
             <Route path="/ouvreur/reports-and-stats" element={<ProtectedRoute role="ouvreur"><ReportsAndStats /></ProtectedRoute>} />
+            <Route path="/ouvreur/reports-and-stats/boulders/:wall" element={<ProtectedRoute role="ouvreur"><BoulderStats /></ProtectedRoute>} />
+            <Route path="/ouvreur/reports-and-stats/competitions" element={<ProtectedRoute role="ouvreur"><CompetitionBoulderStats /></ProtectedRoute>} /> {/* ✅ CORRIGÉ */}
 
             {/* ========== ROUTES MONITEUR ========== */}
             <Route path="/moniteur" element={<ProtectedRoute role="moniteur"><MoniteurScreen /></ProtectedRoute>} />
