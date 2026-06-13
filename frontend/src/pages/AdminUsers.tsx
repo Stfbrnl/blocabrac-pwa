@@ -3,16 +3,17 @@ import {
   Typography, Paper, Container, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Button, Dialog, DialogTitle,
   DialogContent, DialogActions, TextField, MenuItem, Select,
-  FormControl, InputLabel, Box, IconButton, Snackbar, Alert, Chip
+  FormControl, InputLabel, Box, IconButton, Snackbar, Alert, Chip,
+  TableSortLabel, Tooltip
 } from '@mui/material';
-import { Delete as DeleteIcon, Edit as EditIcon, Add as AddIcon } from '@mui/icons-material';
+import { Delete as DeleteIcon, Edit as EditIcon, Add as AddIcon, ArrowUpward as ArrowUpwardIcon, ArrowDownward as ArrowDownwardIcon } from '@mui/icons-material';
 import { db, auth } from '../services/firebaseConfig';
 import {
-  collection, getDocs, doc, updateDoc, deleteDoc, setDoc
+  collection, getDocs, doc, updateDoc, deleteDoc, setDoc, query, orderBy
 } from 'firebase/firestore';
-import { createUserWithEmailAndPassword, sendPasswordResetEmail, deleteUser } from 'firebase/auth';
+import { createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 
-// ✅ Tableau de correspondance code-couleur/cotations (comme dans Register.tsx)
+// ✅ Tableau de correspondance code-couleur/cotations
 const levelOptions = [
   { value: 'jaune', label: 'Jaune (3A-3C) - Débutant' },
   { value: 'vert', label: 'Vert (4A-4B+) - Débutant' },
@@ -46,6 +47,11 @@ interface User {
   inscritAuxCompetitions?: boolean;
 }
 
+type SortConfig = {
+  key: keyof User;
+  direction: 'ascending' | 'descending';
+};
+
 const AdminUsers: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,9 +80,59 @@ const AdminUsers: React.FC = () => {
     gender: '',
     level: '',
     inscritAuxCours: false,
-    inscritAuxCompetitions: true, // ✅ Par défaut à true
+    inscritAuxCompetitions: true,
     password: '',
   });
+  // ✅ État pour le tri
+  const [sortConfig, setSortConfig] = useState<SortConfig | null>({
+    key: 'email',
+    direction: 'ascending'
+  });
+
+  // ✅ Fonction pour trier les utilisateurs
+  const sortUsers = (users: User[]): User[] => {
+    if (!sortConfig) return users;
+
+    return [...users].sort((a, b) => {
+      // Gérer les champs potentiellement undefined
+      const aValue = a[sortConfig.key] || '';
+      const bValue = b[sortConfig.key] || '';
+
+      // Pour les rôles (tableau), convertir en string
+      if (sortConfig.key === 'roles') {
+        const aRoles = (a.roles || []).join(', ');
+        const bRoles = (b.roles || []).join(', ');
+        return sortConfig.direction === 'ascending'
+          ? aRoles.localeCompare(bRoles)
+          : bRoles.localeCompare(aRoles);
+      }
+
+      // Pour les chips (niveau, genre, etc.)
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        return sortConfig.direction === 'ascending'
+          ? aValue.localeCompare(bValue)
+          : bValue.localeCompare(aValue);
+      }
+
+      // Pour les nombres (âge)
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return sortConfig.direction === 'ascending'
+          ? aValue - bValue
+          : bValue - aValue;
+      }
+
+      return 0;
+    });
+  };
+
+  // ✅ Fonction pour changer le tri
+  const requestSort = (key: keyof User) => {
+    let direction: 'ascending' | 'descending' = 'ascending';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
+      direction = 'descending';
+    }
+    setSortConfig({ key, direction });
+  };
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -96,7 +152,7 @@ const AdminUsers: React.FC = () => {
             level: data.level,
             created_at: data.created_at,
             inscritAuxCours: data.inscritAuxCours ?? false,
-            inscritAuxCompetitions: data.inscritAuxCompetitions ?? true, // ✅ Par défaut à true
+            inscritAuxCompetitions: data.inscritAuxCompetitions ?? true,
           };
         });
         setUsers(usersData);
@@ -114,7 +170,6 @@ const AdminUsers: React.FC = () => {
   const handleUpdateUser = async () => {
     if (!selectedUser) return;
     try {
-      // ✅ S'assurer que roles est un tableau
       const roles = Array.isArray(editForm.roles) ? editForm.roles : [];
       await updateDoc(doc(db, 'users', selectedUser.uid), {
         email: editForm.email,
@@ -127,7 +182,6 @@ const AdminUsers: React.FC = () => {
         inscritAuxCours: editForm.inscritAuxCours,
         inscritAuxCompetitions: editForm.inscritAuxCompetitions,
       });
-      // ✅ Rafraîchir la liste
       const querySnapshot = await getDocs(collection(db, 'users'));
       const usersData: User[] = querySnapshot.docs.map(doc => {
         const data = doc.data();
@@ -165,7 +219,6 @@ const AdminUsers: React.FC = () => {
     }
 
     try {
-      // 1. Créer le compte Firebase Auth
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         createForm.email,
@@ -177,7 +230,6 @@ const AdminUsers: React.FC = () => {
         throw new Error("La création de l'utilisateur a échoué.");
       }
 
-      // 2. Créer le document dans Firestore
       await setDoc(doc(db, 'users', newUser.uid), {
         uid: newUser.uid,
         email: newUser.email,
@@ -192,10 +244,8 @@ const AdminUsers: React.FC = () => {
         created_at: new Date().toISOString()
       });
 
-      // 3. Envoyer l'email de réinitialisation
       await sendPasswordResetEmail(auth, createForm.email);
 
-      // 4. Rafraîchir la liste
       const querySnapshot = await getDocs(collection(db, 'users'));
       const usersData: User[] = querySnapshot.docs.map(doc => {
         const data = doc.data();
@@ -232,16 +282,6 @@ const AdminUsers: React.FC = () => {
         message = error.message;
       }
 
-      // ✅ Supprimer l'utilisateur Auth si la création a échoué
-      const currentUser = auth.currentUser;
-      if (currentUser && currentUser.email !== auth.currentUser?.email) {
-        try {
-          await deleteUser(currentUser);
-        } catch (deleteError) {
-          console.error("Erreur lors de la suppression de l'utilisateur Auth :", deleteError);
-        }
-      }
-
       setSnackbarMessage(message);
       setOpenSnackbar(true);
     }
@@ -258,7 +298,7 @@ const AdminUsers: React.FC = () => {
       gender: user.gender || '',
       level: user.level || '',
       inscritAuxCours: user.inscritAuxCours ?? false,
-      inscritAuxCompetitions: user.inscritAuxCompetitions ?? true, // ✅ Par défaut à true
+      inscritAuxCompetitions: user.inscritAuxCompetitions ?? true,
     });
     setOpenEditDialog(true);
   };
@@ -268,10 +308,7 @@ const AdminUsers: React.FC = () => {
       return;
     }
     try {
-      // 1. Supprimer de Firestore
       await deleteDoc(doc(db, 'users', userId));
-
-      // 2. Rafraîchir la liste
       const querySnapshot = await getDocs(collection(db, 'users'));
       const usersData: User[] = querySnapshot.docs.map(doc => {
         const data = doc.data();
@@ -290,7 +327,7 @@ const AdminUsers: React.FC = () => {
         };
       });
       setUsers(usersData);
-      setSnackbarMessage("Utilisateur supprimé de la base de données avec succès !");
+      setSnackbarMessage("Utilisateur supprimé avec succès !");
       setOpenSnackbar(true);
     } catch (error) {
       console.error("Erreur :", error);
@@ -299,12 +336,20 @@ const AdminUsers: React.FC = () => {
     }
   };
 
+  // ✅ Fonction pour obtenir l'icône de tri
+  const getSortIcon = (key: keyof User) => {
+    if (!sortConfig || sortConfig.key !== key) {
+      return null;
+    }
+    return sortConfig.direction === 'ascending' ? <ArrowUpwardIcon /> : <ArrowDownwardIcon />;
+  };
+
   if (loading) {
     return <Typography>Chargement des utilisateurs...</Typography>;
   }
 
   return (
-    <Container maxWidth="lg">
+    <Container maxWidth={false} sx={{ px: 2 }}> {/* ✅ Largeur maximale */}
       <Paper sx={{ p: 3, mt: 3 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
           <Typography variant="h4" gutterBottom>
@@ -319,24 +364,96 @@ const AdminUsers: React.FC = () => {
           </Button>
         </Box>
 
-        <TableContainer>
+        <TableContainer sx={{ overflowX: 'auto' }}> {/* ✅ Défilement horizontal si nécessaire */}
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell>Email</TableCell>
-                <TableCell>Prénom</TableCell>
-                <TableCell>Nom</TableCell>
-                <TableCell>Rôles</TableCell>
-                <TableCell>Niveau</TableCell>
-                <TableCell>Âge</TableCell>
-                <TableCell>Genre</TableCell>
-                <TableCell>Cours</TableCell>
-                <TableCell>Compétitions</TableCell>
-                <TableCell>Actions</TableCell> {/* ✅ COLONNE POUR LES ICÔNES */}
+                <TableCell>
+                  <TableSortLabel
+                    active={sortConfig?.key === 'email'}
+                    direction={sortConfig?.direction}
+                    onClick={() => requestSort('email')}
+                  >
+                    Email {getSortIcon('email')}
+                  </TableSortLabel>
+                </TableCell>
+                <TableCell>
+                  <TableSortLabel
+                    active={sortConfig?.key === 'first_name'}
+                    direction={sortConfig?.direction}
+                    onClick={() => requestSort('first_name')}
+                  >
+                    Prénom {getSortIcon('first_name')}
+                  </TableSortLabel>
+                </TableCell>
+                <TableCell>
+                  <TableSortLabel
+                    active={sortConfig?.key === 'last_name'}
+                    direction={sortConfig?.direction}
+                    onClick={() => requestSort('last_name')}
+                  >
+                    Nom {getSortIcon('last_name')}
+                  </TableSortLabel>
+                </TableCell>
+                <TableCell>
+                  <TableSortLabel
+                    active={sortConfig?.key === 'roles'}
+                    direction={sortConfig?.direction}
+                    onClick={() => requestSort('roles')}
+                  >
+                    Rôles {getSortIcon('roles')}
+                  </TableSortLabel>
+                </TableCell>
+                <TableCell>
+                  <TableSortLabel
+                    active={sortConfig?.key === 'level'}
+                    direction={sortConfig?.direction}
+                    onClick={() => requestSort('level')}
+                  >
+                    Niveau {getSortIcon('level')}
+                  </TableSortLabel>
+                </TableCell>
+                <TableCell>
+                  <TableSortLabel
+                    active={sortConfig?.key === 'age'}
+                    direction={sortConfig?.direction}
+                    onClick={() => requestSort('age')}
+                  >
+                    Âge {getSortIcon('age')}
+                  </TableSortLabel>
+                </TableCell>
+                <TableCell>
+                  <TableSortLabel
+                    active={sortConfig?.key === 'gender'}
+                    direction={sortConfig?.direction}
+                    onClick={() => requestSort('gender')}
+                  >
+                    Genre {getSortIcon('gender')}
+                  </TableSortLabel>
+                </TableCell>
+                <TableCell>
+                  <TableSortLabel
+                    active={sortConfig?.key === 'inscritAuxCours'}
+                    direction={sortConfig?.direction}
+                    onClick={() => requestSort('inscritAuxCours')}
+                  >
+                    Cours {getSortIcon('inscritAuxCours')}
+                  </TableSortLabel>
+                </TableCell>
+                <TableCell>
+                  <TableSortLabel
+                    active={sortConfig?.key === 'inscritAuxCompetitions'}
+                    direction={sortConfig?.direction}
+                    onClick={() => requestSort('inscritAuxCompetitions')}
+                  >
+                    Compétitions {getSortIcon('inscritAuxCompetitions')}
+                  </TableSortLabel>
+                </TableCell>
+                <TableCell>Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {users.map(user => (
+              {sortUsers(users).map(user => (
                 <TableRow key={user.uid}>
                   <TableCell>{user.email}</TableCell>
                   <TableCell>{user.first_name}</TableCell>
@@ -365,20 +482,11 @@ const AdminUsers: React.FC = () => {
                   <TableCell>
                     {user.inscritAuxCompetitions ? <Chip label="Oui" color="success" /> : <Chip label="Non" color="error" />}
                   </TableCell>
-                  {/* ✅ ICÔNES D'ÉDITION ET SUPPRESSION */}
                   <TableCell>
-                    <IconButton
-                      color="primary"
-                      onClick={() => handleOpenEditDialog(user)}
-                      aria-label="Modifier"
-                    >
+                    <IconButton color="primary" onClick={() => handleOpenEditDialog(user)} aria-label="Modifier">
                       <EditIcon />
                     </IconButton>
-                    <IconButton
-                      color="error"
-                      onClick={() => handleDeleteUser(user.uid)}
-                      aria-label="Supprimer"
-                    >
+                    <IconButton color="error" onClick={() => handleDeleteUser(user.uid)} aria-label="Supprimer">
                       <DeleteIcon />
                     </IconButton>
                   </TableCell>
@@ -393,24 +501,9 @@ const AdminUsers: React.FC = () => {
           <DialogTitle>Modifier l'utilisateur</DialogTitle>
           <DialogContent>
             <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <TextField
-                label="Email"
-                value={editForm.email}
-                onChange={(e) => setEditForm({...editForm, email: e.target.value})}
-                fullWidth
-              />
-              <TextField
-                label="Prénom"
-                value={editForm.first_name}
-                onChange={(e) => setEditForm({...editForm, first_name: e.target.value})}
-                fullWidth
-              />
-              <TextField
-                label="Nom"
-                value={editForm.last_name}
-                onChange={(e) => setEditForm({...editForm, last_name: e.target.value})}
-                fullWidth
-              />
+              <TextField label="Email" value={editForm.email} onChange={(e) => setEditForm({...editForm, email: e.target.value})} fullWidth />
+              <TextField label="Prénom" value={editForm.first_name} onChange={(e) => setEditForm({...editForm, first_name: e.target.value})} fullWidth />
+              <TextField label="Nom" value={editForm.last_name} onChange={(e) => setEditForm({...editForm, last_name: e.target.value})} fullWidth />
               <FormControl fullWidth>
                 <InputLabel>Rôles (multiple possible)</InputLabel>
                 <Select
@@ -418,17 +511,12 @@ const AdminUsers: React.FC = () => {
                   value={editForm.roles || []}
                   onChange={(e) => {
                     const value = e.target.value;
-                    setEditForm({
-                      ...editForm,
-                      roles: typeof value === 'string' ? [value as UserRole] : (value as UserRole[])
-                    });
+                    setEditForm({ ...editForm, roles: typeof value === 'string' ? [value as UserRole] : (value as UserRole[]) });
                   }}
                   label="Rôles"
                   renderValue={(selected) => (
                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                      {(selected as UserRole[]).map(role => (
-                        <Chip key={role} label={role} />
-                      ))}
+                      {(selected as UserRole[]).map(role => <Chip key={role} label={role} />)}
                     </Box>
                   )}
                 >
@@ -440,33 +528,14 @@ const AdminUsers: React.FC = () => {
               </FormControl>
               <FormControl fullWidth required>
                 <InputLabel>Niveau en salle</InputLabel>
-                <Select
-                  value={editForm.level || ''}
-                  onChange={(e) => setEditForm({...editForm, level: e.target.value})}
-                  label="Niveau en salle"
-                >
-                  {levelOptions.map(option => (
-                    <MenuItem key={option.value} value={option.value}>
-                      {option.label}
-                    </MenuItem>
-                  ))}
+                <Select value={editForm.level || ''} onChange={(e) => setEditForm({...editForm, level: e.target.value})} label="Niveau en salle">
+                  {levelOptions.map(option => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
                 </Select>
               </FormControl>
-              <TextField
-                label="Âge"
-                type="number"
-                value={editForm.age || ''}
-                onChange={(e) => setEditForm({...editForm, age: e.target.value ? parseInt(e.target.value) : undefined})}
-                fullWidth
-                slotProps={{ inputLabel: { shrink: true } }}
-              />
+              <TextField label="Âge" type="number" value={editForm.age || ''} onChange={(e) => setEditForm({...editForm, age: e.target.value ? parseInt(e.target.value) : undefined})} fullWidth slotProps={{ inputLabel: { shrink: true } }} />
               <FormControl fullWidth>
                 <InputLabel>Genre</InputLabel>
-                <Select
-                  value={editForm.gender || ''}
-                  onChange={(e) => setEditForm({...editForm, gender: e.target.value})}
-                  label="Genre"
-                >
+                <Select value={editForm.gender || ''} onChange={(e) => setEditForm({...editForm, gender: e.target.value})} label="Genre">
                   <MenuItem value="homme">Homme</MenuItem>
                   <MenuItem value="femme">Femme</MenuItem>
                   <MenuItem value="autre">Autre</MenuItem>
@@ -474,22 +543,14 @@ const AdminUsers: React.FC = () => {
               </FormControl>
               <FormControl fullWidth>
                 <InputLabel>Inscrit aux cours</InputLabel>
-                <Select
-                  value={editForm.inscritAuxCours ? 'true' : 'false'}
-                  onChange={(e) => setEditForm({...editForm, inscritAuxCours: e.target.value === 'true'})}
-                  label="Inscrit aux cours"
-                >
+                <Select value={editForm.inscritAuxCours ? 'true' : 'false'} onChange={(e) => setEditForm({...editForm, inscritAuxCours: e.target.value === 'true'})} label="Inscrit aux cours">
                   <MenuItem value="true">Oui</MenuItem>
                   <MenuItem value="false">Non</MenuItem>
                 </Select>
               </FormControl>
               <FormControl fullWidth>
                 <InputLabel>Inscrit aux compétitions</InputLabel>
-                <Select
-                  value={editForm.inscritAuxCompetitions ? 'true' : 'false'}
-                  onChange={(e) => setEditForm({...editForm, inscritAuxCompetitions: e.target.value === 'true'})}
-                  label="Inscrit aux compétitions"
-                >
+                <Select value={editForm.inscritAuxCompetitions ? 'true' : 'false'} onChange={(e) => setEditForm({...editForm, inscritAuxCompetitions: e.target.value === 'true'})} label="Inscrit aux compétitions">
                   <MenuItem value="true">Oui</MenuItem>
                   <MenuItem value="false">Non</MenuItem>
                 </Select>
@@ -498,9 +559,7 @@ const AdminUsers: React.FC = () => {
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setOpenEditDialog(false)}>Annuler</Button>
-            <Button onClick={handleUpdateUser} color="primary">
-              Enregistrer
-            </Button>
+            <Button onClick={handleUpdateUser} color="primary">Enregistrer</Button>
           </DialogActions>
         </Dialog>
 
@@ -509,36 +568,10 @@ const AdminUsers: React.FC = () => {
           <DialogTitle>Créer un nouvel utilisateur</DialogTitle>
           <DialogContent>
             <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <TextField
-                label="Email"
-                value={createForm.email}
-                onChange={(e) => setCreateForm({...createForm, email: e.target.value})}
-                fullWidth
-                required
-              />
-              <TextField
-                label="Mot de passe"
-                type="password"
-                value={createForm.password}
-                onChange={(e) => setCreateForm({...createForm, password: e.target.value})}
-                fullWidth
-                required
-                helperText="Ce mot de passe sera envoyé à l'utilisateur par email."
-              />
-              <TextField
-                label="Prénom"
-                value={createForm.first_name}
-                onChange={(e) => setCreateForm({...createForm, first_name: e.target.value})}
-                fullWidth
-                required
-              />
-              <TextField
-                label="Nom"
-                value={createForm.last_name}
-                onChange={(e) => setCreateForm({...createForm, last_name: e.target.value})}
-                fullWidth
-                required
-              />
+              <TextField label="Email" value={createForm.email} onChange={(e) => setCreateForm({...createForm, email: e.target.value})} fullWidth required />
+              <TextField label="Mot de passe" type="password" value={createForm.password} onChange={(e) => setCreateForm({...createForm, password: e.target.value})} fullWidth required helperText="Ce mot de passe sera envoyé à l'utilisateur par email." />
+              <TextField label="Prénom" value={createForm.first_name} onChange={(e) => setCreateForm({...createForm, first_name: e.target.value})} fullWidth required />
+              <TextField label="Nom" value={createForm.last_name} onChange={(e) => setCreateForm({...createForm, last_name: e.target.value})} fullWidth required />
               <FormControl fullWidth>
                 <InputLabel>Rôles (multiple possible)</InputLabel>
                 <Select
@@ -546,17 +579,12 @@ const AdminUsers: React.FC = () => {
                   value={createForm.roles || []}
                   onChange={(e) => {
                     const value = e.target.value;
-                    setCreateForm({
-                      ...createForm,
-                      roles: typeof value === 'string' ? [value as UserRole] : (value as UserRole[])
-                    });
+                    setCreateForm({ ...createForm, roles: typeof value === 'string' ? [value as UserRole] : (value as UserRole[]) });
                   }}
                   label="Rôles"
                   renderValue={(selected) => (
                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                      {(selected as UserRole[]).map(role => (
-                        <Chip key={role} label={role} />
-                      ))}
+                      {(selected as UserRole[]).map(role => <Chip key={role} label={role} />)}
                     </Box>
                   )}
                 >
@@ -568,33 +596,14 @@ const AdminUsers: React.FC = () => {
               </FormControl>
               <FormControl fullWidth required>
                 <InputLabel>Niveau en salle</InputLabel>
-                <Select
-                  value={createForm.level || ''}
-                  onChange={(e) => setCreateForm({...createForm, level: e.target.value})}
-                  label="Niveau en salle"
-                >
-                  {levelOptions.map(option => (
-                    <MenuItem key={option.value} value={option.value}>
-                      {option.label}
-                    </MenuItem>
-                  ))}
+                <Select value={createForm.level || ''} onChange={(e) => setCreateForm({...createForm, level: e.target.value})} label="Niveau en salle">
+                  {levelOptions.map(option => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
                 </Select>
               </FormControl>
-              <TextField
-                label="Âge"
-                type="number"
-                value={createForm.age || ''}
-                onChange={(e) => setCreateForm({...createForm, age: e.target.value ? parseInt(e.target.value) : undefined})}
-                fullWidth
-                slotProps={{ inputLabel: { shrink: true } }}
-              />
+              <TextField label="Âge" type="number" value={createForm.age || ''} onChange={(e) => setCreateForm({...createForm, age: e.target.value ? parseInt(e.target.value) : undefined})} fullWidth slotProps={{ inputLabel: { shrink: true } }} />
               <FormControl fullWidth>
                 <InputLabel>Genre</InputLabel>
-                <Select
-                  value={createForm.gender || ''}
-                  onChange={(e) => setCreateForm({...createForm, gender: e.target.value})}
-                  label="Genre"
-                >
+                <Select value={createForm.gender || ''} onChange={(e) => setCreateForm({...createForm, gender: e.target.value})} label="Genre">
                   <MenuItem value="homme">Homme</MenuItem>
                   <MenuItem value="femme">Femme</MenuItem>
                   <MenuItem value="autre">Autre</MenuItem>
@@ -602,22 +611,14 @@ const AdminUsers: React.FC = () => {
               </FormControl>
               <FormControl fullWidth>
                 <InputLabel>Inscrit aux cours</InputLabel>
-                <Select
-                  value={createForm.inscritAuxCours ? 'true' : 'false'}
-                  onChange={(e) => setCreateForm({...createForm, inscritAuxCours: e.target.value === 'true'})}
-                  label="Inscrit aux cours"
-                >
+                <Select value={createForm.inscritAuxCours ? 'true' : 'false'} onChange={(e) => setCreateForm({...createForm, inscritAuxCours: e.target.value === 'true'})} label="Inscrit aux cours">
                   <MenuItem value="true">Oui</MenuItem>
                   <MenuItem value="false">Non</MenuItem>
                 </Select>
               </FormControl>
               <FormControl fullWidth>
                 <InputLabel>Inscrit aux compétitions</InputLabel>
-                <Select
-                  value={createForm.inscritAuxCompetitions ? 'true' : 'false'}
-                  onChange={(e) => setCreateForm({...createForm, inscritAuxCompetitions: e.target.value === 'true'})}
-                  label="Inscrit aux compétitions"
-                >
+                <Select value={createForm.inscritAuxCompetitions ? 'true' : 'false'} onChange={(e) => setCreateForm({...createForm, inscritAuxCompetitions: e.target.value === 'true'})} label="Inscrit aux compétitions">
                   <MenuItem value="true">Oui</MenuItem>
                   <MenuItem value="false">Non</MenuItem>
                 </Select>
@@ -626,21 +627,12 @@ const AdminUsers: React.FC = () => {
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setOpenCreateDialog(false)}>Annuler</Button>
-            <Button onClick={handleCreateUser} color="primary">
-              Créer
-            </Button>
+            <Button onClick={handleCreateUser} color="primary">Créer</Button>
           </DialogActions>
         </Dialog>
 
-        <Snackbar
-          open={openSnackbar}
-          autoHideDuration={6000}
-          onClose={() => setOpenSnackbar(false)}
-        >
-          <Alert
-            severity={snackbarMessage.includes("succès") ? "success" : "error"}
-            onClose={() => setOpenSnackbar(false)}
-          >
+        <Snackbar open={openSnackbar} autoHideDuration={6000} onClose={() => setOpenSnackbar(false)}>
+          <Alert severity={snackbarMessage.includes("succès") ? "success" : "error"} onClose={() => setOpenSnackbar(false)}>
             {snackbarMessage}
           </Alert>
         </Snackbar>
