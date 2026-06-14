@@ -49,7 +49,7 @@ interface User {
 
 type SortConfig = {
   key: keyof User;
-  direction: 'ascending' | 'descending';
+  direction: 'asc' | 'desc'; // ✅ Corrigé : 'asc' | 'desc' pour MUI v9
 };
 
 const AdminUsers: React.FC = () => {
@@ -86,7 +86,7 @@ const AdminUsers: React.FC = () => {
   // ✅ État pour le tri
   const [sortConfig, setSortConfig] = useState<SortConfig | null>({
     key: 'email',
-    direction: 'ascending'
+    direction: 'asc'
   });
 
   // ✅ Fonction pour trier les utilisateurs
@@ -102,21 +102,21 @@ const AdminUsers: React.FC = () => {
       if (sortConfig.key === 'roles') {
         const aRoles = (a.roles || []).join(', ');
         const bRoles = (b.roles || []).join(', ');
-        return sortConfig.direction === 'ascending'
+        return sortConfig.direction === 'asc'
           ? aRoles.localeCompare(bRoles)
           : bRoles.localeCompare(aRoles);
       }
 
       // Pour les chips (niveau, genre, etc.)
       if (typeof aValue === 'string' && typeof bValue === 'string') {
-        return sortConfig.direction === 'ascending'
+        return sortConfig.direction === 'asc'
           ? aValue.localeCompare(bValue)
           : bValue.localeCompare(aValue);
       }
 
       // Pour les nombres (âge)
       if (typeof aValue === 'number' && typeof bValue === 'number') {
-        return sortConfig.direction === 'ascending'
+        return sortConfig.direction === 'asc'
           ? aValue - bValue
           : bValue - aValue;
       }
@@ -127,9 +127,9 @@ const AdminUsers: React.FC = () => {
 
   // ✅ Fonction pour changer le tri
   const requestSort = (key: keyof User) => {
-    let direction: 'ascending' | 'descending' = 'ascending';
-    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
-      direction = 'descending';
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
     }
     setSortConfig({ key, direction });
   };
@@ -341,7 +341,7 @@ const AdminUsers: React.FC = () => {
     if (!sortConfig || sortConfig.key !== key) {
       return null;
     }
-    return sortConfig.direction === 'ascending' ? <ArrowUpwardIcon /> : <ArrowDownwardIcon />;
+    return sortConfig.direction === 'asc' ? <ArrowUpwardIcon /> : <ArrowDownwardIcon />;
   };
 
   if (loading) {
@@ -371,7 +371,7 @@ const AdminUsers: React.FC = () => {
                 <TableCell>
                   <TableSortLabel
                     active={sortConfig?.key === 'email'}
-                    direction={sortConfig?.direction}
+                    direction={sortConfig?.direction ?? 'asc'}
                     onClick={() => requestSort('email')}
                   >
                     Email {getSortIcon('email')}
@@ -380,7 +380,7 @@ const AdminUsers: React.FC = () => {
                 <TableCell>
                   <TableSortLabel
                     active={sortConfig?.key === 'first_name'}
-                    direction={sortConfig?.direction}
+                    direction={sortConfig?.direction ?? 'asc'}
                     onClick={() => requestSort('first_name')}
                   >
                     Prénom {getSortIcon('first_name')}
@@ -389,7 +389,7 @@ const AdminUsers: React.FC = () => {
                 <TableCell>
                   <TableSortLabel
                     active={sortConfig?.key === 'last_name'}
-                    direction={sortConfig?.direction}
+                    direction={sortConfig?.direction ?? 'asc'}
                     onClick={() => requestSort('last_name')}
                   >
                     Nom {getSortIcon('last_name')}
@@ -398,7 +398,7 @@ const AdminUsers: React.FC = () => {
                 <TableCell>
                   <TableSortLabel
                     active={sortConfig?.key === 'roles'}
-                    direction={sortConfig?.direction}
+                    direction={sortConfig?.direction ?? 'asc'}
                     onClick={() => requestSort('roles')}
                   >
                     Rôles {getSortIcon('roles')}
@@ -407,7 +407,7 @@ const AdminUsers: React.FC = () => {
                 <TableCell>
                   <TableSortLabel
                     active={sortConfig?.key === 'level'}
-                    direction={sortConfig?.direction}
+                    direction={sortConfig?.direction ?? 'asc'}
                     onClick={() => requestSort('level')}
                   >
                     Niveau {getSortIcon('level')}
@@ -416,7 +416,7 @@ const AdminUsers: React.FC = () => {
                 <TableCell>
                   <TableSortLabel
                     active={sortConfig?.key === 'age'}
-                    direction={sortConfig?.direction}
+                    direction={sortConfig?.direction ?? 'asc'}
                     onClick={() => requestSort('age')}
                   >
                     Âge {getSortIcon('age')}
@@ -425,7 +425,7 @@ const AdminUsers: React.FC = () => {
                 <TableCell>
                   <TableSortLabel
                     active={sortConfig?.key === 'gender'}
-                    direction={sortConfig?.direction}
+                    direction={sortConfig?.direction ?? 'asc'}
                     onClick={() => requestSort('gender')}
                   >
                     Genre {getSortIcon('gender')}
@@ -434,7 +434,7 @@ const AdminUsers: React.FC = () => {
                 <TableCell>
                   <TableSortLabel
                     active={sortConfig?.key === 'inscritAuxCours'}
-                    direction={sortConfig?.direction}
+                    direction={sortConfig?.direction ?? 'asc'}
                     onClick={() => requestSort('inscritAuxCours')}
                   >
                     Cours {getSortIcon('inscritAuxCours')}
@@ -443,7 +443,7 @@ const AdminUsers: React.FC = () => {
                 <TableCell>
                   <TableSortLabel
                     active={sortConfig?.key === 'inscritAuxCompetitions'}
-                    direction={sortConfig?.direction}
+                    direction={sortConfig?.direction ?? 'asc'}
                     onClick={() => requestSort('inscritAuxCompetitions')}
                   >
                     Compétitions {getSortIcon('inscritAuxCompetitions')}
