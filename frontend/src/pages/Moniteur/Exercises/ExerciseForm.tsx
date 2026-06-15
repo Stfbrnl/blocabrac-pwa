@@ -20,13 +20,19 @@ import {
   CircularProgress,
   FormControl,
   FormLabel,
+  MenuItem,
   Snackbar,
   Alert,
   Autocomplete,
   Chip,
-  MenuItem,
+  RadioGroup,
+  FormControlLabel,
+  Radio,
+  IconButton,
+  Tooltip,
 } from '@mui/material';
 import { useNavigate, useParams } from 'react-router-dom';
+import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
 
 interface Exercise {
   id?: string;
@@ -38,6 +44,8 @@ interface Exercise {
   block?: string;
   createdBy: string;
   createdAt: Date;
+  type: 'validation' | 'data'; // Nouveau : type d'exercice
+  dataFields?: { label: string; type: 'number' | 'text' | 'time' }[]; // Champs personnalisés
 }
 
 interface Equipment {
@@ -50,6 +58,7 @@ interface Equipment {
 
 const difficulties = ['Facile', 'Moyen', 'Difficile', 'Expert'];
 const categories = ['Échauffement', 'Bloc', 'Plyométrie', 'Renforcement musculaire'];
+const fieldTypes = ['number', 'text', 'time'];
 
 const ExerciseForm: React.FC = () => {
   const [user, loadingAuth] = useAuthState(auth);
@@ -62,13 +71,14 @@ const ExerciseForm: React.FC = () => {
     description: '',
     difficulty: 'Facile',
     category: 'Échauffement',
+    type: 'validation', // Par défaut : validation
     createdBy: user?.uid || '',
     createdAt: new Date(),
   });
-
   const [equipmentOptions, setEquipmentOptions] = useState<Equipment[]>([]);
   const [selectedEquipment, setSelectedEquipment] = useState<string[]>([]);
   const [newEquipment, setNewEquipment] = useState<string>('');
+  const [dataFields, setDataFields] = useState<{ label: string; type: 'number' | 'text' | 'time' }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -112,6 +122,7 @@ const ExerciseForm: React.FC = () => {
             createdAt: data.createdAt?.toDate() || new Date(),
           } as Exercise);
           setSelectedEquipment(data.equipment || []);
+          setDataFields(data.dataFields || []);
         }
       } catch (err) {
         setError(`Erreur lors du chargement de l'exercice : ${err}`);
@@ -125,7 +136,6 @@ const ExerciseForm: React.FC = () => {
   const handleAddEquipment = async () => {
     if (!newEquipment.trim()) return;
 
-    // Vérifier si l'équipement existe déjà (par nom)
     const existingEquipment = equipmentOptions.find(eq => eq.name === newEquipment.trim());
     if (existingEquipment) {
       setSelectedEquipment([...selectedEquipment, newEquipment.trim()]);
@@ -142,7 +152,6 @@ const ExerciseForm: React.FC = () => {
       };
 
       await addDoc(collection(db, 'equipment'), newEquipmentDoc);
-      // ✅ Recharger les équipements pour avoir l'ID du nouveau document
       const updatedSnapshot = await getDocs(query(collection(db, 'equipment')));
       const updatedEquipmentList: Equipment[] = [];
       updatedSnapshot.forEach((doc) => {
@@ -154,6 +163,25 @@ const ExerciseForm: React.FC = () => {
     } catch (err) {
       setError(`Erreur lors de l'ajout de l'équipement : ${err}`);
     }
+  };
+
+  // Ajouter un champ de données personnalisé
+  const handleAddDataField = () => {
+    setDataFields([...dataFields, { label: '', type: 'number' }]);
+  };
+
+  // Supprimer un champ de données personnalisé
+  const handleRemoveDataField = (index: number) => {
+    const newFields = [...dataFields];
+    newFields.splice(index, 1);
+    setDataFields(newFields);
+  };
+
+  // Mettre à jour un champ de données personnalisé
+  const handleUpdateDataField = (index: number, field: 'label' | 'type', value: string) => {
+    const newFields = [...dataFields];
+    newFields[index] = { ...newFields[index], [field]: value };
+    setDataFields(newFields);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -176,6 +204,8 @@ const ExerciseForm: React.FC = () => {
         category: exercise.category,
         equipment: selectedEquipment.length > 0 ? selectedEquipment : undefined,
         block: exercise.block || null,
+        type: exercise.type,
+        dataFields: exercise.type === 'data' ? dataFields : undefined,
         createdBy: user.uid,
         createdAt: isEditMode ? exercise.createdAt : new Date(),
       };
@@ -217,6 +247,27 @@ const ExerciseForm: React.FC = () => {
         </Typography>
 
         <Box component="form" onSubmit={handleSubmit} noValidate>
+          {/* Type d'exercice */}
+          <FormControl fullWidth margin="normal">
+            <FormLabel>Type d'exercice *</FormLabel>
+            <RadioGroup
+              row
+              value={exercise.type}
+              onChange={(e) => setExercise({ ...exercise, type: e.target.value as 'validation' | 'data' })}
+            >
+              <FormControlLabel
+                value="validation"
+                control={<Radio />}
+                label="Validation (réussi/échoué)"
+              />
+              <FormControlLabel
+                value="data"
+                control={<Radio />}
+                label="Données personnalisées (ex: tractions, temps)"
+              />
+            </RadioGroup>
+          </FormControl>
+
           <FormControl fullWidth margin="normal">
             <FormLabel>Nom *</FormLabel>
             <TextField
@@ -272,7 +323,7 @@ const ExerciseForm: React.FC = () => {
             </FormControl>
           </Box>
 
-          {/* ✅ Champ Équipement : Avec vérification de chargement */}
+          {/* Champ Équipement */}
           <FormControl fullWidth margin="normal">
             <FormLabel>Équipements</FormLabel>
             {equipmentOptions.length === 0 ? (
@@ -328,6 +379,64 @@ const ExerciseForm: React.FC = () => {
                 rows={3}
                 placeholder="Description spécifique pour les blocs..."
               />
+            </FormControl>
+          )}
+
+          {/* Champs de données personnalisées (uniquement si type = 'data') */}
+          {exercise.type === 'data' && (
+            <FormControl fullWidth margin="normal">
+              <FormLabel>Champs de données personnalisées</FormLabel>
+              {dataFields.length === 0 ? (
+                <Typography color="textSecondary" sx={{ mt: 1 }}>
+                  Aucun champ défini. Ajoutez-en un pour collecter des données spécifiques (ex: nombre de tractions, temps de suspension).
+                </Typography>
+              ) : (
+                <Box sx={{ mt: 1 }}>
+                  {dataFields.map((field, index) => (
+                    <Box key={index} sx={{ display: 'flex', gap: 1, mb: 1, alignItems: 'center' }}>
+                      <TextField
+                        label="Nom du champ"
+                        value={field.label}
+                        onChange={(e) => handleUpdateDataField(index, 'label', e.target.value)}
+                        variant="outlined"
+                        fullWidth
+                        placeholder="Ex: Nombre de tractions"
+                      />
+                      <TextField
+                        select
+                        label="Type"
+                        value={field.type}
+                        onChange={(e) => handleUpdateDataField(index, 'type', e.target.value as 'number' | 'text' | 'time')}
+                        variant="outlined"
+                        sx={{ minWidth: 120 }}
+                      >
+                        {fieldTypes.map((type) => (
+                          <MenuItem key={type} value={type}>
+                            {type === 'number' ? 'Nombre' : type === 'time' ? 'Temps (hh:mm:ss)' : 'Texte'}
+                          </MenuItem>
+                        ))}
+                      </TextField>
+                      <Tooltip title="Supprimer ce champ">
+                        <IconButton
+                          color="error"
+                          onClick={() => handleRemoveDataField(index)}
+                          sx={{ height: '40px', width: '40px' }}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
+                  ))}
+                </Box>
+              )}
+              <Button
+                variant="outlined"
+                startIcon={<AddIcon />}
+                onClick={handleAddDataField}
+                sx={{ mt: 1 }}
+              >
+                Ajouter un champ
+              </Button>
             </FormControl>
           )}
 

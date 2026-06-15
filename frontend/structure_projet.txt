@@ -1,0 +1,96 @@
+.
+├── public
+│   ├── images
+│   │   └── logo-blocabrac.png
+│   ├── favicon.svg
+│   └── icons.svg
+├── src
+│   ├── assets
+│   │   ├── hero.png
+│   │   ├── logo-blocabrac.png
+│   │   ├── react.svg
+│   │   └── vite.svg
+│   ├── components
+│   │   ├── LevelCorrespondenceTable.tsx
+│   │   ├── Navbar.tsx
+│   │   └── ProtectedRoute.tsx
+│   ├── context
+│   │   └── AuthContext.tsx
+│   ├── pages
+│   │   ├── Client
+│   │   │   ├── Competitions
+│   │   │   │   ├── ClientCompetitionStats.tsx
+│   │   │   │   └── ClientCompetitions.tsx
+│   │   │   ├── Courses
+│   │   │   │   ├── ClientCourseSession.tsx
+│   │   │   │   └── ClientCourses.tsx
+│   │   │   ├── Daily
+│   │   │   │   └── ClientDaily.tsx
+│   │   │   ├── Profile
+│   │   │   │   └── ClientProfile.tsx
+│   │   │   ├── Stats
+│   │   │   │   └── ClientStats.tsx
+│   │   │   └── ClientScreen.tsx
+│   │   ├── Moniteur
+│   │   │   ├── Courses
+│   │   │   │   ├── CourseDetail.tsx
+│   │   │   │   ├── CourseForm.tsx
+│   │   │   │   └── CoursesList.tsx
+│   │   │   ├── Exercises
+│   │   │   │   ├── ExerciseForm.tsx
+│   │   │   │   └── ExercisesList.tsx
+│   │   │   ├── Groups
+│   │   │   │   ├── GroupForm.tsx
+│   │   │   │   └── GroupsList.tsx
+│   │   │   ├── Messages
+│   │   │   │   └── MessagesList.tsx
+│   │   │   ├── Stats
+│   │   │   │   └── StatsList.tsx
+│   │   │   └── MoniteurScreen.tsx
+│   │   ├── Ouvreur
+│   │   │   ├── CompetitionBoulders
+│   │   │   │   ├── CompetitionBoulderForm.tsx
+│   │   │   │   ├── CompetitionBouldersList.tsx
+│   │   │   │   └── CompetitionStats.tsx
+│   │   │   ├── DailyBoulders
+│   │   │   │   ├── DailyBoulderForm.tsx
+│   │   │   │   └── DailyBouldersList.tsx
+│   │   │   ├── ReportsAndStats
+│   │   │   │   ├── BoulderStats.tsx
+│   │   │   │   ├── CompetitionBoulderStats.tsx
+│   │   │   │   ├── ReportsAndStats.tsx
+│   │   │   │   └── ReportsList.tsx
+│   │   │   └── OuvreurScreen.tsx
+│   │   ├── Admin.tsx
+│   │   ├── AdminCompetitionList.tsx
+│   │   ├── AdminCompetitionManagement.tsx
+│   │   ├── AdminCompetitionRegistration.tsx
+│   │   ├── AdminCompetitionStats.tsx
+│   │   ├── AdminHomeContent.tsx
+│   │   ├── AdminUsers.tsx
+│   │   ├── Client.tsx
+│   │   ├── ForgotPassword.tsx
+│   │   ├── Home.tsx
+│   │   ├── Login.tsx
+│   │   ├── Moniteur.tsx
+│   │   ├── Ouvreur.tsx
+│   │   └── Register.tsx
+│   ├── services
+│   │   ├── firebaseConfig.ts
+│   │   └── supabaseClient.ts
+│   ├── App.css
+│   ├── index.css
+│   └── main.tsx
+├── README.md
+├── cors.json
+├── eslint.config.js
+├── index.html
+├── package-lock.json
+├── package.json
+├── structure_projet.txt
+├── tsconfig.app.json
+├── tsconfig.json
+├── tsconfig.node.json
+└── vite.config.ts
+
+25 directories, 69 files

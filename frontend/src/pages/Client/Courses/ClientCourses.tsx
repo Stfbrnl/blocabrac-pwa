@@ -6,7 +6,7 @@ import {
 } from 'firebase/firestore';
 import {
   Container, Typography, Box, CircularProgress, Alert,
-  Paper, Grid, Card, CardContent, Button, Chip
+  Card, CardContent, Button, Grid
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 
@@ -81,9 +81,9 @@ const ClientCourses: React.FC = () => {
           const sessionsSnapshot = await getDocs(sessionsQuery);
           const groupSessions: Session[] = sessionsSnapshot.docs.map(doc => ({
             id: doc.id,
-            name: doc.data().name || '',
+            name: doc.data().name || doc.data().title || '',
             date: doc.data().date || '',
-            moniteurId: doc.data().moniteurId || '',
+            moniteurId: doc.data().moniteurId || doc.data().createdBy || '',
             groupId: doc.data().groupId || '',
             isActive: doc.data().isActive || false,
             exercises: doc.data().exercises || []

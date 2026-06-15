@@ -26,6 +26,11 @@ import {
   Alert,
   Autocomplete,
   Chip,
+  Checkbox,
+  ListItemText,
+  OutlinedInput,
+  InputLabel,
+  Select,
 } from '@mui/material';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -36,11 +41,11 @@ interface Course {
   date: Date;
   time: string;
   level: string;
-  MaxParticipants: number;
   groupId: string;
-  exercises?: string[]; // ✅ Ajout du tableau d'IDs d'exercices
+  exercises?: string[];
   createdBy: string;
   createdAt: Date;
+  isActive: boolean;
 }
 
 const levels = ['Débutant', 'Intermédiaire', 'Avancé', 'Expert'];
@@ -57,14 +62,14 @@ const CourseForm: React.FC = () => {
     date: new Date(),
     time: '18:00',
     level: 'Débutant',
-    MaxParticipants: 10,
     groupId: '',
+    isActive: false,
     createdBy: user?.uid || '',
     createdAt: new Date(),
   });
   const [groups, setGroups] = useState<{ id: string; name: string }[]>([]);
-  const [exercises, setExercises] = useState<{ id: string; name: string }[]>([]); // ✅ État pour les exercices
-  const [selectedExercises, setSelectedExercises] = useState<{ id: string; name: string }[]>([]); // ✅ Exercices sélectionnés
+  const [exercises, setExercises] = useState<{ id: string; name: string; type: 'validation' | 'data' }[]>([]);
+  const [selectedExercises, setSelectedExercises] = useState<{ id: string; name: string; type: 'validation' | 'data' }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -100,11 +105,12 @@ const CourseForm: React.FC = () => {
       try {
         const q = query(collection(db, 'exercises'));
         const querySnapshot = await getDocs(q);
-        const exercisesData: { id: string; name: string }[] = [];
+        const exercisesData: { id: string; name: string; type: 'validation' | 'data' }[] = [];
         querySnapshot.forEach((doc) => {
           exercisesData.push({
             id: doc.id,
             name: doc.data().name,
+            type: doc.data().type || 'validation',
           });
         });
         setExercises(exercisesData);
@@ -128,8 +134,8 @@ const CourseForm: React.FC = () => {
             ...data,
             date: data.date?.toDate() || new Date(),
             createdAt: data.createdAt?.toDate() || new Date(),
+            isActive: data.isActive || false,
           } as Course);
-          // ✅ Charger les exercices sélectionnés pour cette séance
           if (data.exercises && data.exercises.length > 0) {
             const selectedExercisesData = exercises.filter(ex => data.exercises.includes(ex.id));
             setSelectedExercises(selectedExercisesData);
@@ -142,7 +148,6 @@ const CourseForm: React.FC = () => {
       }
     };
 
-    // ✅ Charger les groupes et exercices en parallèle
     Promise.all([fetchGroups(), fetchExercises()]).then(() => {
       fetchCourse();
     });
@@ -167,11 +172,11 @@ const CourseForm: React.FC = () => {
         date: course.date,
         time: course.time,
         level: course.level,
-        MaxParticipants: course.MaxParticipants,
         groupId: course.groupId,
-        exercises: selectedExercises.map(ex => ex.id), // ✅ Ajout des IDs des exercices sélectionnés
+        exercises: selectedExercises.map(ex => ex.id),
         createdBy: user.uid,
         createdAt: isEditMode ? course.createdAt : new Date(),
+        isActive: course.isActive,
         Participants: [],
       };
 
@@ -292,15 +297,6 @@ const CourseForm: React.FC = () => {
                 ))}
               </TextField>
             </FormControl>
-            <FormControl fullWidth margin="normal">
-              <FormLabel>Participants max *</FormLabel>
-              <TextField
-                type="number"
-                value={course.MaxParticipants}
-                onChange={(e) => setCourse({ ...course, MaxParticipants: Math.max(1, Number(e.target.value)) })}
-                variant="outlined"
-              />
-            </FormControl>
           </Box>
 
           <FormControl fullWidth margin="normal">
@@ -319,7 +315,18 @@ const CourseForm: React.FC = () => {
             </TextField>
           </FormControl>
 
-          {/* ✅ Champ Exercices : Sélection multiple */}
+          <FormControl fullWidth margin="normal">
+            <FormLabel>Séance active</FormLabel>
+            <Select
+              value={course.isActive ? 'true' : 'false'}
+              onChange={(e) => setCourse({ ...course, isActive: e.target.value === 'true' })}
+              variant="outlined"
+            >
+              <MenuItem value="true">Oui (les membres du groupe y auront accès)</MenuItem>
+              <MenuItem value="false">Non (la séance n'est pas encore accessible)</MenuItem>
+            </Select>
+          </FormControl>
+
           <FormControl fullWidth margin="normal">
             <FormLabel>Exercices</FormLabel>
             {exercises.length === 0 ? (
@@ -330,11 +337,20 @@ const CourseForm: React.FC = () => {
               <Autocomplete
                 multiple
                 options={exercises}
-                getOptionLabel={(option) => option.name}
+                getOptionLabel={(option) => `${option.name} (${option.type === 'data' ? 'Données' : 'Validation'})`}
                 value={selectedExercises}
                 onChange={(_event, newValue) => {
                   setSelectedExercises(newValue);
                 }}
+                renderOption={(props, option) => (
+                  <li {...props}>
+                    <Checkbox checked={selectedExercises.some(ex => ex.id === option.id)} />
+                    <ListItemText
+                      primary={option.name}
+                      secondary={`Type: ${option.type === 'data' ? 'Données personnalisées' : 'Validation (réussi/échoué)'}`}
+                    />
+                  </li>
+                )}
                 renderInput={(params) => (
                   <TextField
                     {...params}

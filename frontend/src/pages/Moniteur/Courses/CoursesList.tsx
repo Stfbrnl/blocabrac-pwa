@@ -28,6 +28,7 @@ import {
   DialogActions,
   CircularProgress,
   Tooltip,
+  Chip,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -53,11 +54,10 @@ interface Course {
   date: Date;
   time: string;
   level: string;
-  MaxParticipants: number;
-  Participants?: string[]; // ✅ Ajout de la propriété Participants
   groupId: string;
   createdBy: string;
   createdAt: Date;
+  isActive: boolean; // ✅ Ajout de isActive
 }
 
 const CoursesList: React.FC = () => {
@@ -90,6 +90,7 @@ const CoursesList: React.FC = () => {
             ...doc.data(),
             date: convertFirestoreDate(doc.data().date),
             createdAt: convertFirestoreDate(doc.data().createdAt),
+            isActive: doc.data().isActive || false, // ✅ Chargement de isActive
           } as Course);
         });
         setCourses(coursesData);
@@ -157,7 +158,7 @@ const CoursesList: React.FC = () => {
                 <TableCell>Date</TableCell>
                 <TableCell>Heure</TableCell>
                 <TableCell>Niveau</TableCell>
-                <TableCell>Participants</TableCell>
+                <TableCell>Statut</TableCell> {/* ✅ Remplacement de Participants par Statut */}
                 <TableCell>Actions</TableCell>
               </TableRow>
             </TableHead>
@@ -176,7 +177,10 @@ const CoursesList: React.FC = () => {
                     <TableCell>{course.time}</TableCell>
                     <TableCell>{course.level}</TableCell>
                     <TableCell>
-                      {(course.Participants?.length || 0)}/{course.MaxParticipants}
+                      <Chip
+                        label={course.isActive ? "Active" : "Inactive"}
+                        color={course.isActive ? "success" : "default"}
+                      />
                     </TableCell>
                     <TableCell>
                       <Tooltip title="Voir les détails">

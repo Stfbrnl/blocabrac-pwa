@@ -3,12 +3,12 @@ import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '../../../services/firebaseConfig';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  collection, query, where, getDocs, doc, setDoc
+  collection, query, where, getDocs, doc, setDoc, getDoc
 } from 'firebase/firestore';
 import {
   Container, Typography, Box, CircularProgress, Alert,
   Paper, Card, CardContent, CardMedia, Button,
-  FormControl, InputLabel, Select, MenuItem, Rating, Chip
+  FormControl, InputLabel, Select, MenuItem, Rating, Chip, TextField
 } from '@mui/material';
 
 // Couleurs des niveaux
@@ -24,6 +24,8 @@ interface Exercise {
   difficulty: string;
   instructions?: string;
   image_base64?: string;
+  type?: 'validation' | 'data';
+  dataFields?: { label: string; type: 'number' | 'text' | 'time' }[];
 }
 
 interface Session {
@@ -44,9 +46,10 @@ const ClientCourseSession: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [validationResults, setValidationResults] = useState<Record<string, {
-    success: boolean;
-    attempts: number;
-    rating: number;
+    success?: boolean;
+    attempts?: number;
+    rating?: number;
+    data?: Record<string, string | number>;
   }>>({});
   const navigate = useNavigate();
 
@@ -56,24 +59,53 @@ const ClientCourseSession: React.FC = () => {
     const fetchSession = async () => {
       try {
         setLoading(true);
-        const docSnapshot = await getDocs(
-          query(collection(db, 'courses'), where('__name__', '==', sessionId))
-        );
-        if (docSnapshot.empty) {
+        const docRef = doc(db, 'courses', sessionId);
+        const docSnap = await getDoc(docRef);
+
+        if (!docSnap.exists()) {
           setError("Séance introuvable.");
           return;
         }
-        const sessionData = docSnapshot.docs[0];
+
+        const sessionData = docSnap.data();
         const session: Session = {
-          id: sessionData.id,
-          name: sessionData.data().name || '',
-          date: sessionData.data().date || '',
-          moniteurId: sessionData.data().moniteurId || '',
-          groupId: sessionData.data().groupId || '',
-          isActive: sessionData.data().isActive || false,
-          exercises: sessionData.data().exercises || []
+          id: docSnap.id,
+          name: sessionData.name || sessionData.title || '',
+          date: sessionData.date || '',
+          moniteurId: sessionData.moniteurId || sessionData.createdBy || '',
+          groupId: sessionData.groupId || '',
+          isActive: sessionData.isActive || false,
+          exercises: sessionData.exercises?.map((ex: any) => ({
+            id: ex.id || ex,
+            name: ex.name || '',
+            description: ex.description || '',
+            difficulty: ex.difficulty || '',
+            instructions: ex.instructions || '',
+            image_base64: ex.image_base64 || '',
+            type: ex.type || 'validation',
+            dataFields: ex.dataFields || []
+          })) || []
         };
         setSession(session);
+
+        // Charger les résultats existants pour cette séance
+        const resultsQuery = query(
+          collection(db, 'client_course_results'),
+          where('userId', '==', user.uid),
+          where('courseId', '==', sessionId)
+        );
+        const resultsSnapshot = await getDocs(resultsQuery);
+        const results: Record<string, any> = {};
+        resultsSnapshot.forEach(doc => {
+          const data = doc.data();
+          results[data.exerciseId] = {
+            success: data.success,
+            attempts: data.attempts,
+            rating: data.rating,
+            data: data.data || {}
+          };
+        });
+        setValidationResults(results);
       } catch (err: any) {
         setError(`Erreur: ${err.message}`);
         console.error("Erreur Firestore:", err);
@@ -85,10 +117,17 @@ const ClientCourseSession: React.FC = () => {
     fetchSession();
   }, [user, sessionId, loadingAuth]);
 
-  const handleValidateExercise = (exerciseId: string, success: boolean, attempts: number, rating: number) => {
+  const handleValidateExercise = (
+    exerciseId: string,
+    field: string,
+    value: boolean | number | Record<string, string | number>
+  ) => {
     setValidationResults(prev => ({
       ...prev,
-      [exerciseId]: { success, attempts, rating }
+      [exerciseId]: {
+        ...prev[exerciseId],
+        [field]: value
+      }
     }));
   };
 
@@ -101,9 +140,7 @@ const ClientCourseSession: React.FC = () => {
           userId: user.uid,
           courseId: session.id,
           exerciseId,
-          success: result.success,
-          attempts: result.attempts,
-          rating: result.rating,
+          ...result,
           createdAt: new Date().toISOString()
         });
       }
@@ -166,11 +203,7 @@ const ClientCourseSession: React.FC = () => {
       <Typography variant="h6" sx={{ mb: 2 }}>Exercices</Typography>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
         {session.exercises.map((exercise) => {
-          const result = validationResults[exercise.id] || {
-            success: false,
-            attempts: 1,
-            rating: 0
-          };
+          const result = validationResults[exercise.id] || {};
           return (
             <Card key={exercise.id} sx={{ width: 300, mb: 2 }}>
               <CardContent>
@@ -201,82 +234,115 @@ const ClientCourseSession: React.FC = () => {
                   />
                 )}
 
-                {/* Validation (uniquement pour les séances du jour) */}
+                {/* Validation ou données personnalisées */}
                 {isTodaySession ? (
                   <>
-                    <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
-                      <Button
-                        variant={result.success ? "contained" : "outlined"}
-                        color="success"
-                        size="small"
-                        onClick={() => handleValidateExercise(
-                          exercise.id,
-                          true,
-                          result.attempts,
-                          result.rating
-                        )}
-                      >
-                        ✅ Réussi
-                      </Button>
-                      <Button
-                        variant={!result.success ? "contained" : "outlined"}
-                        color="error"
-                        size="small"
-                        onClick={() => handleValidateExercise(
-                          exercise.id,
-                          false,
-                          result.attempts,
-                          result.rating
-                        )}
-                      >
-                        ❌ Échoué
-                      </Button>
-                    </Box>
-                    <FormControl fullWidth sx={{ mb: 1 }}>
-                      <InputLabel>Nombre d'essais</InputLabel>
-                      <Select
-                        value={result.attempts}
-                        onChange={(e) => handleValidateExercise(
-                          exercise.id,
-                          result.success,
-                          e.target.value as number,
-                          result.rating
-                        )}
-                        label="Nombre d'essais"
-                      >
-                        {Array.from({ length: 15 }, (_, i) => i + 1).map(num => (
-                          <MenuItem key={num} value={num}>
-                            {num} essai{num > 1 ? 's' : ''}
-                          </MenuItem>
+                    {exercise.type === 'validation' ? (
+                      <>
+                        <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
+                          <Button
+                            variant={result.success ? "contained" : "outlined"}
+                            color="success"
+                            size="small"
+                            onClick={() => handleValidateExercise(
+                              exercise.id,
+                              'success',
+                              true
+                            )}
+                          >
+                            ✅ Réussi
+                          </Button>
+                          <Button
+                            variant={!result.success ? "contained" : "outlined"}
+                            color="error"
+                            size="small"
+                            onClick={() => handleValidateExercise(
+                              exercise.id,
+                              'success',
+                              false
+                            )}
+                          >
+                            ❌ Échoué
+                          </Button>
+                        </Box>
+                        <FormControl fullWidth sx={{ mb: 1 }}>
+                          <InputLabel>Nombre d'essais</InputLabel>
+                          <Select
+                            value={result.attempts || 1}
+                            onChange={(e) => handleValidateExercise(
+                              exercise.id,
+                              'attempts',
+                              e.target.value as number
+                            )}
+                            label="Nombre d'essais"
+                          >
+                            {Array.from({ length: 15 }, (_, i) => i + 1).map(num => (
+                              <MenuItem key={num} value={num}>
+                                {num} essai{num > 1 ? 's' : ''}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                          <Typography>Note: </Typography>
+                          <Rating
+                            name={`rating-${exercise.id}`}
+                            value={result.rating || 0}
+                            onChange={(e, newValue) => handleValidateExercise(
+                              exercise.id,
+                              'rating',
+                              newValue || 0
+                            )}
+                          />
+                        </Box>
+                      </>
+                    ) : (
+                      // Type 'data' : Champs personnalisés
+                      <Box sx={{ mt: 1 }}>
+                        {exercise.dataFields?.map((field, index) => (
+                          <TextField
+                            key={index}
+                            label={field.label}
+                            type={field.type === 'number' ? 'number' : field.type === 'time' ? 'text' : 'text'}
+                            value={result.data?.[field.label] || ''}
+                            onChange={(e) => handleValidateExercise(
+                              exercise.id,
+                              'data',
+                              { ...result.data, [field.label]: field.type === 'number' ? Number(e.target.value) : e.target.value }
+                            )}
+                            fullWidth
+                            sx={{ mb: 1 }}
+                            slotProps={{ inputLabel: { shrink: true } }} // ✅ Correction MUI v9
+                          />
                         ))}
-                      </Select>
-                    </FormControl>
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      <Typography>Note: </Typography>
-                      <Rating
-                        name={`rating-${exercise.id}`}
-                        value={result.rating}
-                        onChange={(e, newValue) => handleValidateExercise(
-                          exercise.id,
-                          result.success,
-                          result.attempts,
-                          newValue || 0
-                        )}
-                      />
-                    </Box>
+                      </Box>
+                    )}
                   </>
                 ) : (
                   // ✅ Séance archivée : affichage en lecture seule
                   <Box sx={{ mt: 1 }}>
-                    <Typography variant="body2">
-                      <strong>Statut:</strong> {result.success ? '✅ Réussi' : '❌ Échoué'}
-                    </Typography>
-                    <Typography variant="body2">
-                      <strong>Essais:</strong> {result.attempts}
-                    </Typography>
-                    <Typography variant="body2">
-                      <strong>Note:</strong> {result.rating}/5
-                    </Typography>
+                    {exercise.type === 'validation' ? (
+                      <>
+                        <Typography variant="body2">
+                          <strong>Statut:</strong> {result.success ? '✅ Réussi' : '❌ Échoué'}
+                        </Typography>
+                        <Typography variant="body2">
+                          <strong>Essais:</strong> {result.attempts || 'Non renseigné'}
+                        </Typography>
+                        <Typography variant="body2">
+                          <strong>Note:</strong> {result.rating || 'Non noté'}/5
+                        </Typography>
+                      </>
+                    ) : (
+                      // Affichage des données personnalisées
+                      <>
+                        {exercise.dataFields?.map((field, index) => (
+                          <Typography key={index} variant="body2">
+                            <strong>{field.label}:</strong> {result.data?.[field.label] || 'Non renseigné'}
+                          </Typography>
+                        ))}
+                      </>
+                    )}
                   </Box>
                 )}
               </CardContent>
