@@ -6,9 +6,10 @@ import {
 } from 'firebase/firestore';
 import {
   Container, Typography, Box, CircularProgress, Alert,
-  Paper, Grid, Card, CardContent, Button
+  Card, CardContent, Button, Grid
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
+import { Mail as MailIcon } from '@mui/icons-material';
 
 const levelColors: Record<string, string> = {
   jaune: '#FFFF00', vert: '#00FF00', bleu: '#0000FF', violet: '#800080',
@@ -102,14 +103,12 @@ const ClientCourses: React.FC = () => {
           allSessions.push(...groupSessions);
         }
 
-        // Filtrer les séances accessibles (date + heure ≤ maintenant)
         const now = new Date();
         const accessibleSessions = allSessions.filter(session => {
           const sessionDateTime = new Date(session.date + 'T' + session.time);
           return sessionDateTime <= now;
         });
 
-        // Trier les séances par date/heure (la plus récente en premier)
         const sortedSessions = accessibleSessions.sort((a, b) => {
           const dateA = new Date(a.date + 'T' + a.time);
           const dateB = new Date(b.date + 'T' + b.time);
@@ -163,13 +162,21 @@ const ClientCourses: React.FC = () => {
                   <Typography sx={{ mt: 1 }}>
                     <strong>Exercices:</strong> {session.exercises.length}
                   </Typography>
-                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2 }}>
                     <Button
                       variant="contained"
                       color="primary"
                       onClick={() => navigate(`/client/courses/session/${session.id}`)}
                     >
                       Valider les exercices
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      color="info"
+                      startIcon={<MailIcon />}
+                      onClick={() => navigate(`/client/messages?moniteurId=${session.moniteurId}`)}
+                    >
+                      Messages
                     </Button>
                   </Box>
                 </CardContent>
@@ -196,12 +203,20 @@ const ClientCourses: React.FC = () => {
                   <Typography sx={{ mt: 1 }}>
                     <strong>Exercices:</strong> {session.exercises.length}
                   </Typography>
-                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2 }}>
                     <Button
                       variant="outlined"
                       onClick={() => navigate(`/client/courses/session/${session.id}`)}
                     >
                       Voir les détails
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      color="info"
+                      startIcon={<MailIcon />}
+                      onClick={() => navigate(`/client/messages?moniteurId=${session.moniteurId}`)}
+                    >
+                      Messages
                     </Button>
                   </Box>
                 </CardContent>
