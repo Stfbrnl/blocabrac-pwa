@@ -6,7 +6,7 @@ import {
 } from 'firebase/firestore';
 import {
   Container, Typography, Box, CircularProgress, Alert,
-  Card, CardContent, Button, Grid
+  Paper, Grid, Card, CardContent, Button
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { Mail as MailIcon } from '@mui/icons-material';
@@ -144,7 +144,18 @@ const ClientCourses: React.FC = () => {
 
   return (
     <Container maxWidth="lg">
-      <Typography variant="h4" sx={{ mt: 4, mb: 2 }}>Mes Cours</Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography variant="h4" sx={{ mt: 4 }}>Mes Cours</Typography>
+        <Button
+          variant="contained"
+          color="info"
+          startIcon={<MailIcon />}
+          onClick={() => navigate('/client/messages')}
+        >
+          Messages avec mon moniteur
+        </Button>
+      </Box>
+
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
       <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>Séances du jour</Typography>
@@ -162,21 +173,13 @@ const ClientCourses: React.FC = () => {
                   <Typography sx={{ mt: 1 }}>
                     <strong>Exercices:</strong> {session.exercises.length}
                   </Typography>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
                     <Button
                       variant="contained"
                       color="primary"
                       onClick={() => navigate(`/client/courses/session/${session.id}`)}
                     >
                       Valider les exercices
-                    </Button>
-                    <Button
-                      variant="outlined"
-                      color="info"
-                      startIcon={<MailIcon />}
-                      onClick={() => navigate(`/client/messages?moniteurId=${session.moniteurId}`)}
-                    >
-                      Messages
                     </Button>
                   </Box>
                 </CardContent>
@@ -203,20 +206,12 @@ const ClientCourses: React.FC = () => {
                   <Typography sx={{ mt: 1 }}>
                     <strong>Exercices:</strong> {session.exercises.length}
                   </Typography>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
                     <Button
                       variant="outlined"
                       onClick={() => navigate(`/client/courses/session/${session.id}`)}
                     >
                       Voir les détails
-                    </Button>
-                    <Button
-                      variant="outlined"
-                      color="info"
-                      startIcon={<MailIcon />}
-                      onClick={() => navigate(`/client/messages?moniteurId=${session.moniteurId}`)}
-                    >
-                      Messages
                     </Button>
                   </Box>
                 </CardContent>

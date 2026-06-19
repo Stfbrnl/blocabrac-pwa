@@ -10,6 +10,7 @@ import {
   serverTimestamp,
   doc,
   getDocs,
+  orderBy,
 } from 'firebase/firestore';
 import {
   Container,
@@ -34,8 +35,10 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Badge
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
+import { Mail as MailIcon } from '@mui/icons-material';
 
 interface Message {
   id: string;
@@ -43,9 +46,9 @@ interface Message {
   content: string;
   senderId: string;
   senderName: string;
-  recipientIds: string[];
+  receiverId: string;
   createdAt: Date;
-  readBy: string[];
+  isRead: boolean;
 }
 
 interface User {
@@ -65,6 +68,7 @@ const MoniteurScreen: React.FC = () => {
   const [recipients, setRecipients] = useState<string[]>([]);
   const [allClients, setAllClients] = useState<User[]>([]);
   const [success, setSuccess] = useState<string | null>(null);
+  const [unreadCount, setUnreadCount] = useState<number>(0);
   const navigate = useNavigate();
 
   // Charger les clients
@@ -73,7 +77,7 @@ const MoniteurScreen: React.FC = () => {
 
     const fetchClients = async () => {
       try {
-        const usersQuery = query(collection(db, 'users'));
+        const usersQuery = query(collection(db, 'users'), where('role', '==', 'client'));
         const querySnapshot = await getDocs(usersQuery);
         const clients: User[] = querySnapshot.docs.map((doc) => ({
           id: doc.id,
@@ -86,18 +90,33 @@ const MoniteurScreen: React.FC = () => {
       }
     };
 
+    // Charger les messages reçus (où le moniteur est le destinataire)
     const unsubscribe = onSnapshot(
-      query(collection(db, 'messages'), where('recipientIds', 'array-contains', user?.uid || '')),
+      query(
+        collection(db, 'messages'),
+        where('receiverId', '==', user.uid),
+        orderBy('createdAt', 'desc')
+      ),
       (querySnapshot) => {
         const messagesData: Message[] = [];
+        let unread = 0;
         querySnapshot.forEach((doc) => {
-          messagesData.push({
+          const data = doc.data();
+          const message: Message = {
             id: doc.id,
-            ...doc.data(),
-            createdAt: doc.data().createdAt?.toDate() || new Date(),
-          } as Message);
+            title: data.title || 'Message sans titre',
+            content: data.content || '',
+            senderId: data.senderId || '',
+            senderName: data.senderName || data.senderId,
+            receiverId: data.receiverId || '',
+            createdAt: data.createdAt?.toDate() || new Date(),
+            isRead: data.isRead || false,
+          };
+          messagesData.push(message);
+          if (!message.isRead) unread++;
         });
         setMessages(messagesData);
+        setUnreadCount(unread);
         setIsLoading(false);
       }
     );
@@ -113,17 +132,19 @@ const MoniteurScreen: React.FC = () => {
     }
 
     try {
-      await addDoc(collection(db, 'messages'), {
-        title: messageTitle,
-        content: messageContent,
-        senderId: user?.uid || '',
-        senderName: user?.displayName || 'Moniteur',
-        recipientIds: recipients,
-        createdAt: serverTimestamp(),
-        readBy: [],
-      });
+      for (const recipientId of recipients) {
+        await addDoc(collection(db, 'messages'), {
+          title: messageTitle,
+          content: messageContent,
+          senderId: user?.uid || '',
+          senderName: user?.displayName || 'Moniteur',
+          receiverId: recipientId,
+          createdAt: serverTimestamp(),
+          isRead: false,
+        });
+      }
 
-      setSuccess('Message envoyé avec succès !');
+      setSuccess('Message(s) envoyé(s) avec succès !');
       setOpenSendDialog(false);
       setMessageTitle('');
       setMessageContent('');
@@ -158,13 +179,22 @@ const MoniteurScreen: React.FC = () => {
         {/* Section Messages */}
         <Box sx={{ mb: 4 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-            <Typography variant="h5">Messages</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <MailIcon color="primary" sx={{ fontSize: 32 }} />
+              <Typography variant="h5">Messages</Typography>
+              {unreadCount > 0 && (
+                <Badge color="error" badgeContent={unreadCount}>
+                  <MailIcon color="action" />
+                </Badge>
+              )}
+            </Box>
             <Button
               variant="contained"
               color="primary"
-              onClick={() => setOpenSendDialog(true)}
+              onClick={() => navigate('/moniteur/messages')}
+              startIcon={<MailIcon />}
             >
-              Envoyer un message
+              Voir tous les messages
             </Button>
           </Box>
 
@@ -173,17 +203,34 @@ const MoniteurScreen: React.FC = () => {
               Aucun message reçu.
             </Typography>
           ) : (
-            messages.map((message) => (
-              <Card key={message.id} sx={{ mb: 2 }}>
-                <CardHeader
-                  title={message.title}
-                  subheader={`De: ${message.senderName} - ${message.createdAt.toLocaleString('fr-FR')}`}
-                />
-                <CardContent>
-                  <Typography variant="body2">{message.content}</Typography>
-                </CardContent>
-              </Card>
-            ))
+            <Box sx={{ maxHeight: '400px', overflow: 'auto' }}>
+              {messages.slice(0, 3).map((message) => (
+                <Card key={message.id} sx={{ mb: 2 }}>
+                  <CardHeader
+                    title={message.title}
+                    subheader={`De: ${message.senderName} - ${message.createdAt.toLocaleString('fr-FR')}`}
+                    action={
+                      !message.isRead && (
+                        <Chip label="Nouveau" color="error" size="small" />
+                      )
+                    }
+                  />
+                  <CardContent>
+                    <Typography variant="body2">{message.content}</Typography>
+                  </CardContent>
+                </Card>
+              ))}
+              {messages.length > 3 && (
+                <Button
+                  variant="outlined"
+                  color="primary"
+                  onClick={() => navigate('/moniteur/messages')}
+                  sx={{ mt: 2 }}
+                >
+                  Voir tous les messages ({messages.length})
+                </Button>
+              )}
+            </Box>
           )}
         </Box>
 
