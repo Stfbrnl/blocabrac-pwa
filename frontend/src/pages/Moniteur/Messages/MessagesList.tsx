@@ -41,8 +41,7 @@ import {
   MenuItem,
   Checkbox,
   ListItemText,
-  OutlinedInput,
-  Collapse
+  OutlinedInput
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -101,46 +100,8 @@ const MessagesList: React.FC = () => {
   const [recipientType, setRecipientType] = useState<'client' | 'group'>('client');
   const navigate = useNavigate();
 
-  // Charger les clients et les groupes
-  useEffect(() => {
-    if (!user?.uid) return;
-    const fetchData = async () => {
-      try {
-        // Charger les clients
-        const clientsQuery = query(
-          collection(db, 'users'),
-          where('role', '==', 'client')
-        );
-        const clientsSnapshot = await getDocs(clientsQuery);
-        const clientsList = clientsSnapshot.docs.map(doc => ({
-          id: doc.id,
-          displayName: doc.data().displayName || doc.data().email || doc.id,
-          email: doc.data().email || ''
-        }));
-        setClients(clientsList);
-
-        // Charger les groupes du moniteur
-        const groupsQuery = query(
-          collection(db, 'Groups'),
-          where('moniteurId', '==', user.uid)
-        );
-        const groupsSnapshot = await getDocs(groupsQuery);
-        const groupsList = groupsSnapshot.docs.map(doc => ({
-          id: doc.id,
-          name: doc.data().name || '',
-          moniteurId: doc.data().moniteurId || '',
-          students: doc.data().students || []
-        }));
-        setGroups(groupsList);
-      } catch (err) {
-        console.error("Erreur lors du chargement des données:", err);
-      }
-    };
-    fetchData();
-  }, [user]);
-
-  // Fonction de chargement des messages (accessible dans tout le composant)
-  const loadMessages = async () => {
+  // Fonction pour charger les messages - ACCESSIBLE PARTOUT DANS LE COMPOSANT
+  const fetchMessages = async () => {
     if (!user?.uid) return;
 
     try {
@@ -194,19 +155,57 @@ const MessagesList: React.FC = () => {
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
       setMessages(allMessages);
-      setIsLoading(false);
     } catch (err: any) {
       setError(`Erreur: ${err.message}`);
       console.error("Erreur Firestore:", err);
+    } finally {
       setIsLoading(false);
     }
   };
 
-  // Charger les messages (sans orderBy pour éviter les index)
+  // Charger les clients et les groupes
   useEffect(() => {
     if (!user?.uid) return;
-    loadMessages();
-  }, [user, clients, groups]);
+    const fetchData = async () => {
+      try {
+        // Charger les clients
+        const clientsQuery = query(
+          collection(db, 'users'),
+          where('role', '==', 'client')
+        );
+        const clientsSnapshot = await getDocs(clientsQuery);
+        const clientsList = clientsSnapshot.docs.map(doc => ({
+          id: doc.id,
+          displayName: doc.data().displayName || doc.data().email || doc.id,
+          email: doc.data().email || ''
+        }));
+        setClients(clientsList);
+
+        // Charger les groupes du moniteur
+        const groupsQuery = query(
+          collection(db, 'Groups'),
+          where('moniteurId', '==', user.uid)
+        );
+        const groupsSnapshot = await getDocs(groupsQuery);
+        const groupsList = groupsSnapshot.docs.map(doc => ({
+          id: doc.id,
+          name: doc.data().name || '',
+          moniteurId: doc.data().moniteurId || '',
+          students: doc.data().students || []
+        }));
+        setGroups(groupsList);
+      } catch (err) {
+        console.error("Erreur lors du chargement des données:", err);
+        setIsLoading(false);
+      }
+    };
+    fetchData();
+  }, [user]);
+
+  // Charger les messages quand clients ou groups changent
+  useEffect(() => {
+    fetchMessages();
+  }, [clients, groups, user]); // ESLint peut avertir, mais c'est normal ici
 
   const handleToggleExpand = (messageId: string) => {
     setMessages(prevMessages =>
@@ -225,31 +224,24 @@ const MessagesList: React.FC = () => {
       setSuccess('Message supprimé avec succès !');
       setOpenDeleteDialog(false);
       setMessageToDelete(null);
-      await loadMessages();
+      await fetchMessages();
     } catch (error) {
       setError(`Erreur lors de la suppression du message : ${error}`);
       setOpenDeleteDialog(false);
     }
   };
 
+  // CORRECTION: Fonction simplifiée pour marquer comme lu
   const handleMarkAsRead = async (messageId: string) => {
     if (!user) return;
     try {
       const messageRef = doc(db, 'messages', messageId);
-      // Vérifier que le message appartient bien au moniteur
-      const messageDoc = await getDocs(query(collection(db, 'messages'), where('__name__', '==', messageId)));
-      if (!messageDoc.empty) {
-        const messageData = messageDoc.docs[0].data();
-        if (messageData.receiverId === user.uid) {
-          await updateDoc(messageRef, { isRead: true });
-          setSuccess('Message marqué comme lu !');
-          await loadMessages();
-        } else {
-          setError('Vous ne pouvez pas marquer ce message comme lu.');
-        }
-      }
+      await updateDoc(messageRef, { isRead: true });
+      setSuccess('Message marqué comme lu !');
+      await fetchMessages();
     } catch (error) {
       setError(`Erreur lors de la mise à jour : ${error}`);
+      console.error("Détails:", error);
     }
   };
 
@@ -276,7 +268,7 @@ const MessagesList: React.FC = () => {
       setOpenReplyDialog(false);
       setReplyContent('');
       setSelectedMessage(null);
-      await loadMessages();
+      await fetchMessages();
     } catch (err: any) {
       setError(`Erreur: ${err.message}`);
     }
@@ -308,7 +300,7 @@ const MessagesList: React.FC = () => {
       setNewMessageTitle('');
       setNewMessageContent('');
       setRecipients([]);
-      await loadMessages();
+      await fetchMessages();
     } catch (err: any) {
       setError(`Erreur: ${err.message}`);
     }
@@ -345,17 +337,8 @@ const MessagesList: React.FC = () => {
           </Button>
         </Box>
 
-        {error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
-          </Alert>
-        )}
-
-        {success && (
-          <Alert severity="success" sx={{ mb: 2 }}>
-            {success}
-          </Alert>
-        )}
+        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+        {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
 
         <TableContainer>
           <Table>
@@ -373,9 +356,7 @@ const MessagesList: React.FC = () => {
             <TableBody>
               {messages.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} align="center">
-                    Aucun message trouvé.
-                  </TableCell>
+                  <TableCell colSpan={7} align="center">Aucun message trouvé.</TableCell>
                 </TableRow>
               ) : (
                 messages.map((message) => {
@@ -386,61 +367,36 @@ const MessagesList: React.FC = () => {
                     <React.Fragment key={message.id}>
                       <TableRow hover>
                         <TableCell>
-                          <IconButton
-                            size="small"
-                            onClick={() => handleToggleExpand(message.id)}
-                          >
+                          <IconButton size="small" onClick={() => handleToggleExpand(message.id)}>
                             {message.expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
                           </IconButton>
                         </TableCell>
                         <TableCell>{message.title}</TableCell>
-                        <TableCell>
-                          {isReceived ? `De: ${displayName}` : `À: ${displayName}`}
-                        </TableCell>
+                        <TableCell>{isReceived ? `De: ${displayName}` : `À: ${displayName}`}</TableCell>
                         <TableCell>{message.createdAt.toLocaleDateString('fr-FR')}</TableCell>
                         <TableCell>
-                          <Chip
-                            label={isReceived ? 'Reçu' : 'Envoyé'}
-                            color={isReceived ? 'success' : 'primary'}
-                            size="small"
-                          />
+                          <Chip label={isReceived ? 'Reçu' : 'Envoyé'} color={isReceived ? 'success' : 'primary'} size="small" />
                         </TableCell>
                         <TableCell>
-                          <Chip
-                            label={message.isRead ? 'Lu' : 'Non lu'}
-                            color={message.isRead ? 'success' : 'default'}
-                            size="small"
-                          />
+                          <Chip label={message.isRead ? 'Lu' : 'Non lu'} color={message.isRead ? 'success' : 'default'} size="small" />
                         </TableCell>
                         <TableCell>
                           {!message.isRead && isReceived && (
                             <Tooltip title="Marquer comme lu">
-                              <IconButton
-                                color="primary"
-                                onClick={() => handleMarkAsRead(message.id)}
-                              >
+                              <IconButton color="primary" onClick={() => handleMarkAsRead(message.id)}>
                                 <CheckIcon />
                               </IconButton>
                             </Tooltip>
                           )}
                           {isReceived && (
                             <Tooltip title="Répondre">
-                              <IconButton
-                                color="info"
-                                onClick={() => handleReply(message)}
-                              >
+                              <IconButton color="info" onClick={() => handleReply(message)}>
                                 <ReplyIcon />
                               </IconButton>
                             </Tooltip>
                           )}
-                          <Tooltip title="Supprimer le message">
-                            <IconButton
-                              color="error"
-                              onClick={() => {
-                                setMessageToDelete(message.id);
-                                setOpenDeleteDialog(true);
-                              }}
-                            >
+                          <Tooltip title="Supprimer">
+                            <IconButton color="error" onClick={() => { setMessageToDelete(message.id); setOpenDeleteDialog(true); }}>
                               <DeleteIcon />
                             </IconButton>
                           </Tooltip>
@@ -464,19 +420,12 @@ const MessagesList: React.FC = () => {
         </TableContainer>
       </Paper>
 
-      {/* Dialogues (inchangés) */}
       <Dialog open={openDeleteDialog} onClose={() => setOpenDeleteDialog(false)}>
         <DialogTitle>Supprimer le message</DialogTitle>
-        <DialogContent>
-          Êtes-vous sûr de vouloir supprimer ce message ?
-          <br />
-          <strong>Cette action est irréversible.</strong>
-        </DialogContent>
+        <DialogContent>Êtes-vous sûr de vouloir supprimer ce message ?<br /><strong>Cette action est irréversible.</strong></DialogContent>
         <DialogActions>
           <Button onClick={() => setOpenDeleteDialog(false)}>Annuler</Button>
-          <Button onClick={() => messageToDelete && handleDelete(messageToDelete)} color="error" variant="contained" autoFocus>
-            Supprimer
-          </Button>
+          <Button onClick={() => messageToDelete && handleDelete(messageToDelete)} color="error" variant="contained" autoFocus>Supprimer</Button>
         </DialogActions>
       </Dialog>
 
@@ -487,23 +436,13 @@ const MessagesList: React.FC = () => {
             <>
               <Typography sx={{ mb: 2 }}><strong>De:</strong> {selectedMessage.senderName}</Typography>
               <Typography sx={{ mb: 2 }}><strong>Message:</strong> {selectedMessage.content}</Typography>
-              <TextField
-                label="Votre réponse"
-                multiline
-                rows={4}
-                fullWidth
-                value={replyContent}
-                onChange={(e) => setReplyContent(e.target.value)}
-                placeholder="Saisissez votre réponse..."
-              />
+              <TextField label="Votre réponse" multiline rows={4} fullWidth value={replyContent} onChange={(e) => setReplyContent(e.target.value)} placeholder="Saisissez votre réponse..." />
             </>
           )}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpenReplyDialog(false)}>Annuler</Button>
-          <Button onClick={handleSendReply} color="primary" variant="contained" disabled={!replyContent.trim()}>
-            Envoyer
-          </Button>
+          <Button onClick={handleSendReply} color="primary" variant="contained" disabled={!replyContent.trim()}>Envoyer</Button>
         </DialogActions>
       </Dialog>
 
@@ -556,9 +495,7 @@ const MessagesList: React.FC = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpenNewMessageDialog(false)}>Annuler</Button>
-          <Button onClick={handleSendNewMessage} color="primary" variant="contained" disabled={!newMessageTitle.trim() || !newMessageContent.trim() || recipients.length === 0}>
-            Envoyer
-          </Button>
+          <Button onClick={handleSendNewMessage} color="primary" variant="contained" disabled={!newMessageTitle.trim() || !newMessageContent.trim() || recipients.length === 0}>Envoyer</Button>
         </DialogActions>
       </Dialog>
 
