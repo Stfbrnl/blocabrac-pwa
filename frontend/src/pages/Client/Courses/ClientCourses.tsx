@@ -6,11 +6,10 @@ import {
 } from 'firebase/firestore';
 import {
   Container, Typography, Box, CircularProgress, Alert,
-  Card, CardContent, Button, Grid
+  Paper, Grid, Card, CardContent, Button
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 
-// Couleurs des niveaux (pour les exercices)
 const levelColors: Record<string, string> = {
   jaune: '#FFFF00', vert: '#00FF00', bleu: '#0000FF', violet: '#800080',
   rouge: '#FF0000', noir: '#000000', blanc: '#FFFFFF', rose: '#FFC0CB'
@@ -35,6 +34,7 @@ interface Session {
   id: string;
   name: string;
   date: string;
+  time: string;
   moniteurId: string;
   groupId: string;
   isActive: boolean;
@@ -56,7 +56,6 @@ const ClientCourses: React.FC = () => {
       try {
         setLoading(true);
 
-        // 1. Charger les groupes de l'utilisateur
         const groupsQuery = query(
           collection(db, 'Groups'),
           where('students', 'array-contains', user.uid)
@@ -70,7 +69,6 @@ const ClientCourses: React.FC = () => {
         }));
         setGroups(groupsData);
 
-        // 2. Charger toutes les séances des groupes de l'utilisateur
         const allSessions: Session[] = [];
         for (const group of groupsData) {
           const sessionsQuery = query(
@@ -79,21 +77,43 @@ const ClientCourses: React.FC = () => {
             orderBy('date', 'desc')
           );
           const sessionsSnapshot = await getDocs(sessionsQuery);
-          const groupSessions: Session[] = sessionsSnapshot.docs.map(doc => ({
-            id: doc.id,
-            name: doc.data().name || doc.data().title || '',
-            date: doc.data().date || '',
-            moniteurId: doc.data().moniteurId || doc.data().createdBy || '',
-            groupId: doc.data().groupId || '',
-            isActive: doc.data().isActive || false,
-            exercises: doc.data().exercises || []
-          }));
+          const groupSessions: Session[] = sessionsSnapshot.docs.map(doc => {
+            const date = doc.data().date;
+            let normalizedDate: string;
+            if (date && typeof date === 'object' && date.toDate) {
+              normalizedDate = date.toDate().toISOString().split('T')[0];
+            } else if (typeof date === 'string') {
+              normalizedDate = new Date(date).toISOString().split('T')[0];
+            } else {
+              normalizedDate = new Date().toISOString().split('T')[0];
+            }
+
+            return {
+              id: doc.id,
+              name: doc.data().name || doc.data().title || '',
+              date: normalizedDate,
+              time: doc.data().time || '00:00',
+              moniteurId: doc.data().moniteurId || doc.data().createdBy || '',
+              groupId: doc.data().groupId || '',
+              isActive: doc.data().isActive || false,
+              exercises: doc.data().exercises || []
+            };
+          });
           allSessions.push(...groupSessions);
         }
 
-        // 3. Trier les séances par date (la plus récente en premier)
-        const sortedSessions = allSessions.sort((a, b) => {
-          return new Date(b.date).getTime() - new Date(a.date).getTime();
+        // Filtrer les séances accessibles (date + heure ≤ maintenant)
+        const now = new Date();
+        const accessibleSessions = allSessions.filter(session => {
+          const sessionDateTime = new Date(session.date + 'T' + session.time);
+          return sessionDateTime <= now;
+        });
+
+        // Trier les séances par date/heure (la plus récente en premier)
+        const sortedSessions = accessibleSessions.sort((a, b) => {
+          const dateA = new Date(a.date + 'T' + a.time);
+          const dateB = new Date(b.date + 'T' + b.time);
+          return dateB.getTime() - dateA.getTime();
         });
         setSessions(sortedSessions);
       } catch (err: any) {
@@ -107,10 +127,9 @@ const ClientCourses: React.FC = () => {
     fetchData();
   }, [user, loadingAuth]);
 
-  // Séparer les séances en "Aujourd'hui" et "Archivées"
   const today = new Date().toISOString().split('T')[0];
-  const todaySessions = sessions.filter(session => session.date === today && session.isActive);
-  const archivedSessions = sessions.filter(session => session.date < today || !session.isActive);
+  const todaySessions = sessions.filter(session => session.date === today);
+  const archivedSessions = sessions.filter(session => session.date < today);
 
   if (loadingAuth || loading) {
     return (
@@ -129,8 +148,7 @@ const ClientCourses: React.FC = () => {
       <Typography variant="h4" sx={{ mt: 4, mb: 2 }}>Mes Cours</Typography>
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-      {/* Séances du jour */}
-      <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>Séance du jour</Typography>
+      <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>Séances du jour</Typography>
       {todaySessions.length > 0 ? (
         <Grid container spacing={2} sx={{ mb: 4 }}>
           {todaySessions.map((session) => (
@@ -138,7 +156,8 @@ const ClientCourses: React.FC = () => {
               <Card sx={{ height: '100%' }}>
                 <CardContent>
                   <Typography variant="h6">{session.name}</Typography>
-                  <Typography>Date: {new Date(session.date).toLocaleDateString()}</Typography>
+                  <Typography>Date: {new Date(session.date).toLocaleDateString('fr-FR')}</Typography>
+                  <Typography>Heure: {session.time}</Typography>
                   <Typography>Moniteur: {session.moniteurId}</Typography>
                   <Typography>Groupe: {groups.find(g => g.id === session.groupId)?.name || 'Inconnu'}</Typography>
                   <Typography sx={{ mt: 1 }}>
@@ -159,10 +178,9 @@ const ClientCourses: React.FC = () => {
           ))}
         </Grid>
       ) : (
-        <Typography sx={{ mb: 3 }}>Aucune séance du jour.</Typography>
+        <Typography sx={{ mb: 3 }}>Aucune séance aujourd'hui.</Typography>
       )}
 
-      {/* Séances archivées */}
       <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>Séances archivées</Typography>
       {archivedSessions.length > 0 ? (
         <Grid container spacing={2}>
@@ -171,7 +189,8 @@ const ClientCourses: React.FC = () => {
               <Card sx={{ height: '100%' }}>
                 <CardContent>
                   <Typography variant="h6">{session.name}</Typography>
-                  <Typography>Date: {new Date(session.date).toLocaleDateString()}</Typography>
+                  <Typography>Date: {new Date(session.date).toLocaleDateString('fr-FR')}</Typography>
+                  <Typography>Heure: {session.time}</Typography>
                   <Typography>Moniteur: {session.moniteurId}</Typography>
                   <Typography>Groupe: {groups.find(g => g.id === session.groupId)?.name || 'Inconnu'}</Typography>
                   <Typography sx={{ mt: 1 }}>

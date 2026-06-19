@@ -24,10 +24,6 @@ import {
   Snackbar,
   Alert,
   Autocomplete,
-  Chip,
-  RadioGroup,
-  FormControlLabel,
-  Radio,
   IconButton,
   Tooltip,
 } from '@mui/material';
@@ -44,8 +40,8 @@ interface Exercise {
   block?: string;
   createdBy: string;
   createdAt: Date;
-  type: 'validation' | 'data'; // Nouveau : type d'exercice
-  dataFields?: { label: string; type: 'number' | 'text' | 'time' }[]; // Champs personnalisés
+  type: 'validation' | 'data';
+  dataFields?: { label: string; type: 'number' | 'text' | 'time' }[];
 }
 
 interface Equipment {
@@ -71,10 +67,11 @@ const ExerciseForm: React.FC = () => {
     description: '',
     difficulty: 'Facile',
     category: 'Échauffement',
-    type: 'validation', // Par défaut : validation
+    type: 'data',
     createdBy: user?.uid || '',
     createdAt: new Date(),
   });
+
   const [equipmentOptions, setEquipmentOptions] = useState<Equipment[]>([]);
   const [selectedEquipment, setSelectedEquipment] = useState<string[]>([]);
   const [newEquipment, setNewEquipment] = useState<string>('');
@@ -84,7 +81,6 @@ const ExerciseForm: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Charger les équipements existants
   useEffect(() => {
     if (!user) return;
 
@@ -106,7 +102,6 @@ const ExerciseForm: React.FC = () => {
     fetchEquipment();
   }, [user]);
 
-  // Charger l'exercice existant (si mode édition)
   useEffect(() => {
     if (!user || !isEditMode || !exerciseId) return;
 
@@ -132,7 +127,6 @@ const ExerciseForm: React.FC = () => {
     fetchExercise();
   }, [user, isEditMode, exerciseId]);
 
-  // Ajouter un nouvel équipement à Firestore
   const handleAddEquipment = async () => {
     if (!newEquipment.trim()) return;
 
@@ -165,19 +159,16 @@ const ExerciseForm: React.FC = () => {
     }
   };
 
-  // Ajouter un champ de données personnalisé
   const handleAddDataField = () => {
     setDataFields([...dataFields, { label: '', type: 'number' }]);
   };
 
-  // Supprimer un champ de données personnalisé
   const handleRemoveDataField = (index: number) => {
     const newFields = [...dataFields];
     newFields.splice(index, 1);
     setDataFields(newFields);
   };
 
-  // Mettre à jour un champ de données personnalisé
   const handleUpdateDataField = (index: number, field: 'label' | 'type', value: string) => {
     const newFields = [...dataFields];
     newFields[index] = { ...newFields[index], [field]: value };
@@ -197,18 +188,23 @@ const ExerciseForm: React.FC = () => {
     setError(null);
 
     try {
-      const exerciseData = {
+      const exerciseData: any = {
         name: exercise.name.trim(),
         description: exercise.description,
         difficulty: exercise.difficulty,
         category: exercise.category,
-        equipment: selectedEquipment.length > 0 ? selectedEquipment : undefined,
-        block: exercise.block || null,
         type: exercise.type,
-        dataFields: exercise.type === 'data' ? dataFields : undefined,
         createdBy: user.uid,
         createdAt: isEditMode ? exercise.createdAt : new Date(),
       };
+
+      if (selectedEquipment.length > 0) {
+        exerciseData.equipment = selectedEquipment;
+      }
+
+      if (exercise.type === 'data' && dataFields.length > 0) {
+        exerciseData.dataFields = dataFields;
+      }
 
       if (isEditMode && exerciseId) {
         await updateDoc(doc(db, 'exercises', exerciseId), exerciseData);
@@ -247,25 +243,17 @@ const ExerciseForm: React.FC = () => {
         </Typography>
 
         <Box component="form" onSubmit={handleSubmit} noValidate>
-          {/* Type d'exercice */}
           <FormControl fullWidth margin="normal">
             <FormLabel>Type d'exercice *</FormLabel>
-            <RadioGroup
-              row
+            <TextField
+              select
               value={exercise.type}
               onChange={(e) => setExercise({ ...exercise, type: e.target.value as 'validation' | 'data' })}
+              variant="outlined"
             >
-              <FormControlLabel
-                value="validation"
-                control={<Radio />}
-                label="Validation (réussi/échoué)"
-              />
-              <FormControlLabel
-                value="data"
-                control={<Radio />}
-                label="Données personnalisées (ex: tractions, temps)"
-              />
-            </RadioGroup>
+              <MenuItem value="data">Données personnalisées (ex: nombre de tractions)</MenuItem>
+              <MenuItem value="validation">Validation (réussi/échoué)</MenuItem>
+            </TextField>
           </FormControl>
 
           <FormControl fullWidth margin="normal">
@@ -323,11 +311,10 @@ const ExerciseForm: React.FC = () => {
             </FormControl>
           </Box>
 
-          {/* Champ Équipement */}
           <FormControl fullWidth margin="normal">
             <FormLabel>Équipements</FormLabel>
             {equipmentOptions.length === 0 ? (
-              <Typography color="error" sx={{ mt: 1 }}>
+              <Typography color="textSecondary" sx={{ mt: 1 }}>
                 Aucun équipement disponible. Ajoutez-en un ci-dessous.
               </Typography>
             ) : (
@@ -340,14 +327,11 @@ const ExerciseForm: React.FC = () => {
                   onChange={(_event, newValue: string[]) => {
                     setSelectedEquipment(newValue);
                   }}
-                  onInputChange={(_, newInputValue) => {
-                    setNewEquipment(newInputValue);
-                  }}
                   renderInput={(params) => (
                     <TextField
                       {...params}
                       variant="outlined"
-                      placeholder="Ajoutez un ou plusieurs équipements (ex: Poutre 1, Poutre 2)"
+                      placeholder="Ajoutez un ou plusieurs équipements"
                     />
                   )}
                   filterSelectedOptions
@@ -367,7 +351,6 @@ const ExerciseForm: React.FC = () => {
             )}
           </FormControl>
 
-          {/* Champ Bloc (optionnel) */}
           {exercise.category === 'Bloc' && (
             <FormControl fullWidth margin="normal">
               <FormLabel>Description du bloc</FormLabel>
@@ -382,13 +365,12 @@ const ExerciseForm: React.FC = () => {
             </FormControl>
           )}
 
-          {/* Champs de données personnalisées (uniquement si type = 'data') */}
           {exercise.type === 'data' && (
             <FormControl fullWidth margin="normal">
               <FormLabel>Champs de données personnalisées</FormLabel>
               {dataFields.length === 0 ? (
                 <Typography color="textSecondary" sx={{ mt: 1 }}>
-                  Aucun champ défini. Ajoutez-en un pour collecter des données spécifiques (ex: nombre de tractions, temps de suspension).
+                  Aucun champ défini. Ajoutez-en un pour collecter des données spécifiques.
                 </Typography>
               ) : (
                 <Box sx={{ mt: 1 }}>
@@ -412,7 +394,7 @@ const ExerciseForm: React.FC = () => {
                       >
                         {fieldTypes.map((type) => (
                           <MenuItem key={type} value={type}>
-                            {type === 'number' ? 'Nombre' : type === 'time' ? 'Temps (hh:mm:ss)' : 'Texte'}
+                            {type === 'number' ? 'Nombre' : type === 'time' ? 'Temps' : 'Texte'}
                           </MenuItem>
                         ))}
                       </TextField>

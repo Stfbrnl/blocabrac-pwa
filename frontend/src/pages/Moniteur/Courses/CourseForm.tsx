@@ -28,9 +28,6 @@ import {
   Chip,
   Checkbox,
   ListItemText,
-  OutlinedInput,
-  InputLabel,
-  Select,
 } from '@mui/material';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -110,7 +107,7 @@ const CourseForm: React.FC = () => {
           exercisesData.push({
             id: doc.id,
             name: doc.data().name,
-            type: doc.data().type || 'validation',
+            type: doc.data().type || 'data',
           });
         });
         setExercises(exercisesData);
@@ -166,6 +163,13 @@ const CourseForm: React.FC = () => {
     setError(null);
 
     try {
+      // Calcul automatique de isActive en fonction de la date/heure
+      const courseDateTime = new Date(course.date);
+      const [hours, minutes] = course.time.split(':').map(Number);
+      courseDateTime.setHours(hours, minutes, 0, 0);
+      const now = new Date();
+      const shouldBeActive = courseDateTime <= now;
+
       const courseData = {
         title: course.title,
         description: course.description,
@@ -176,7 +180,7 @@ const CourseForm: React.FC = () => {
         exercises: selectedExercises.map(ex => ex.id),
         createdBy: user.uid,
         createdAt: isEditMode ? course.createdAt : new Date(),
-        isActive: course.isActive,
+        isActive: shouldBeActive,
         Participants: [],
       };
 
@@ -313,18 +317,6 @@ const CourseForm: React.FC = () => {
                 <MenuItem key={group.id} value={group.id}>{group.name}</MenuItem>
               ))}
             </TextField>
-          </FormControl>
-
-          <FormControl fullWidth margin="normal">
-            <FormLabel>Séance active</FormLabel>
-            <Select
-              value={course.isActive ? 'true' : 'false'}
-              onChange={(e) => setCourse({ ...course, isActive: e.target.value === 'true' })}
-              variant="outlined"
-            >
-              <MenuItem value="true">Oui (les membres du groupe y auront accès)</MenuItem>
-              <MenuItem value="false">Non (la séance n'est pas encore accessible)</MenuItem>
-            </Select>
           </FormControl>
 
           <FormControl fullWidth margin="normal">
