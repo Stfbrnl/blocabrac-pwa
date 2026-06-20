@@ -5,7 +5,7 @@
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "skipLibCheck": true,
-    "moduleResolution": "node",  // ✅ Remplace "node10" par "node"
+    "moduleResolution": "node",
     "strict": true,
     "jsx": "react-jsx",
     "esModuleInterop": true,
@@ -15,7 +15,8 @@
     "paths": {
       "@/*": ["src/*"]
     },
-    "ignoreDeprecations": "6.0"  // ✅ Désactive les avertissements de dépréciation
+    "types": ["vite/client"],
+    "ignoreDeprecations": "6.0"
   },
   "include": ["src"],
   "exclude": ["node_modules"]
