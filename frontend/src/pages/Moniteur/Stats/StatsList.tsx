@@ -40,7 +40,9 @@ import {
   Chip,
   SelectChangeEvent,
 } from '@mui/material';
-import { useNavigate } from 'react-router-dom';
+import { jsPDF } from 'jspdf';
+import * as html2canvas from 'html2canvas';
+import diplomaBackground from '../../../assets/diploma-background.png'; // Votre image de fond
 
 // Types pour les données
 interface User {
@@ -61,6 +63,11 @@ interface Course {
   id: string;
   title: string;
   groupId?: string;
+}
+
+interface Exercise {
+  id: string;
+  name: string;
 }
 
 interface Boulder {
@@ -99,11 +106,11 @@ interface ClientBadge {
 interface Diploma {
   id: string;
   userId: string;
-  userName?: string;
+  userName: string;
   type: string;
   awardedAt: Date;
   awardedBy: string;
-  awardedByName?: string;
+  awardedByName: string;
 }
 
 interface UserResult {
@@ -135,6 +142,7 @@ const StatsList: React.FC = () => {
   const [badges, setBadges] = useState<Badge[]>([]);
   const [clientBadges, setClientBadges] = useState<ClientBadge[]>([]);
   const [diplomas, setDiplomas] = useState<Diploma[]>([]);
+  const [exercises, setExercises] = useState<Exercise[]>([]);
 
   // États pour les filtres
   const [filters, setFilters] = useState<{
@@ -175,14 +183,13 @@ const StatsList: React.FC = () => {
   ]);
 
   // Fonction pour convertir un Timestamp ou Date en string
-  const formatDate = (date: Date | { seconds: number; nanoseconds: number } | any): string => {
-    if (date instanceof Date) {
-      return date.toLocaleDateString('fr-FR');
-    } else if (date?.seconds) {
-      return new Date(date.seconds * 1000).toLocaleDateString('fr-FR');
-    } else {
-      return 'N/A';
-    }
+  const formatDate = (date: any): string => {
+    if (!date) return 'N/A';
+    if (date instanceof Date) return date.toLocaleDateString('fr-FR');
+    if (date instanceof Timestamp) return date.toDate().toLocaleDateString('fr-FR');
+    if (date?.seconds) return new Date(date.seconds * 1000).toLocaleDateString('fr-FR');
+    if (typeof date === 'string' && date) return date;
+    return 'N/A';
   };
 
   // Récupérer les données
@@ -203,6 +210,15 @@ const StatsList: React.FC = () => {
           role: userDoc.data().role || '',
         }));
         setUsers(usersList);
+
+        // Récupérer les exercices
+        const exercisesQuery = query(collection(db, 'exercises'));
+        const exercisesSnapshot = await getDocs(exercisesQuery);
+        const exercisesList: Exercise[] = exercisesSnapshot.docs.map((exerciseDoc) => ({
+          id: exerciseDoc.id,
+          name: exerciseDoc.data().name || `Exercice ${exerciseDoc.id}`,
+        }));
+        setExercises(exercisesList);
 
         // Récupérer les groupes du moniteur
         const groupsQuery = query(collection(db, 'Groups'), where('moniteurId', '==', user.uid));
@@ -262,7 +278,6 @@ const StatsList: React.FC = () => {
 
         for (const resultDoc of resultsSnapshot.docs) {
           const data = resultDoc.data();
-          // Conversion systématique du Timestamp en Date
           const resultDate = data.date instanceof Timestamp
             ? data.date.toDate()
             : data.date?.seconds
@@ -273,7 +288,7 @@ const StatsList: React.FC = () => {
           if (userResult) {
             userResult.results.push({
               exerciseId: data.exerciseId,
-              exerciseName: data.exerciseName || 'Exercice inconnu',
+              exerciseName: exercisesList.find((ex) => ex.id === data.exerciseId)?.name || data.exerciseName || data.exerciseId,
               success: data.success || false,
               date: resultDate,
               badgeAwarded: data.badgeAwarded || false,
@@ -290,7 +305,7 @@ const StatsList: React.FC = () => {
               results: [
                 {
                   exerciseId: data.exerciseId,
-                  exerciseName: data.exerciseName || 'Exercice inconnu',
+                  exerciseName: exercisesList.find((ex) => ex.id === data.exerciseId)?.name || data.exerciseName || data.exerciseId,
                   success: data.success || false,
                   date: resultDate,
                   badgeAwarded: data.badgeAwarded || false,
@@ -309,7 +324,6 @@ const StatsList: React.FC = () => {
         const clientBadgesSnapshot = await getDocs(clientBadgesQuery);
         const clientBadgesList: ClientBadge[] = clientBadgesSnapshot.docs.map((badgeLinkDoc) => {
           const data = badgeLinkDoc.data();
-          // Conversion systématique du Timestamp en Date
           const awardedAt = data.awardedAt instanceof Timestamp
             ? data.awardedAt.toDate()
             : data.awardedAt?.seconds
@@ -334,21 +348,24 @@ const StatsList: React.FC = () => {
         const diplomasSnapshot = await getDocs(diplomasQuery);
         const diplomasList: Diploma[] = diplomasSnapshot.docs.map((diplomaDoc) => {
           const data = diplomaDoc.data();
-          // Conversion systématique du Timestamp en Date
           const awardedAt = data.awardedAt instanceof Timestamp
             ? data.awardedAt.toDate()
             : data.awardedAt?.seconds
               ? new Date(data.awardedAt.seconds * 1000)
               : new Date();
 
+          // Récupérer les noms réels depuis users
+          const user = usersList.find((u) => u.id === data.userId);
+          const moniteur = usersList.find((u) => u.id === data.awardedBy);
+
           return {
             id: diplomaDoc.id,
             userId: data.userId || '',
-            userName: data.userName,
+            userName: user?.displayName || data.userName || 'Utilisateur inconnu',
             type: data.type || '',
             awardedAt,
             awardedBy: data.awardedBy || '',
-            awardedByName: data.awardedByName || '',
+            awardedByName: moniteur?.displayName || data.awardedByName || 'Moniteur inconnu',
           };
         });
         setDiplomas(diplomasList);
@@ -367,7 +384,6 @@ const StatsList: React.FC = () => {
   const filteredResults = (): UserResult[] => {
     let filteredData = [...userResults];
 
-    // Filtre par période
     if (filters.period !== 'all') {
       const now = new Date();
       let startDate: Date | null = null;
@@ -407,7 +423,6 @@ const StatsList: React.FC = () => {
       }
     }
 
-    // Filtre par exercice
     if (filters.exercise) {
       filteredData = filteredData.map((userResult) => ({
         ...userResult,
@@ -415,7 +430,6 @@ const StatsList: React.FC = () => {
       }));
     }
 
-    // Filtre par type d'exercice
     if (filters.exerciseType) {
       filteredData = filteredData.map((userResult) => ({
         ...userResult,
@@ -425,12 +439,10 @@ const StatsList: React.FC = () => {
       }));
     }
 
-    // Filtre par utilisateur
     if (filters.user) {
       filteredData = filteredData.filter((userResult) => userResult.id === filters.user);
     }
 
-    // Filtre par groupe
     if (filters.group) {
       const group = groups.find((g) => g.id === filters.group);
       if (group) {
@@ -438,7 +450,6 @@ const StatsList: React.FC = () => {
       }
     }
 
-    // Filtre par couleur de bloc
     if (filters.boulderColor) {
       filteredData = filteredData.map((userResult) => ({
         ...userResult,
@@ -462,7 +473,6 @@ const StatsList: React.FC = () => {
       awardedByName: user.displayName || user.email?.split('@')[0] || user.uid,
     });
 
-    // Mise à jour locale
     setClientBadges((prev) => [
       ...prev,
       {
@@ -487,6 +497,156 @@ const StatsList: React.FC = () => {
     setOpenManualBadgeDialog(true);
   };
 
+  // Attribuer un diplôme
+  const handleAwardDiploma = (userId: string, userName: string): void => {
+    setSelectedClientForDiploma({ id: userId, name: userName });
+    setOpenDiplomaDialog(true);
+  };
+
+  // Générer un PDF pour un diplôme avec le design personnalisé
+  const generateDiplomaPDF = async (diploma: Diploma) => {
+    // Charger la police EB Garamond (via Google Fonts)
+    const fontUrl = 'https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;700&display=swap';
+    const link = document.createElement('link');
+    link.href = fontUrl;
+    link.rel = 'stylesheet';
+    document.head.appendChild(link);
+
+    // Créer l'élément du diplôme
+    const diplomaElement = document.createElement('div');
+    diplomaElement.style.width = '800px';
+    diplomaElement.style.height = '600px';
+    diplomaElement.style.backgroundImage = `url(${diplomaBackground})`;
+    diplomaElement.style.backgroundSize = 'cover';
+    diplomaElement.style.backgroundPosition = 'center';
+    diplomaElement.style.position = 'relative';
+    diplomaElement.style.display = 'flex';
+    diplomaElement.style.flexDirection = 'column';
+    diplomaElement.style.alignItems = 'center';
+    diplomaElement.style.justifyContent = 'center';
+    diplomaElement.style.color = '#D4AF37'; // Or
+    diplomaElement.style.fontFamily = "'EB Garamond', serif";
+    diplomaElement.style.padding = '20px';
+    diplomaElement.style.boxSizing = 'border-box';
+    diplomaElement.style.textAlign = 'center';
+
+    // Titre principal
+    const title = document.createElement('h1');
+    title.textContent = 'DIPLÔME OFFICIEL';
+    title.style.fontSize = '48px';
+    title.style.fontWeight = '700';
+    title.style.marginBottom = '10px';
+    title.style.color = '#D4AF37';
+    title.style.textShadow = '2px 2px 4px rgba(0, 0, 0, 0.5)';
+    diplomaElement.appendChild(title);
+
+    // Sous-titre
+    const subtitle = document.createElement('h2');
+    subtitle.textContent = 'BLOCABRAC - ESCALADE INDOOR';
+    subtitle.style.fontSize = '24px';
+    subtitle.style.fontWeight = '400';
+    subtitle.style.marginBottom = '40px';
+    subtitle.style.color = '#D4AF37';
+    subtitle.style.textShadow = '1px 1px 2px rgba(0, 0, 0, 0.5)';
+    diplomaElement.appendChild(subtitle);
+
+    // Contenu principal (nom, diplôme, date, moniteur)
+    const content = document.createElement('div');
+    content.style.display = 'flex';
+    content.style.flexDirection = 'column';
+    content.style.alignItems = 'center';
+    content.style.gap = '15px';
+    content.style.marginBottom = '40px';
+
+    // Nom du titulaire
+    const userName = document.createElement('p');
+    userName.textContent = `Ce diplôme est décerné à : ${diploma.userName}`;
+    userName.style.fontSize = '22px';
+    userName.style.fontWeight = '400';
+    userName.style.color = '#D4AF37';
+    userName.style.textShadow = '1px 1px 2px rgba(0, 0, 0, 0.5)';
+    content.appendChild(userName);
+
+    // Type de diplôme
+    const diplomaType = document.createElement('p');
+    diplomaType.textContent = `Type : ${diploma.type}`;
+    diplomaType.style.fontSize = '20px';
+    diplomaType.style.fontWeight = '400';
+    diplomaType.style.color = '#D4AF37';
+    diplomaType.style.textShadow = '1px 1px 2px rgba(0, 0, 0, 0.5)';
+    content.appendChild(diplomaType);
+
+    // Date
+    const diplomaDate = document.createElement('p');
+    diplomaDate.textContent = `Le ${formatDate(diploma.awardedAt)}`;
+    diplomaDate.style.fontSize = '18px';
+    diplomaDate.style.fontWeight = '400';
+    diplomaDate.style.color = '#D4AF37';
+    diplomaDate.style.textShadow = '1px 1px 2px rgba(0, 0, 0, 0.5)';
+    content.appendChild(diplomaDate);
+
+    // Nom du moniteur
+    const moniteurName = document.createElement('p');
+    moniteurName.textContent = `Décerné par : ${diploma.awardedByName}`;
+    moniteurName.style.fontSize = '18px';
+    moniteurName.style.fontWeight = '400';
+    moniteurName.style.color = '#D4AF37';
+    moniteurName.style.textShadow = '1px 1px 2px rgba(0, 0, 0, 0.5)';
+    content.appendChild(moniteurName);
+
+    diplomaElement.appendChild(content);
+
+    // Pied de page
+    const footer = document.createElement('p');
+    footer.textContent = 'Félicitations pour votre progression !';
+    footer.style.fontSize = '16px';
+    footer.style.fontStyle = 'italic';
+    footer.style.color = '#D4AF37';
+    footer.style.textShadow = '1px 1px 2px rgba(0, 0, 0, 0.5)';
+    footer.style.marginTop = 'auto';
+    diplomaElement.appendChild(footer);
+
+    // Ajouter temporairement au DOM
+    document.body.appendChild(diplomaElement);
+
+    // Attendre que la police soit chargée
+    await new Promise(resolve => {
+      const checkFont = () => {
+        if (document.fonts?.check('16px EB Garamond')) {
+          resolve(true);
+        } else {
+          setTimeout(checkFont, 100);
+        }
+      };
+      checkFont();
+    });
+
+    // Capturer en canvas
+    const canvas = await html2canvas.default(diplomaElement, {
+      scale: 2,
+      logging: false,
+      useCORS: true,
+      backgroundColor: null, // Transparent pour garder le fond de l'image
+    });
+
+    // Supprimer l'élément temporaire
+    document.body.removeChild(diplomaElement);
+
+    // Créer le PDF
+    const pdf = new jsPDF({
+      orientation: 'landscape',
+      unit: 'mm',
+      format: [210, 297], // A4
+    });
+
+    const imgData = canvas.toDataURL('image/png');
+    const imgWidth = pdf.internal.pageSize.getWidth();
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+    pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+    pdf.save(`diplome_${diploma.userName.replace(/\s+/g, '_')}_${diploma.type.replace(/\s+/g, '_')}.pdf`);
+  };
+
   // Confirmer l'attribution manuelle d'un badge
   const confirmManualAwardBadge = async (): Promise<void> => {
     if (!selectedResult || !selectedBadgeId || !user) return;
@@ -500,12 +660,6 @@ const StatsList: React.FC = () => {
     }
   };
 
-  // Attribuer un diplôme
-  const handleAwardDiploma = (userId: string, userName: string): void => {
-    setSelectedClientForDiploma({ id: userId, name: userName });
-    setOpenDiplomaDialog(true);
-  };
-
   // Confirmer l'attribution d'un diplôme
   const confirmAwardDiploma = async (): Promise<void> => {
     if (!selectedClientForDiploma || !selectedDiplomaType || !user) return;
@@ -514,14 +668,27 @@ const StatsList: React.FC = () => {
       const diplomaId = `diploma_${selectedClientForDiploma.id}_${selectedDiplomaType.replace(/\s+/g, '_')}_${Date.now()}`;
       await setDoc(doc(db, 'diplomas', diplomaId), {
         userId: selectedClientForDiploma.id,
+        userName: selectedClientForDiploma.name, // Nom réel
         type: selectedDiplomaType,
         awardedAt: serverTimestamp(),
         awardedBy: user.uid,
-        awardedByName: user.displayName || user.email?.split('@')[0] || user.uid,
+        awardedByName: user.displayName || user.email?.split('@')[0] || user.uid, // Nom réel
       });
 
       setSuccess(`Diplôme "${selectedDiplomaType}" attribué à ${selectedClientForDiploma.name} !`);
       setOpenDiplomaDialog(false);
+
+      // Générer le PDF automatiquement
+      const newDiploma: Diploma = {
+        id: diplomaId,
+        userId: selectedClientForDiploma.id,
+        userName: selectedClientForDiploma.name,
+        type: selectedDiplomaType,
+        awardedAt: new Date(),
+        awardedBy: user.uid,
+        awardedByName: user.displayName || user.email?.split('@')[0] || user.uid,
+      };
+      await generateDiplomaPDF(newDiploma);
     } catch (err: unknown) {
       setError(`Erreur lors de l'attribution du diplôme : ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -596,7 +763,7 @@ const StatsList: React.FC = () => {
               <MenuItem value="">Tous</MenuItem>
               {uniqueExercises.map((exercise) => (
                 <MenuItem key={exercise} value={exercise}>
-                  {exercise}
+                  {exercises.find((ex) => ex.id === exercise)?.name || exercise}
                 </MenuItem>
               ))}
             </Select>
@@ -693,7 +860,9 @@ const StatsList: React.FC = () => {
                   userResult.results.map((result, index) => (
                     <TableRow key={`${userResult.id}-${result.exerciseId}-${index}`}>
                       <TableCell>{userResult.displayName}</TableCell>
-                      <TableCell>{result.exerciseName}</TableCell>
+                      <TableCell>
+                        {exercises.find((ex) => ex.id === result.exerciseId)?.name || result.exerciseName || result.exerciseId}
+                      </TableCell>
                       <TableCell>
                         {result.boulderColor ? (
                           <Chip
@@ -799,7 +968,7 @@ const StatsList: React.FC = () => {
           <DialogActions>
             <Button onClick={() => setOpenDiplomaDialog(false)}>Annuler</Button>
             <Button onClick={confirmAwardDiploma} color="primary">
-              Attribuer
+              Attribuer et générer le PDF
             </Button>
           </DialogActions>
         </Dialog>
