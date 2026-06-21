@@ -42,12 +42,14 @@ import {
 } from '@mui/material';
 import { jsPDF } from 'jspdf';
 import * as html2canvas from 'html2canvas';
-import diplomaBackground from '../../../assets/diploma-background.png'; // Votre image de fond
+import diplomaBackground from '../../../assets/diploma-background.png';
 
 // Types pour les données
 interface User {
   id: string;
   displayName: string;
+  firstName?: string;
+  lastName?: string;
   email?: string;
   role?: string;
 }
@@ -182,6 +184,14 @@ const StatsList: React.FC = () => {
     'Bloc d\'or',
   ]);
 
+  // ✅ Construit "Prénom Nom" à partir de first_name/last_name, avec fallback
+  const getFullName = (u: User | undefined, fallbackId: string): string => {
+    if (!u) return fallbackId;
+    const composed = [u.firstName, u.lastName].filter(Boolean).join(' ').trim();
+    if (composed) return composed;
+    return u.displayName || u.email?.split('@')[0] || fallbackId;
+  };
+
   // Fonction pour convertir un Timestamp ou Date en string
   const formatDate = (date: any): string => {
     if (!date) return 'N/A';
@@ -203,12 +213,17 @@ const StatsList: React.FC = () => {
         // Récupérer les utilisateurs
         const usersQuery = query(collection(db, 'users'));
         const usersSnapshot = await getDocs(usersQuery);
-        const usersList: User[] = usersSnapshot.docs.map((userDoc) => ({
-          id: userDoc.id,
-          displayName: userDoc.data().displayName || userDoc.data().email?.split('@')[0] || userDoc.id,
-          email: userDoc.data().email || '',
-          role: userDoc.data().role || '',
-        }));
+        const usersList: User[] = usersSnapshot.docs.map((userDoc) => {
+          const data = userDoc.data();
+          return {
+            id: userDoc.id,
+            displayName: data.displayName || data.email?.split('@')[0] || userDoc.id,
+            firstName: data.first_name || '',
+            lastName: data.last_name || '',
+            email: data.email || '',
+            role: data.role || '',
+          };
+        });
         setUsers(usersList);
 
         // Récupérer les exercices
@@ -297,11 +312,11 @@ const StatsList: React.FC = () => {
               boulderColor: data.boulderColor,
             });
           } else {
-            const user = usersList.find((u) => u.id === data.userId);
+            const matchedUser = usersList.find((u) => u.id === data.userId);
             resultsData.push({
               id: data.userId,
-              displayName: user?.displayName || 'Utilisateur inconnu',
-              email: user?.email || '',
+              displayName: getFullName(matchedUser, data.userId),
+              email: matchedUser?.email || '',
               results: [
                 {
                   exerciseId: data.exerciseId,
@@ -354,18 +369,18 @@ const StatsList: React.FC = () => {
               ? new Date(data.awardedAt.seconds * 1000)
               : new Date();
 
-          // Récupérer les noms réels depuis users
-          const user = usersList.find((u) => u.id === data.userId);
-          const moniteur = usersList.find((u) => u.id === data.awardedBy);
+          // ✅ Récupérer Prénom Nom depuis users plutôt que displayName/email
+          const matchedUser = usersList.find((u) => u.id === data.userId);
+          const matchedMoniteur = usersList.find((u) => u.id === data.awardedBy);
 
           return {
             id: diplomaDoc.id,
             userId: data.userId || '',
-            userName: user?.displayName || data.userName || 'Utilisateur inconnu',
+            userName: getFullName(matchedUser, data.userName || 'Utilisateur inconnu'),
             type: data.type || '',
             awardedAt,
             awardedBy: data.awardedBy || '',
-            awardedByName: moniteur?.displayName || data.awardedByName || 'Moniteur inconnu',
+            awardedByName: getFullName(matchedMoniteur, data.awardedByName || 'Moniteur inconnu'),
           };
         });
         setDiplomas(diplomasList);
@@ -464,13 +479,18 @@ const StatsList: React.FC = () => {
   const awardBadgeToUser = async (userId: string, badgeId: string): Promise<void> => {
     if (!user) return;
 
+    const moniteurFullName = getFullName(
+      users.find((u) => u.id === user.uid),
+      user.displayName || user.email?.split('@')[0] || user.uid
+    );
+
     const newClientBadgeId = `${userId}_${badgeId}_${Date.now()}`;
     await setDoc(doc(db, 'client_badges', newClientBadgeId), {
       userId: userId,
       badgeId: badgeId,
       awardedAt: serverTimestamp(),
       awardedBy: user.uid,
-      awardedByName: user.displayName || user.email?.split('@')[0] || user.uid,
+      awardedByName: moniteurFullName,
     });
 
     setClientBadges((prev) => [
@@ -481,7 +501,7 @@ const StatsList: React.FC = () => {
         badgeId,
         awardedAt: new Date(),
         awardedBy: user.uid,
-        awardedByName: user.displayName || user.email?.split('@')[0] || user.uid,
+        awardedByName: moniteurFullName,
       },
     ]);
   };
@@ -503,7 +523,7 @@ const StatsList: React.FC = () => {
     setOpenDiplomaDialog(true);
   };
 
-  // Générer un PDF pour un diplôme avec le design personnalisé
+  // ✅ Générer un PDF pour un diplôme — texte recentré dans la zone bleutée du fond
   const generateDiplomaPDF = async (diploma: Diploma) => {
     // Charger la police EB Garamond (via Google Fonts)
     const fontUrl = 'https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;700&display=swap';
@@ -512,7 +532,7 @@ const StatsList: React.FC = () => {
     link.rel = 'stylesheet';
     document.head.appendChild(link);
 
-    // Créer l'élément du diplôme
+    // Conteneur principal : taille fixe correspondant à l'image de fond
     const diplomaElement = document.createElement('div');
     diplomaElement.style.width = '800px';
     diplomaElement.style.height = '600px';
@@ -520,97 +540,100 @@ const StatsList: React.FC = () => {
     diplomaElement.style.backgroundSize = 'cover';
     diplomaElement.style.backgroundPosition = 'center';
     diplomaElement.style.position = 'relative';
-    diplomaElement.style.display = 'flex';
-    diplomaElement.style.flexDirection = 'column';
-    diplomaElement.style.alignItems = 'center';
-    diplomaElement.style.justifyContent = 'center';
-    diplomaElement.style.color = '#D4AF37'; // Or
     diplomaElement.style.fontFamily = "'EB Garamond', serif";
-    diplomaElement.style.padding = '20px';
     diplomaElement.style.boxSizing = 'border-box';
-    diplomaElement.style.textAlign = 'center';
+
+    // ✅ Zone de texte contrainte à la partie bleutée du fond (sous le logo,
+    // à l'intérieur des diagonales dorées) : verticalement de 38% à 92%,
+    // largeur limitée à 68% centrée pour ne jamais toucher les diagonales latérales.
+    const textZone = document.createElement('div');
+    textZone.style.position = 'absolute';
+    textZone.style.top = '38%';
+    textZone.style.bottom = '8%';
+    textZone.style.left = '16%';
+    textZone.style.right = '16%';
+    textZone.style.display = 'flex';
+    textZone.style.flexDirection = 'column';
+    textZone.style.alignItems = 'center';
+    textZone.style.justifyContent = 'space-between';
+    textZone.style.textAlign = 'center';
+    textZone.style.color = '#D4AF37';
+    diplomaElement.appendChild(textZone);
 
     // Titre principal
     const title = document.createElement('h1');
     title.textContent = 'DIPLÔME OFFICIEL';
-    title.style.fontSize = '48px';
+    title.style.fontSize = '34px';
     title.style.fontWeight = '700';
-    title.style.marginBottom = '10px';
+    title.style.margin = '0';
     title.style.color = '#D4AF37';
-    title.style.textShadow = '2px 2px 4px rgba(0, 0, 0, 0.5)';
-    diplomaElement.appendChild(title);
-
-    // Sous-titre
-    const subtitle = document.createElement('h2');
-    subtitle.textContent = 'BLOCABRAC - ESCALADE INDOOR';
-    subtitle.style.fontSize = '24px';
-    subtitle.style.fontWeight = '400';
-    subtitle.style.marginBottom = '40px';
-    subtitle.style.color = '#D4AF37';
-    subtitle.style.textShadow = '1px 1px 2px rgba(0, 0, 0, 0.5)';
-    diplomaElement.appendChild(subtitle);
+    title.style.textShadow = '2px 2px 4px rgba(0, 0, 0, 0.6)';
+    textZone.appendChild(title);
 
     // Contenu principal (nom, diplôme, date, moniteur)
     const content = document.createElement('div');
     content.style.display = 'flex';
     content.style.flexDirection = 'column';
     content.style.alignItems = 'center';
-    content.style.gap = '15px';
-    content.style.marginBottom = '40px';
+    content.style.gap = '12px';
 
     // Nom du titulaire
     const userName = document.createElement('p');
     userName.textContent = `Ce diplôme est décerné à : ${diploma.userName}`;
-    userName.style.fontSize = '22px';
+    userName.style.fontSize = '20px';
     userName.style.fontWeight = '400';
+    userName.style.margin = '0';
     userName.style.color = '#D4AF37';
-    userName.style.textShadow = '1px 1px 2px rgba(0, 0, 0, 0.5)';
+    userName.style.textShadow = '1px 1px 3px rgba(0, 0, 0, 0.6)';
     content.appendChild(userName);
 
     // Type de diplôme
     const diplomaType = document.createElement('p');
     diplomaType.textContent = `Type : ${diploma.type}`;
-    diplomaType.style.fontSize = '20px';
+    diplomaType.style.fontSize = '18px';
     diplomaType.style.fontWeight = '400';
+    diplomaType.style.margin = '0';
     diplomaType.style.color = '#D4AF37';
-    diplomaType.style.textShadow = '1px 1px 2px rgba(0, 0, 0, 0.5)';
+    diplomaType.style.textShadow = '1px 1px 3px rgba(0, 0, 0, 0.6)';
     content.appendChild(diplomaType);
 
     // Date
     const diplomaDate = document.createElement('p');
     diplomaDate.textContent = `Le ${formatDate(diploma.awardedAt)}`;
-    diplomaDate.style.fontSize = '18px';
+    diplomaDate.style.fontSize = '16px';
     diplomaDate.style.fontWeight = '400';
+    diplomaDate.style.margin = '0';
     diplomaDate.style.color = '#D4AF37';
-    diplomaDate.style.textShadow = '1px 1px 2px rgba(0, 0, 0, 0.5)';
+    diplomaDate.style.textShadow = '1px 1px 3px rgba(0, 0, 0, 0.6)';
     content.appendChild(diplomaDate);
 
     // Nom du moniteur
     const moniteurName = document.createElement('p');
     moniteurName.textContent = `Décerné par : ${diploma.awardedByName}`;
-    moniteurName.style.fontSize = '18px';
+    moniteurName.style.fontSize = '16px';
     moniteurName.style.fontWeight = '400';
+    moniteurName.style.margin = '0';
     moniteurName.style.color = '#D4AF37';
-    moniteurName.style.textShadow = '1px 1px 2px rgba(0, 0, 0, 0.5)';
+    moniteurName.style.textShadow = '1px 1px 3px rgba(0, 0, 0, 0.6)';
     content.appendChild(moniteurName);
 
-    diplomaElement.appendChild(content);
+    textZone.appendChild(content);
 
     // Pied de page
     const footer = document.createElement('p');
     footer.textContent = 'Félicitations pour votre progression !';
-    footer.style.fontSize = '16px';
+    footer.style.fontSize = '15px';
     footer.style.fontStyle = 'italic';
+    footer.style.margin = '0';
     footer.style.color = '#D4AF37';
-    footer.style.textShadow = '1px 1px 2px rgba(0, 0, 0, 0.5)';
-    footer.style.marginTop = 'auto';
-    diplomaElement.appendChild(footer);
+    footer.style.textShadow = '1px 1px 3px rgba(0, 0, 0, 0.6)';
+    textZone.appendChild(footer);
 
     // Ajouter temporairement au DOM
     document.body.appendChild(diplomaElement);
 
     // Attendre que la police soit chargée
-    await new Promise(resolve => {
+    await new Promise((resolve) => {
       const checkFont = () => {
         if (document.fonts?.check('16px EB Garamond')) {
           resolve(true);
@@ -626,7 +649,7 @@ const StatsList: React.FC = () => {
       scale: 2,
       logging: false,
       useCORS: true,
-      backgroundColor: null, // Transparent pour garder le fond de l'image
+      backgroundColor: null,
     });
 
     // Supprimer l'élément temporaire
@@ -636,7 +659,7 @@ const StatsList: React.FC = () => {
     const pdf = new jsPDF({
       orientation: 'landscape',
       unit: 'mm',
-      format: [210, 297], // A4
+      format: [210, 297],
     });
 
     const imgData = canvas.toDataURL('image/png');
@@ -665,14 +688,19 @@ const StatsList: React.FC = () => {
     if (!selectedClientForDiploma || !selectedDiplomaType || !user) return;
 
     try {
+      const moniteurFullName = getFullName(
+        users.find((u) => u.id === user.uid),
+        user.displayName || user.email?.split('@')[0] || user.uid
+      );
+
       const diplomaId = `diploma_${selectedClientForDiploma.id}_${selectedDiplomaType.replace(/\s+/g, '_')}_${Date.now()}`;
       await setDoc(doc(db, 'diplomas', diplomaId), {
         userId: selectedClientForDiploma.id,
-        userName: selectedClientForDiploma.name, // Nom réel
+        userName: selectedClientForDiploma.name,
         type: selectedDiplomaType,
         awardedAt: serverTimestamp(),
         awardedBy: user.uid,
-        awardedByName: user.displayName || user.email?.split('@')[0] || user.uid, // Nom réel
+        awardedByName: moniteurFullName,
       });
 
       setSuccess(`Diplôme "${selectedDiplomaType}" attribué à ${selectedClientForDiploma.name} !`);
@@ -686,7 +714,7 @@ const StatsList: React.FC = () => {
         type: selectedDiplomaType,
         awardedAt: new Date(),
         awardedBy: user.uid,
-        awardedByName: user.displayName || user.email?.split('@')[0] || user.uid,
+        awardedByName: moniteurFullName,
       };
       await generateDiplomaPDF(newDiploma);
     } catch (err: unknown) {
@@ -795,7 +823,7 @@ const StatsList: React.FC = () => {
               <MenuItem value="">Tous</MenuItem>
               {users.map((u) => (
                 <MenuItem key={u.id} value={u.id}>
-                  {u.displayName}
+                  {getFullName(u, u.id)}
                 </MenuItem>
               ))}
             </Select>

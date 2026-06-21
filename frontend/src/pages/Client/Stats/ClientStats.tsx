@@ -46,7 +46,7 @@ import {
 import MilitaryTechIcon from '@mui/icons-material/MilitaryTech';
 import { jsPDF } from 'jspdf';
 import * as html2canvas from 'html2canvas';
-import logo from '../../../assets/logo-blocabrac.png';
+import diplomaBackground from '../../../assets/diploma-background.png';
 
 // Couleurs des niveaux
 const levelColors: Record<string, string> = {
@@ -142,8 +142,6 @@ const ClientStats: React.FC = () => {
   };
 
   // Choisit le bon nom de badge selon le genre du client.
-  // "Femme" -> feminineName si défini, sinon fallback sur name.
-  // "Homme" / "Autre" -> toujours name.
   const getBadgeDisplayName = (badge: Badge): string => {
     if (userGender === 'Femme' && badge.feminineName) {
       return badge.feminineName;
@@ -151,9 +149,7 @@ const ClientStats: React.FC = () => {
     return badge.name;
   };
 
-  // Couleur d'affichage du badge : on résout d'abord via levelColors
-  // (si badge.color correspond à un nom de niveau connu), sinon on utilise
-  // badge.color tel quel (peut déjà être un code hexa), sinon un gris neutre.
+  // Couleur d'affichage du badge
   const getBadgeColor = (badge: Badge): string => {
     if (badge.color && levelColors[badge.color]) {
       return levelColors[badge.color];
@@ -224,14 +220,12 @@ const ClientStats: React.FC = () => {
 
         for (const resultDoc of boulderResultsSnapshot.docs) {
           const result = resultDoc.data();
-          // Conversion systématique du Timestamp en Date
           const resultDate = result.createdAt instanceof Timestamp
             ? result.createdAt.toDate()
             : result.createdAt?.seconds
               ? new Date(result.createdAt.seconds * 1000)
               : new Date();
 
-          // Filtrer par période
           if (startDateFilter && resultDate < startDateFilter) continue;
           if (endDateFilter && resultDate >= endDateFilter) continue;
 
@@ -249,10 +243,9 @@ const ClientStats: React.FC = () => {
               difficulty_type: boulderData.difficulty_types ? boulderData.difficulty_types[0] : 'Inconnu',
               created_at: boulderData.created_at || 'Inconnu',
               color: color,
-              createdAt: resultDate, // Date déjà convertie
+              createdAt: resultDate,
             });
 
-            // Compter les blocs validés par couleur
             if (result.success === true) {
               colorCounts[color] = (colorCounts[color] || 0) + 1;
             }
@@ -269,7 +262,6 @@ const ClientStats: React.FC = () => {
         const courseStatsData: any[] = [];
         for (const resultDoc of courseResultsSnapshot.docs) {
           const result = resultDoc.data();
-          // Conversion systématique du Timestamp en Date
           const resultDate = result.date instanceof Timestamp
             ? result.date.toDate()
             : result.date?.seconds
@@ -283,7 +275,7 @@ const ClientStats: React.FC = () => {
               ...result,
               courseTitle: courseData.title || result.courseId,
               courseDate: courseData.date ? formatDate(courseData.date) : 'Inconnu',
-              date: resultDate, // Date déjà convertie
+              date: resultDate,
               exerciseName: result.exerciseName || exercisesList.find((ex) => ex.id === result.exerciseId)?.name || result.exerciseId,
             });
           }
@@ -305,14 +297,12 @@ const ClientStats: React.FC = () => {
             const badgeDoc = await getDoc(doc(db, 'badges', badgeId));
             if (badgeDoc.exists()) {
               const badgeData = badgeDoc.data();
-              // Conversion systématique du Timestamp en Date
               const awardedAt = data.awardedAt instanceof Timestamp
                 ? data.awardedAt.toDate()
                 : data.awardedAt?.seconds
                   ? new Date(data.awardedAt.seconds * 1000)
                   : new Date();
 
-              // Création explicite de l'objet Badge
               const badge: Badge = {
                 id: badgeData.id,
                 name: badgeData.name || 'Badge inconnu',
@@ -344,7 +334,6 @@ const ClientStats: React.FC = () => {
         const diplomasSnapshot = await getDocs(diplomasQuery);
         const diplomasList: Diploma[] = diplomasSnapshot.docs.map((diplomaDoc) => {
           const data = diplomaDoc.data();
-          // Conversion systématique du Timestamp en Date
           const awardedAt = data.awardedAt instanceof Timestamp
             ? data.awardedAt.toDate()
             : data.awardedAt?.seconds
@@ -354,6 +343,8 @@ const ClientStats: React.FC = () => {
           return {
             id: diplomaDoc.id,
             userId: data.userId || '',
+            // ✅ userName est déjà enregistré en "Prénom Nom" par StatsList lors
+            // de l'attribution ; en fallback on garde le displayName de l'utilisateur courant.
             userName: data.userName || user.displayName || user.email?.split('@')[0] || user.uid,
             type: data.type || '',
             awardedAt,
@@ -407,75 +398,123 @@ const ClientStats: React.FC = () => {
     }
   };
 
-  // Générer un PDF pour un diplôme
+  // ✅ Générer un PDF pour un diplôme — identique à la version StatsList.tsx
+  // (même fond, même mise en page recentrée dans la zone bleutée)
   const generateDiplomaPDF = async (diploma: Diploma) => {
+    const fontUrl = 'https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;700&display=swap';
+    const link = document.createElement('link');
+    link.href = fontUrl;
+    link.rel = 'stylesheet';
+    document.head.appendChild(link);
+
     const diplomaElement = document.createElement('div');
     diplomaElement.style.width = '800px';
     diplomaElement.style.height = '600px';
-    diplomaElement.style.backgroundColor = '#FFFFFF';
-    diplomaElement.style.border = '10px solid #000000';
-    diplomaElement.style.padding = '20px';
-    diplomaElement.style.textAlign = 'center';
-    diplomaElement.style.fontFamily = 'Arial, sans-serif';
+    diplomaElement.style.backgroundImage = `url(${diplomaBackground})`;
+    diplomaElement.style.backgroundSize = 'cover';
+    diplomaElement.style.backgroundPosition = 'center';
     diplomaElement.style.position = 'relative';
-    diplomaElement.style.overflow = 'hidden';
+    diplomaElement.style.fontFamily = "'EB Garamond', serif";
+    diplomaElement.style.boxSizing = 'border-box';
 
-    // Ajouter le logo
-    const logoImg = document.createElement('img');
-    logoImg.src = logo;
-    logoImg.style.width = '150px';
-    logoImg.style.position = 'absolute';
-    logoImg.style.top = '20px';
-    logoImg.style.left = '20px';
-    diplomaElement.appendChild(logoImg);
+    const textZone = document.createElement('div');
+    textZone.style.position = 'absolute';
+    textZone.style.top = '38%';
+    textZone.style.bottom = '8%';
+    textZone.style.left = '16%';
+    textZone.style.right = '16%';
+    textZone.style.display = 'flex';
+    textZone.style.flexDirection = 'column';
+    textZone.style.alignItems = 'center';
+    textZone.style.justifyContent = 'space-between';
+    textZone.style.textAlign = 'center';
+    textZone.style.color = '#D4AF37';
+    diplomaElement.appendChild(textZone);
 
-    // Titre
     const title = document.createElement('h1');
-    title.textContent = 'DIPLÔME OFFICIEL BLOCABRAC';
-    title.style.color = '#FFD700';
-    title.style.fontSize = '36px';
-    title.style.marginTop = '100px';
-    title.style.marginBottom = '40px';
-    diplomaElement.appendChild(title);
+    title.textContent = 'DIPLÔME OFFICIEL';
+    title.style.fontSize = '34px';
+    title.style.fontWeight = '700';
+    title.style.margin = '0';
+    title.style.color = '#D4AF37';
+    title.style.textShadow = '2px 2px 4px rgba(0, 0, 0, 0.6)';
+    textZone.appendChild(title);
 
-    // Contenu
     const content = document.createElement('div');
-    content.style.color = '#000000';
-    content.style.fontSize = '24px';
-    content.style.lineHeight = '1.6';
-    content.innerHTML = `
-      <p><strong style="color: #00FF00;">Décerné à :</strong> ${diploma.userName}</p>
-      <p><strong style="color: #00FF00;">Type :</strong> ${diploma.type}</p>
-      <p><strong style="color: #00FF00;">Par :</strong> ${diploma.awardedByName}</p>
-      <p><strong style="color: #00FF00;">Le :</strong> ${formatDate(diploma.awardedAt)}</p>
-    `;
-    diplomaElement.appendChild(content);
+    content.style.display = 'flex';
+    content.style.flexDirection = 'column';
+    content.style.alignItems = 'center';
+    content.style.gap = '12px';
 
-    // Pied de page
+    const userName = document.createElement('p');
+    userName.textContent = `Ce diplôme est décerné à : ${diploma.userName}`;
+    userName.style.fontSize = '20px';
+    userName.style.fontWeight = '400';
+    userName.style.margin = '0';
+    userName.style.color = '#D4AF37';
+    userName.style.textShadow = '1px 1px 3px rgba(0, 0, 0, 0.6)';
+    content.appendChild(userName);
+
+    const diplomaType = document.createElement('p');
+    diplomaType.textContent = `Type : ${diploma.type}`;
+    diplomaType.style.fontSize = '18px';
+    diplomaType.style.fontWeight = '400';
+    diplomaType.style.margin = '0';
+    diplomaType.style.color = '#D4AF37';
+    diplomaType.style.textShadow = '1px 1px 3px rgba(0, 0, 0, 0.6)';
+    content.appendChild(diplomaType);
+
+    const diplomaDate = document.createElement('p');
+    diplomaDate.textContent = `Le ${formatDate(diploma.awardedAt)}`;
+    diplomaDate.style.fontSize = '16px';
+    diplomaDate.style.fontWeight = '400';
+    diplomaDate.style.margin = '0';
+    diplomaDate.style.color = '#D4AF37';
+    diplomaDate.style.textShadow = '1px 1px 3px rgba(0, 0, 0, 0.6)';
+    content.appendChild(diplomaDate);
+
+    const moniteurName = document.createElement('p');
+    moniteurName.textContent = `Décerné par : ${diploma.awardedByName}`;
+    moniteurName.style.fontSize = '16px';
+    moniteurName.style.fontWeight = '400';
+    moniteurName.style.margin = '0';
+    moniteurName.style.color = '#D4AF37';
+    moniteurName.style.textShadow = '1px 1px 3px rgba(0, 0, 0, 0.6)';
+    content.appendChild(moniteurName);
+
+    textZone.appendChild(content);
+
     const footer = document.createElement('p');
     footer.textContent = 'Félicitations pour votre progression !';
-    footer.style.color = '#FFD700';
-    footer.style.fontSize = '18px';
-    footer.style.position = 'absolute';
-    footer.style.bottom = '40px';
-    footer.style.width = '100%';
-    footer.style.textAlign = 'center';
-    diplomaElement.appendChild(footer);
+    footer.style.fontSize = '15px';
+    footer.style.fontStyle = 'italic';
+    footer.style.margin = '0';
+    footer.style.color = '#D4AF37';
+    footer.style.textShadow = '1px 1px 3px rgba(0, 0, 0, 0.6)';
+    textZone.appendChild(footer);
 
-    // Ajouter temporairement au DOM
     document.body.appendChild(diplomaElement);
 
-    // Capturer en canvas
+    await new Promise((resolve) => {
+      const checkFont = () => {
+        if (document.fonts?.check('16px EB Garamond')) {
+          resolve(true);
+        } else {
+          setTimeout(checkFont, 100);
+        }
+      };
+      checkFont();
+    });
+
     const canvas = await html2canvas.default(diplomaElement, {
       scale: 2,
       logging: false,
       useCORS: true,
+      backgroundColor: null,
     });
 
-    // Supprimer l'élément temporaire
     document.body.removeChild(diplomaElement);
 
-    // Créer le PDF
     const pdf = new jsPDF({
       orientation: 'landscape',
       unit: 'mm',
@@ -487,7 +526,7 @@ const ClientStats: React.FC = () => {
     const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
     pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
-    pdf.save(`diplome_${diploma.userName}_${diploma.type.replace(/\s+/g, '_')}.pdf`);
+    pdf.save(`diplome_${diploma.userName.replace(/\s+/g, '_')}_${diploma.type.replace(/\s+/g, '_')}.pdf`);
   };
 
   // Gestion des changements de période
@@ -707,7 +746,6 @@ const ClientStats: React.FC = () => {
                 const badgeColor = getBadgeColor(cb.badge);
                 return (
                   <Card key={index} sx={{ width: 250, mb: 2, overflow: 'hidden' }}>
-                    {/* Bandeau coloré + icône médaille reprenant la couleur du badge */}
                     <Box
                       sx={{
                         backgroundColor: badgeColor,
@@ -727,7 +765,6 @@ const ClientStats: React.FC = () => {
                       />
                     </Box>
                     <CardContent>
-                      {/* Un seul nom affiché, choisi selon le genre du client, dans la couleur du badge */}
                       <Typography variant="h6" sx={{ color: badgeColor }}>
                         {getBadgeDisplayName(cb.badge)}
                       </Typography>
