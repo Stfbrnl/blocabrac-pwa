@@ -22,3 +22,21 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Artefacts de compilation TypeScript générés par erreur dans src/
+# (tsc sans outDir écrit les .js à côté des sources si lancé directement)
+src/**/*.js
+src/**/*.js.map
+src/**/*.d.ts
+!src/vite-env.d.ts
+
+# Firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+firestore-migration/
+GCloudSDK/
+*serviceAccountKey*.json
+*adminsdk*.json
+tsconfig.tsbuildinfo
