@@ -8,10 +8,11 @@ import {
   Container, Typography, Box, Button, CircularProgress, Alert,
   Dialog, DialogTitle, DialogContent, DialogActions, Paper,
   Grid, Card, CardContent, CardMedia, Rating, TextField,
-  FormControl, InputLabel, Select, MenuItem, Chip
+  FormControl, InputLabel, Select, MenuItem, Chip,
+  useMediaQuery
 } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 
-// Couleurs des niveaux
 const levelColors: Record<string, string> = {
   jaune: '#FFFF00',
   vert: '#00FF00',
@@ -23,15 +24,12 @@ const levelColors: Record<string, string> = {
   rose: '#FFC0CB'
 };
 
-// ✅ Ordre des niveaux (pour les comparaisons)
 const levelOrder: string[] = ['jaune', 'vert', 'bleu', 'violet', 'rouge', 'noire', 'blanc', 'rose'];
 
-// Points par couleur
 const basePoints: Record<string, number> = {
   vert: 50, bleu: 100, violet: 200, rouge: 400, noir: 600, blanc: 800, rose: 1000
 };
 
-// Déductions par essai
 const deductions: Record<string, number> = {
   vert: 10, bleu: 10, violet: 10, rouge: 20, noir: 20, blanc: 50, rose: 50
 };
@@ -44,8 +42,8 @@ interface Competition {
   access_code: string;
   max_participants: number;
   registered_count: number;
-  minLevel?: string; // ✅ Nouveau : Niveau minimum
-  maxLevel?: string; // ✅ Nouveau : Niveau maximum
+  minLevel?: string;
+  maxLevel?: string;
 }
 
 interface Boulder {
@@ -71,11 +69,9 @@ const ClientCompetitions: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Modales
   const [openRegisterDialog, setOpenRegisterDialog] = useState(false);
   const [openValidationDialog, setOpenValidationDialog] = useState(false);
 
-  // États pour la validation
   const [validationResults, setValidationResults] = useState<Record<string, {
     success: boolean;
     attempts: number;
@@ -83,8 +79,11 @@ const ClientCompetitions: React.FC = () => {
     proposedDifficulty: string;
   }>>({});
 
-  // Tous les utilisateurs (pour vérifier niveau/accès)
   const [allUsers, setAllUsers] = useState<any[]>([]);
+
+  // ✅ Détection mobile pour passer les Dialogs en plein écran
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -118,8 +117,8 @@ const ClientCompetitions: React.FC = () => {
           access_code: doc.data().access_code || '',
           max_participants: doc.data().max_participants || 0,
           registered_count: doc.data().registered_count || 0,
-          minLevel: doc.data().minLevel, // ✅ Nouveau
-          maxLevel: doc.data().maxLevel  // ✅ Nouveau
+          minLevel: doc.data().minLevel,
+          maxLevel: doc.data().maxLevel
         }));
         setCompetitions(competitionsData);
       } catch (err: any) {
@@ -157,7 +156,7 @@ const ClientCompetitions: React.FC = () => {
         is_active: doc.data().is_active || false,
         color: doc.data().color
       }))
-      .sort((a, b) => a.number - b.number); // ✅ Tri par numéro
+      .sort((a, b) => a.number - b.number);
       setBoulders(bouldersData);
     } catch (err: any) {
       setError(`Erreur: ${err.message}`);
@@ -166,21 +165,17 @@ const ClientCompetitions: React.FC = () => {
     }
   };
 
-  // ✅ Vérifier si un utilisateur peut s'inscrire à une compétition (niveau + accès général)
   const canUserRegister = (user: any, competition: Competition): boolean => {
-    // Vérifier l'accès général aux compétitions
     if (!user.inscritAuxCompetitions) {
       return false;
     }
 
-    // Si pas de restrictions de niveau, autoriser
     if (!competition.minLevel && !competition.maxLevel) {
       return true;
     }
 
-    // Vérifier les restrictions de niveau
     const userLevel = user.level;
-    if (!userLevel) return true; // Si pas de niveau défini, autoriser
+    if (!userLevel) return true;
 
     const userLevelIndex = levelOrder.indexOf(userLevel);
     const minLevelIndex = competition.minLevel ? levelOrder.indexOf(competition.minLevel) : -1;
@@ -195,7 +190,6 @@ const ClientCompetitions: React.FC = () => {
   const handleRegister = async (competition: Competition) => {
     if (!user) return;
     try {
-      // ✅ Vérifier si l'utilisateur a le droit de s'inscrire (accès général + niveau)
       const userDoc = await getDoc(doc(db, 'users', user.uid));
       if (!userDoc.exists()) {
         setError("Utilisateur introuvable.");
@@ -208,7 +202,6 @@ const ClientCompetitions: React.FC = () => {
         return;
       }
 
-      // ✅ Vérifier les restrictions de niveau
       if (userData.level && (competition.minLevel || competition.maxLevel)) {
         const userLevelIndex = levelOrder.indexOf(userData.level);
         const minLevelIndex = competition.minLevel ? levelOrder.indexOf(competition.minLevel) : -1;
@@ -222,7 +215,6 @@ const ClientCompetitions: React.FC = () => {
         }
       }
 
-      // Vérifier si déjà inscrit
       const q = query(
         collection(db, 'competition_participants'),
         where('competition_id', '==', competition.id),
@@ -234,7 +226,6 @@ const ClientCompetitions: React.FC = () => {
         return;
       }
 
-      // S'inscrire
       await addDoc(collection(db, 'competition_participants'), {
         user_id: user.uid,
         competition_id: competition.id,
@@ -245,7 +236,6 @@ const ClientCompetitions: React.FC = () => {
         is_client: true
       });
 
-      // Mettre à jour le compteur
       await updateDoc(doc(db, 'competitions', competition.id), {
         registered_count: (competition.registered_count || 0) + 1
       });
@@ -303,7 +293,6 @@ const ClientCompetitions: React.FC = () => {
 
   const calculatePoints = (difficulty: string, attempts: number, success: boolean): number => {
     if (!success) return 0;
-    // ✅ Utiliser color si difficulty n'est pas définie
     const base = basePoints[difficulty] || 0;
     const deduction = (attempts > 1 ? (attempts - 1) * (deductions[difficulty] || 0) : 0);
     return Math.max(0, base - deduction);
@@ -333,7 +322,6 @@ const ClientCompetitions: React.FC = () => {
       ) : (
         <Grid container spacing={2}>
           {competitions.map((competition) => {
-            // ✅ Vérifier si l'utilisateur peut s'inscrire (pour afficher/masquer le bouton)
             const userDoc = allUsers.find(u => u.uid === user?.uid);
             const canRegister = userDoc ? canUserRegister(userDoc, competition) : false;
 
@@ -345,7 +333,6 @@ const ClientCompetitions: React.FC = () => {
                     <Typography>Date: {new Date(competition.date).toLocaleDateString()}</Typography>
                     <Typography>Statut: {competition.status}</Typography>
                     <Typography>Participants: {competition.registered_count}/{competition.max_participants}</Typography>
-                    {/* ✅ Afficher les restrictions de niveau */}
                     {competition.minLevel || competition.maxLevel ? (
                       <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                         Niveau requis: {competition.minLevel ? `min ${competition.minLevel}` : ''}
@@ -372,7 +359,7 @@ const ClientCompetitions: React.FC = () => {
                             }
                           });
                         }}
-                        disabled={!canRegister} // ✅ Désactiver si niveau insuffisant
+                        disabled={!canRegister}
                       >
                         {competition.registered_count > 0 ? "Valider mes blocs" : "S'inscrire"}
                       </Button>
@@ -391,12 +378,13 @@ const ClientCompetitions: React.FC = () => {
         </Grid>
       )}
 
-      {/* Modale 1: Inscription à une compétition */}
+      {/* Modale 1: Inscription à une compétition — plein écran sur mobile */}
       <Dialog
         open={openRegisterDialog}
         onClose={() => setOpenRegisterDialog(false)}
         maxWidth="sm"
         fullWidth
+        fullScreen={isMobile}
       >
         {selectedCompetition && (
           <>
@@ -411,7 +399,6 @@ const ClientCompetitions: React.FC = () => {
               <Typography sx={{ mb: 2 }}>
                 <strong>Nombre maximum de participants:</strong> {selectedCompetition.max_participants}
               </Typography>
-              {/* ✅ Afficher les restrictions de niveau */}
               {selectedCompetition.minLevel || selectedCompetition.maxLevel ? (
                 <Typography sx={{ mb: 2 }}>
                   <strong>Niveau requis:</strong> {selectedCompetition.minLevel ? `min ${selectedCompetition.minLevel}` : ''}
@@ -434,12 +421,13 @@ const ClientCompetitions: React.FC = () => {
         )}
       </Dialog>
 
-      {/* Modale 2: Validation des blocs de compétition */}
+      {/* Modale 2: Validation des blocs de compétition — plein écran sur mobile */}
       <Dialog
         open={openValidationDialog}
         onClose={() => setOpenValidationDialog(false)}
         maxWidth="lg"
         fullWidth
+        fullScreen={isMobile}
       >
         {selectedCompetition && (
           <>
@@ -456,7 +444,6 @@ const ClientCompetitions: React.FC = () => {
                     rating: 0,
                     proposedDifficulty: ''
                   };
-                  // ✅ Utiliser color si difficulty n'est pas définie
                   const difficulty = boulder.color || boulder.difficulty;
                   const points = calculatePoints(difficulty, result.attempts, result.success);
                   return (

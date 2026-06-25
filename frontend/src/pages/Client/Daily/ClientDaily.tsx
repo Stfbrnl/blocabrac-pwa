@@ -6,10 +6,11 @@ import {
   Container, Typography, Box, Button, CircularProgress, Alert,
   Dialog, DialogTitle, DialogContent, DialogActions,
   Card, CardContent, CardMedia, Rating, TextField,
-  Grid, Chip, FormControl, InputLabel, Select, MenuItem
+  Grid, Chip, FormControl, InputLabel, Select, MenuItem,
+  useMediaQuery
 } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 
-// Couleurs des niveaux
 const levelColors: Record<string, string> = {
   jaune: '#FFFF00',
   vert: '#00FF00',
@@ -22,13 +23,11 @@ const levelColors: Record<string, string> = {
   mystère: '#808080'
 };
 
-// ✅ Liste des murs ALIGNÉE sur DailyBouldersList.tsx (Ouvreur)
 const wallList = [
   'Caverne des petits', 'Réta d\'initiation', 'Réta Adultes', 'Grande Face',
   'Dalle', 'Dévers 15°', 'Dévers 30°', 'Dévers 40°', 'Grotte Adultes', 'Güllich'
 ];
 
-// Types de signalements
 const reportTypes = [
   { value: 'défaillance_prisede', label: 'Défaillance de prise' },
   { value: 'morphologie', label: 'Morphologie' },
@@ -37,13 +36,11 @@ const reportTypes = [
   { value: 'autre', label: 'Autre' }
 ];
 
-// Options pour le nombre d'essais (1 à 15+)
 const attemptOptions = Array.from({ length: 15 }, (_, i) => ({
   value: i + 1,
   label: `${i + 1} essai${i > 0 ? 's' : ''}`
 })).concat({ value: 16, label: '15+ essais' });
 
-// Options pour la cotation proposée
 const difficultyOptions = Object.keys(levelColors).map(color => ({
   value: color,
   label: color.charAt(0).toUpperCase() + color.slice(1)
@@ -58,7 +55,7 @@ interface UserInfo {
 const ClientDaily: React.FC = () => {
   const [user, loadingAuth] = useAuthState(auth);
   const [boulders, setBoulders] = useState<any[]>([]);
-  const [usersById, setUsersById] = useState<Record<string, UserInfo>>({}); // ✅ Annuaire UID -> nom
+  const [usersById, setUsersById] = useState<Record<string, UserInfo>>({});
   const [selectedWall, setSelectedWall] = useState<string | null>(null);
   const [selectedBoulder, setSelectedBoulder] = useState<any | null>(null);
   const [ratings, setRatings] = useState<Record<string, number>>({});
@@ -71,11 +68,13 @@ const ClientDaily: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Modales
   const [openWallDialog, setOpenWallDialog] = useState(false);
   const [openBoulderDialog, setOpenBoulderDialog] = useState(false);
 
-  // ✅ Construit "Prénom Nom" à partir d'un UID, avec fallback sur l'UID lui-même
+  // ✅ Détection mobile pour passer les Dialogs en plein écran
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+
   const getUserFullName = (uid: string | undefined | null): string => {
     if (!uid) return 'Inconnu';
     const found = usersById[uid];
@@ -84,7 +83,6 @@ const ClientDaily: React.FC = () => {
     return composed || uid;
   };
 
-  // Charger l'annuaire des utilisateurs (pour résoudre created_by -> nom)
   useEffect(() => {
     if (!user || loadingAuth) return;
 
@@ -109,7 +107,6 @@ const ClientDaily: React.FC = () => {
     fetchUsers();
   }, [user, loadingAuth]);
 
-  // Charger tous les blocs actifs de type "daily"
   useEffect(() => {
     if (!user || loadingAuth) return;
 
@@ -139,12 +136,10 @@ const ClientDaily: React.FC = () => {
     fetchBoulders();
   }, [user, loadingAuth]);
 
-  // Filtrer les blocs par mur
   const getBouldersByWall = (wall: string) => {
     return boulders.filter(boulder => boulder.wall === wall);
   };
 
-  // Fonction pour détecter les blocs mystère (vérifie color, difficulty, ou difficulty_level)
   const isMysteryBoulder = (boulder: any): boolean => {
     return boulder.color === 'mystère' ||
            boulder.color === 'mystere' ||
@@ -152,19 +147,16 @@ const ClientDaily: React.FC = () => {
            boulder.difficulty_level === 'mystère';
   };
 
-  // Ouvrir la modale des blocs d'un mur
   const handleOpenWall = (wall: string) => {
     setSelectedWall(wall);
     setOpenWallDialog(true);
   };
 
-  // Ouvrir la modale des détails d'un bloc
   const handleOpenBoulder = (boulder: any) => {
     setSelectedBoulder(boulder);
     setOpenBoulderDialog(true);
   };
 
-  // Valider la réussite d'un bloc
   const handleValidateSuccess = async (boulderId: string, success: boolean) => {
     if (!user) return;
     try {
@@ -188,7 +180,6 @@ const ClientDaily: React.FC = () => {
     }
   };
 
-  // Noter un bloc
   const handleRate = async (boulderId: string, rating: number | null, comment: string) => {
     if (!rating || !user) return;
     try {
@@ -213,7 +204,6 @@ const ClientDaily: React.FC = () => {
     }
   };
 
-  // Signaler un problème
   const handleReportIssue = async (boulderId: string, boulderNumber: number, wall: string) => {
     if (!user || !comments[boulderId] || !reportTypesSelected[boulderId]) return;
     try {
@@ -276,12 +266,13 @@ const ClientDaily: React.FC = () => {
         })}
       </Grid>
 
-      {/* Modale 1 : Liste des blocs d'un mur */}
+      {/* Modale 1 : Liste des blocs d'un mur — plein écran sur mobile */}
       <Dialog
         open={openWallDialog}
         onClose={() => setOpenWallDialog(false)}
         maxWidth="md"
         fullWidth
+        fullScreen={isMobile}
       >
         <DialogTitle>Blocs sur le mur : {selectedWall}</DialogTitle>
         <DialogContent>
@@ -318,12 +309,13 @@ const ClientDaily: React.FC = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Modale 2 : Détails d'un bloc */}
+      {/* Modale 2 : Détails d'un bloc — plein écran sur mobile */}
       <Dialog
         open={openBoulderDialog}
         onClose={() => setOpenBoulderDialog(false)}
         maxWidth="sm"
         fullWidth
+        fullScreen={isMobile}
       >
         {selectedBoulder && (
           <>
@@ -367,7 +359,6 @@ const ClientDaily: React.FC = () => {
                 <strong>Créé le:</strong> {selectedBoulder.created_at ? new Date(selectedBoulder.created_at).toLocaleDateString() : 'Inconnu'}
               </Typography>
               <Typography variant="body2" sx={{ mb: 2 }}>
-                {/* ✅ Résolution UID -> "Prénom Nom" via l'annuaire usersById */}
                 <strong>Créé par:</strong> {getUserFullName(selectedBoulder.created_by)}
               </Typography>
 
@@ -388,7 +379,6 @@ const ClientDaily: React.FC = () => {
                 </Button>
               </Box>
 
-              {/* Sélecteur du nombre d'essais */}
               <FormControl fullWidth sx={{ mb: 2 }}>
                 <InputLabel>Nombre d'essais</InputLabel>
                 <Select
@@ -407,7 +397,6 @@ const ClientDaily: React.FC = () => {
                 </Select>
               </FormControl>
 
-              {/* Sélecteur de cotation PROPOSÉE (uniquement pour les blocs mystère) */}
               {isMysteryBoulder(selectedBoulder) && (
                 <FormControl fullWidth sx={{ mb: 2 }}>
                   <InputLabel>Proposer une cotation</InputLabel>
@@ -446,7 +435,6 @@ const ClientDaily: React.FC = () => {
                 onChange={(e, newValue) => setRatings(prev => ({ ...prev, [selectedBoulder.id]: newValue || 0 }))}
               />
 
-              {/* Sélecteur de type de signalement */}
               <FormControl fullWidth sx={{ mt: 2, mb: 2 }}>
                 <InputLabel>Type de signalement</InputLabel>
                 <Select

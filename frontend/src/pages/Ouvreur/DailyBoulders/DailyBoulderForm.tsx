@@ -9,7 +9,8 @@ import { Delete as DeleteIcon, Check as CheckIcon } from '@mui/icons-material';
 import {
   addDoc, collection, doc, updateDoc, query, where, getDocs
 } from 'firebase/firestore';
-import { db } from '../../../services/firebaseConfig';
+import { useAuthState } from 'react-firebase-hooks/auth';
+import { auth, db } from '../../../services/firebaseConfig';
 
 interface RelativeHold {
   x: number;
@@ -109,6 +110,7 @@ const resizeAndCompressImage = (file: File, maxWidth: number = 800, quality: num
 export default function DailyBoulderForm(): JSX.Element {
   const { wall } = useParams<{ wall: string }>();
   const navigate = useNavigate();
+  const [user] = useAuthState(auth); // ✅ Utilisateur ouvreur connecté
   const [boulders, setBoulders] = useState<Boulder[]>([]);
   const [editingBoulder, setEditingBoulder] = useState<Boulder | null>(null);
   const [formData, setFormData] = useState<{
@@ -267,6 +269,10 @@ export default function DailyBoulderForm(): JSX.Element {
       alert('Erreur : mur non sélectionné.');
       return;
     }
+    if (!user) {
+      alert('Erreur : utilisateur non authentifié.');
+      return;
+    }
     if (!formData.number) {
       alert('Veuillez saisir un numéro de bloc.');
       return;
@@ -343,7 +349,7 @@ export default function DailyBoulderForm(): JSX.Element {
         competition_id: null,
         is_active: true,
         created_at: new Date().toISOString(),
-        created_by: 'ouvreur_uid',
+        created_by: user.uid, // ✅ Vrai UID de l'ouvreur connecté, plus de placeholder
         difficulty_level: formData.difficulty_level
       };
 
