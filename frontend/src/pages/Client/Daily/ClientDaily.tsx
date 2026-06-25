@@ -49,9 +49,16 @@ const difficultyOptions = Object.keys(levelColors).map(color => ({
   label: color.charAt(0).toUpperCase() + color.slice(1)
 }));
 
+interface UserInfo {
+  id: string;
+  firstName: string;
+  lastName: string;
+}
+
 const ClientDaily: React.FC = () => {
   const [user, loadingAuth] = useAuthState(auth);
   const [boulders, setBoulders] = useState<any[]>([]);
+  const [usersById, setUsersById] = useState<Record<string, UserInfo>>({}); // ✅ Annuaire UID -> nom
   const [selectedWall, setSelectedWall] = useState<string | null>(null);
   const [selectedBoulder, setSelectedBoulder] = useState<any | null>(null);
   const [ratings, setRatings] = useState<Record<string, number>>({});
@@ -67,6 +74,40 @@ const ClientDaily: React.FC = () => {
   // Modales
   const [openWallDialog, setOpenWallDialog] = useState(false);
   const [openBoulderDialog, setOpenBoulderDialog] = useState(false);
+
+  // ✅ Construit "Prénom Nom" à partir d'un UID, avec fallback sur l'UID lui-même
+  const getUserFullName = (uid: string | undefined | null): string => {
+    if (!uid) return 'Inconnu';
+    const found = usersById[uid];
+    if (!found) return uid;
+    const composed = [found.firstName, found.lastName].filter(Boolean).join(' ').trim();
+    return composed || uid;
+  };
+
+  // Charger l'annuaire des utilisateurs (pour résoudre created_by -> nom)
+  useEffect(() => {
+    if (!user || loadingAuth) return;
+
+    const fetchUsers = async () => {
+      try {
+        const snapshot = await getDocs(collection(db, 'users'));
+        const map: Record<string, UserInfo> = {};
+        snapshot.docs.forEach((userDoc) => {
+          const data = userDoc.data();
+          map[userDoc.id] = {
+            id: userDoc.id,
+            firstName: data.first_name || '',
+            lastName: data.last_name || '',
+          };
+        });
+        setUsersById(map);
+      } catch (err) {
+        console.error('Erreur lors du chargement des utilisateurs:', err);
+      }
+    };
+
+    fetchUsers();
+  }, [user, loadingAuth]);
 
   // Charger tous les blocs actifs de type "daily"
   useEffect(() => {
@@ -326,7 +367,8 @@ const ClientDaily: React.FC = () => {
                 <strong>Créé le:</strong> {selectedBoulder.created_at ? new Date(selectedBoulder.created_at).toLocaleDateString() : 'Inconnu'}
               </Typography>
               <Typography variant="body2" sx={{ mb: 2 }}>
-                <strong>Créé par:</strong> {selectedBoulder.created_by || 'Inconnu'}
+                {/* ✅ Résolution UID -> "Prénom Nom" via l'annuaire usersById */}
+                <strong>Créé par:</strong> {getUserFullName(selectedBoulder.created_by)}
               </Typography>
 
               <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
