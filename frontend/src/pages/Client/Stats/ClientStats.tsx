@@ -46,7 +46,7 @@ import {
 import MilitaryTechIcon from '@mui/icons-material/MilitaryTech';
 import { jsPDF } from 'jspdf';
 import * as html2canvas from 'html2canvas';
-import diplomaBackground from '../../../assets/diploma-background.png';
+import logo from '../../../assets/logo-blocabrac.png';
 
 // Couleurs des niveaux
 const levelColors: Record<string, string> = {
@@ -343,8 +343,6 @@ const ClientStats: React.FC = () => {
           return {
             id: diplomaDoc.id,
             userId: data.userId || '',
-            // ✅ userName est déjà enregistré en "Prénom Nom" par StatsList lors
-            // de l'attribution ; en fallback on garde le displayName de l'utilisateur courant.
             userName: data.userName || user.displayName || user.email?.split('@')[0] || user.uid,
             type: data.type || '',
             awardedAt,
@@ -398,8 +396,7 @@ const ClientStats: React.FC = () => {
     }
   };
 
-  // ✅ Générer un PDF pour un diplôme — identique à la version StatsList.tsx
-  // (même fond, même mise en page recentrée dans la zone bleutée)
+  // Générer un PDF pour un diplôme
   const generateDiplomaPDF = async (diploma: Diploma) => {
     const fontUrl = 'https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;700&display=swap';
     const link = document.createElement('link');
@@ -410,7 +407,7 @@ const ClientStats: React.FC = () => {
     const diplomaElement = document.createElement('div');
     diplomaElement.style.width = '800px';
     diplomaElement.style.height = '600px';
-    diplomaElement.style.backgroundImage = `url(${diplomaBackground})`;
+    diplomaElement.style.backgroundImage = `url(${logo})`;
     diplomaElement.style.backgroundSize = 'cover';
     diplomaElement.style.backgroundPosition = 'center';
     diplomaElement.style.position = 'relative';
@@ -557,7 +554,7 @@ const ClientStats: React.FC = () => {
 
   return (
     <Container maxWidth="lg">
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
         <Typography variant="h4" sx={{ mt: 4 }}>Mes statistiques</Typography>
         <Button
           variant="outlined"
@@ -575,7 +572,8 @@ const ClientStats: React.FC = () => {
       {/* Sélecteur de période */}
       <Paper sx={{ p: 2, mb: 2 }}>
         <Typography variant="h6" sx={{ mb: 2 }}>Filtrer par période:</Typography>
-        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+        {/* ✅ flexWrap pour que les champs date passent à la ligne sur mobile */}
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
           <FormControl sx={{ minWidth: 120 }}>
             <InputLabel id="period-select-label">Période</InputLabel>
             <Select
@@ -618,9 +616,15 @@ const ClientStats: React.FC = () => {
         </Box>
       </Paper>
 
-      {/* Onglets */}
+      {/* Onglets — scrollables sur mobile pour ne jamais être tronqués */}
       <Paper sx={{ p: 2, mb: 2 }}>
-        <Tabs value={activeTab} onChange={(e: React.SyntheticEvent, newValue: 'stats' | 'badges' | 'diplomas') => setActiveTab(newValue)}>
+        <Tabs
+          value={activeTab}
+          onChange={(e: React.SyntheticEvent, newValue: 'stats' | 'badges' | 'diplomas') => setActiveTab(newValue)}
+          variant="scrollable"
+          scrollButtons="auto"
+          allowScrollButtonsMobile
+        >
           <Tab label="Statistiques" value="stats" />
           <Tab label="Mes badges" value="badges" />
           <Tab label="Mes diplômes" value="diplomas" />
@@ -650,11 +654,13 @@ const ClientStats: React.FC = () => {
             </Paper>
           )}
 
-          <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
+          {/* ✅ Empilé verticalement sur mobile/tablette, côte à côte à partir de "md" */}
+          <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 2, mt: 2 }}>
             {/* Tableau des blocs */}
-            <Paper sx={{ p: 2, flex: 1 }}>
+            <Paper sx={{ p: 2, flex: 1, minWidth: 0 }}>
               <Typography variant="h6">Blocs</Typography>
-              <TableContainer>
+              {/* ✅ Scroll horizontal de secours si le tableau reste trop large */}
+              <TableContainer sx={{ overflowX: 'auto' }}>
                 <Table>
                   <TableHead>
                     <TableRow>
@@ -703,9 +709,9 @@ const ClientStats: React.FC = () => {
             </Paper>
 
             {/* Tableau des cours */}
-            <Paper sx={{ p: 2, flex: 1 }}>
+            <Paper sx={{ p: 2, flex: 1, minWidth: 0 }}>
               <Typography variant="h6">Cours</Typography>
-              <TableContainer>
+              <TableContainer sx={{ overflowX: 'auto' }}>
                 <Table>
                   <TableHead>
                     <TableRow>
@@ -790,7 +796,7 @@ const ClientStats: React.FC = () => {
           {diplomas.length === 0 ? (
             <Typography>Vous n'avez pas encore reçu de diplômes.</Typography>
           ) : (
-            <TableContainer>
+            <TableContainer sx={{ overflowX: 'auto' }}>
               <Table>
                 <TableHead>
                   <TableRow>

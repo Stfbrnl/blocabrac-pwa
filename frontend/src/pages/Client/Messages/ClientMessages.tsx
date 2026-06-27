@@ -7,8 +7,10 @@ import {
 } from 'firebase/firestore';
 import {
   Container, Typography, Box, Paper, CircularProgress, Alert,
-  TextField, Button, List, ListItem, Avatar, Divider, FormControl, InputLabel, Select, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions, IconButton, Tooltip
+  TextField, Button, List, ListItem, Avatar, Divider, FormControl, InputLabel, Select, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions, IconButton, Tooltip,
+  useMediaQuery
 } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import { Send as SendIcon, Reply as ReplyIcon } from '@mui/icons-material';
 
 interface Message {
@@ -36,13 +38,16 @@ const ClientMessages: React.FC = () => {
   const [replyContent, setReplyContent] = useState('');
   const navigate = useNavigate();
 
+  // ✅ Détection mobile pour adapter la zone d'envoi et le Dialog
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+
   const fetchData = async () => {
     if (!user?.uid) return;
 
     try {
       setLoading(true);
 
-      // 1. Récupérer TOUS les messages du client (envoyés et reçus)
       const sentMessagesQuery = query(
         collection(db, 'messages'),
         where('senderId', '==', user.uid)
@@ -57,7 +62,6 @@ const ClientMessages: React.FC = () => {
         getDocs(receivedMessagesQuery)
       ]);
 
-      // 2. Extraire les moniteurs uniques des messages REÇUS
       const moniteursMap = new Map<string, {id: string, displayName: string}>();
       receivedSnapshot.docs.forEach(doc => {
         const data = doc.data() as DocumentData;
@@ -69,7 +73,6 @@ const ClientMessages: React.FC = () => {
         }
       });
 
-      // 3. Si aucun moniteur trouvé dans les messages reçus, chercher dans les messages envoyés
       if (moniteursMap.size === 0) {
         sentSnapshot.docs.forEach(doc => {
           const data = doc.data() as DocumentData;
@@ -82,16 +85,13 @@ const ClientMessages: React.FC = () => {
         });
       }
 
-      // 4. Convertir en tableau
       const moniteursList = Array.from(moniteursMap.values());
       setMoniteurs(moniteursList);
 
-      // 5. Définir le moniteur sélectionné par défaut
       if (moniteursList.length > 0) {
         setSelectedMoniteur(moniteursList[0].id);
       }
 
-      // 6. Charger les messages
       const allMessages: Message[] = [
         ...sentSnapshot.docs.map(doc => {
           const data = doc.data() as DocumentData;
@@ -151,7 +151,6 @@ const ClientMessages: React.FC = () => {
       setNewMessage('');
       setSuccess('Message envoyé avec succès !');
 
-      // Recharger les données
       await fetchData();
     } catch (err: any) {
       setError(`Erreur: ${err.message}`);
@@ -211,14 +210,14 @@ const ClientMessages: React.FC = () => {
 
   return (
     <Container maxWidth="md">
-      <Paper sx={{ p: 3, mt: 3 }}>
+      <Paper sx={{ p: { xs: 2, sm: 3 }, mt: 3 }}>
         <Typography variant="h4" gutterBottom>
           Messages avec mon moniteur
         </Typography>
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
         {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
 
-        <Paper sx={{ height: '400px', overflow: 'auto', p: 2, mb: 2 }}>
+        <Paper sx={{ height: '400px', overflow: 'auto', p: { xs: 1, sm: 2 }, mb: 2 }}>
           {messages.length === 0 ? (
             <Typography color="textSecondary">Aucun message échangé.</Typography>
           ) : (
@@ -226,23 +225,28 @@ const ClientMessages: React.FC = () => {
               {messages.map((message) => {
                 const isSent = message.senderId === user.uid;
                 return (
-                  <ListItem key={message.id} sx={{ display: 'flex', flexDirection: isSent ? 'row-reverse' : 'row', gap: 1 }}>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: isSent ? 'flex-end' : 'flex-start' }}>
+                  <ListItem key={message.id} sx={{ display: 'flex', flexDirection: isSent ? 'row-reverse' : 'row', gap: 1, alignItems: 'flex-start' }}>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: isSent ? 'flex-end' : 'flex-start', flexShrink: 0 }}>
                       <Avatar sx={{ width: 32, height: 32, mb: 1 }}>
                         {(isSent ? message.senderName : message.senderName).charAt(0)}
                       </Avatar>
-                      <Typography variant="caption" color="textSecondary">
+                      <Typography variant="caption" color="textSecondary" sx={{ display: { xs: 'none', sm: 'block' } }}>
                         {isSent ? message.senderName : message.senderName} - {message.timestamp.toLocaleString('fr-FR')}
                       </Typography>
                     </Box>
                     <Paper sx={{
-                      p: 2,
+                      p: { xs: 1, sm: 2 },
                       backgroundColor: isSent ? '#e3f2fd' : '#f5f5f5',
                       borderRadius: 2,
-                      maxWidth: '70%',
+                      // ✅ Bulle plus large sur mobile pour rester lisible
+                      maxWidth: { xs: '82%', sm: '70%' },
                       position: 'relative'
                     }}>
-                      <Typography>{message.content}</Typography>
+                      {/* ✅ Date/auteur visibles inline sur mobile (cachés au-dessus à partir de sm) */}
+                      <Typography variant="caption" color="textSecondary" sx={{ display: { xs: 'block', sm: 'none' }, mb: 0.5 }}>
+                        {message.timestamp.toLocaleString('fr-FR')}
+                      </Typography>
+                      <Typography sx={{ pr: !isSent ? 4 : 0 }}>{message.content}</Typography>
                       {!isSent && (
                         <Tooltip title="Répondre">
                           <IconButton
@@ -265,8 +269,9 @@ const ClientMessages: React.FC = () => {
         <Divider sx={{ my: 2 }} />
 
         {moniteurs.length > 0 ? (
-          <Box sx={{ display: 'flex', gap: 2 }}>
-            <FormControl fullWidth>
+          // ✅ Empilé verticalement sur mobile, en ligne à partir de "sm"
+          <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 2 }}>
+            <FormControl fullWidth sx={{ minWidth: { sm: 160 } }}>
               <InputLabel>Destinataire</InputLabel>
               <Select
                 value={selectedMoniteur}
@@ -301,7 +306,9 @@ const ClientMessages: React.FC = () => {
               color="primary"
               onClick={handleSendMessage}
               disabled={!newMessage.trim()}
-              sx={{ height: '56px' }}
+              // ✅ Bouton pleine largeur sur mobile, hauteur fixe à partir de "sm"
+              fullWidth={isMobile}
+              sx={{ height: { xs: 'auto', sm: '56px' }, py: { xs: 1.5, sm: 0 } }}
             >
               <SendIcon />
             </Button>
@@ -318,6 +325,7 @@ const ClientMessages: React.FC = () => {
         onClose={() => setOpenReplyDialog(false)}
         fullWidth
         maxWidth="md"
+        fullScreen={isMobile}
       >
         <DialogTitle>Répondre au message</DialogTitle>
         <DialogContent>

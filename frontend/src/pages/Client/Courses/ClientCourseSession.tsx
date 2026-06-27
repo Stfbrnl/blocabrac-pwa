@@ -11,7 +11,6 @@ import {
   FormControl, InputLabel, Select, MenuItem, TextField
 } from '@mui/material';
 
-// Couleurs des niveaux
 const levelColors: Record<string, string> = {
   jaune: '#FFFF00', vert: '#00FF00', bleu: '#0000FF', violet: '#800080',
   rouge: '#FF0000', noir: '#000000', blanc: '#FFFFFF', rose: '#FFC0CB'
@@ -69,7 +68,6 @@ const ClientCourseSession: React.FC = () => {
 
         const sessionData = docSnap.data();
 
-        // Normalisation de la date et de l'heure
         let normalizedDate: string;
         if (sessionData.date && typeof sessionData.date === 'object' && sessionData.date.toDate) {
           normalizedDate = sessionData.date.toDate().toISOString().split('T')[0];
@@ -79,7 +77,6 @@ const ClientCourseSession: React.FC = () => {
           normalizedDate = new Date().toISOString().split('T')[0];
         }
 
-        // Charger les exercices depuis Firestore
         const exercisesIds = sessionData.exercises || [];
         const exercisesPromises = exercisesIds.map(async (exerciseId: string) => {
           const exerciseDoc = await getDoc(doc(db, 'exercises', exerciseId));
@@ -113,7 +110,6 @@ const ClientCourseSession: React.FC = () => {
         };
         setSession(session);
 
-        // Charger les résultats existants
         const resultsQuery = query(
           collection(db, 'client_course_results'),
           where('userId', '==', user.uid),
@@ -182,7 +178,6 @@ const ClientCourseSession: React.FC = () => {
     }
   };
 
-  // Vérifier si la séance est accessible
   const now = new Date();
   const sessionDateTime = session ? new Date(session.date + 'T' + session.time) : null;
   const isSessionAccessible = session && sessionDateTime && sessionDateTime <= now;
@@ -227,9 +222,10 @@ const ClientCourseSession: React.FC = () => {
       </Paper>
 
       <Typography variant="h6" sx={{ mb: 2 }}>Exercices</Typography>
+      {/* ✅ Largeur relative au lieu de width fixe : 1 carte par ligne sur mobile,
+          plusieurs sur écran large, sans jamais déborder ni être trop étroite */}
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
         {session.exercises.map((exercise) => {
-          // Initialisation des résultats pour cet exercice
           const result = validationResults[exercise.id] || {
             data: exercise.dataFields?.reduce((acc, field) => {
               acc[field.label] = '';
@@ -238,7 +234,13 @@ const ClientCourseSession: React.FC = () => {
           };
 
           return (
-            <Card key={exercise.id} sx={{ width: 300, mb: 2 }}>
+            <Card
+              key={exercise.id}
+              sx={{
+                width: { xs: '100%', sm: 'calc(50% - 8px)', md: 300 },
+                mb: 2
+              }}
+            >
               <CardContent>
                 <Typography variant="h6">{exercise.name}</Typography>
                 <Typography sx={{ mb: 1 }}>{exercise.description}</Typography>
@@ -270,9 +272,8 @@ const ClientCourseSession: React.FC = () => {
                 {isSessionAccessible ? (
                   <>
                     {exercise.type === 'validation' ? (
-                      // ✅ Type "validation" : UNIQUEMENT Réussi/Échoué + nombre d'essais (SANS notation)
                       <>
-                        <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
+                        <Box sx={{ display: 'flex', gap: 1, mb: 1, flexWrap: 'wrap' }}>
                           <Button
                             variant={result.success ? "contained" : "outlined"}
                             color="success"
@@ -306,7 +307,6 @@ const ClientCourseSession: React.FC = () => {
                         </FormControl>
                       </>
                     ) : (
-                      // Type "data" : Champs personnalisés
                       <Box sx={{ mt: 1 }}>
                         {exercise.dataFields && exercise.dataFields.length > 0 ? (
                           exercise.dataFields.map((field, index) => (
@@ -334,7 +334,6 @@ const ClientCourseSession: React.FC = () => {
                     )}
                   </>
                 ) : (
-                  // Séance non accessible
                   <Box sx={{ mt: 1 }}>
                     <Typography variant="body2" color="textSecondary">
                       Cette séance sera accessible à partir du {new Date(session.date).toLocaleDateString('fr-FR')} à {session.time}.
@@ -348,11 +347,13 @@ const ClientCourseSession: React.FC = () => {
       </Box>
 
       {isSessionAccessible && (
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
+        <Box sx={{ display: 'flex', justifyContent: { xs: 'stretch', sm: 'flex-end' }, mt: 2 }}>
           <Button
             variant="contained"
             color="primary"
             onClick={handleSubmitResults}
+            fullWidth={false}
+            sx={{ width: { xs: '100%', sm: 'auto' } }}
           >
             Enregistrer les résultats
           </Button>

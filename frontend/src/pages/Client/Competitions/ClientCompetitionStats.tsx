@@ -176,8 +176,9 @@ const ClientCompetitionStats: React.FC = () => {
             <Typography>Blocs tentés: {results.length}/{boulders.length}</Typography>
           </Paper>
 
-          <TableContainer component={Paper}>
-            <Table>
+          {/* ✅ Scroll horizontal de secours pour ce tableau à 5 colonnes sur mobile */}
+          <TableContainer component={Paper} sx={{ overflowX: 'auto' }}>
+            <Table sx={{ minWidth: 500 }}>
               <TableHead>
                 <TableRow>
                   <TableCell>Bloc n°</TableCell>
