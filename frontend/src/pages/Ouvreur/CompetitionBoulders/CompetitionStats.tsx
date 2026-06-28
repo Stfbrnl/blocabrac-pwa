@@ -7,7 +7,6 @@ import {
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../../services/firebaseConfig';
 
-// ✅ Points par couleur (comme demandé)
 const basePoints: Record<string, number> = {
   vert: 50,
   bleu: 100,
@@ -18,7 +17,6 @@ const basePoints: Record<string, number> = {
   rose: 1000
 };
 
-// ✅ Déductions par essai (comme demandé)
 const deductions: Record<string, number> = {
   vert: 10,
   bleu: 10,
@@ -49,7 +47,7 @@ interface CompetitionResult {
 interface Boulder {
   id: string;
   difficulty: string;
-  color?: string; // ✅ Ajout du champ color
+  color?: string;
   number: number;
   wall: string;
 }
@@ -80,10 +78,9 @@ const CompetitionStats: React.FC = () => {
   const [results, setResults] = useState<CompetitionResult[]>([]);
   const [boulders, setBoulders] = useState<Boulder[]>([]);
   const [participants, setParticipants] = useState<Participant[]>([]);
-  const [users, setUsers] = useState<User[]>([]); // ✅ Nouveau : Stockage des utilisateurs
+  const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // ✅ Charger tous les utilisateurs une fois
   useEffect(() => {
     const fetchUsers = async () => {
       try {
@@ -131,7 +128,6 @@ const CompetitionStats: React.FC = () => {
       try {
         setLoading(true);
 
-        // Charger les résultats
         const resultsQuery = query(
           collection(db, 'competition_results'),
           where('competition_id', '==', selectedCompetition)
@@ -149,7 +145,6 @@ const CompetitionStats: React.FC = () => {
         }));
         setResults(resultsData);
 
-        // Charger les blocs
         const bouldersQuery = query(
           collection(db, 'boulders'),
           where('competition_id', '==', selectedCompetition)
@@ -158,13 +153,12 @@ const CompetitionStats: React.FC = () => {
         const bouldersData: Boulder[] = bouldersSnapshot.docs.map(doc => ({
           id: doc.id,
           difficulty: doc.data().difficulty || '',
-          color: doc.data().color, // ✅ Charger aussi le champ color
+          color: doc.data().color,
           number: doc.data().number || 0,
           wall: doc.data().wall || ''
         }));
         setBoulders(bouldersData);
 
-        // Charger les participants
         const participantsQuery = query(
           collection(db, 'competition_participants'),
           where('competition_id', '==', selectedCompetition)
@@ -178,8 +172,8 @@ const CompetitionStats: React.FC = () => {
             first_name: user?.first_name || doc.data().first_name || '',
             last_name: user?.last_name || doc.data().last_name || '',
             email: user?.email || doc.data().email || '',
-            age: user?.age || doc.data().age, // ✅ Prendre age depuis users
-            gender: user?.gender || doc.data().gender, // ✅ Prendre gender depuis users
+            age: user?.age || doc.data().age,
+            gender: user?.gender || doc.data().gender,
             level: (user as any)?.level || doc.data().level
           };
         });
@@ -194,10 +188,8 @@ const CompetitionStats: React.FC = () => {
     fetchData();
   }, [selectedCompetition, users]);
 
-  // ✅ Fonction de calcul des points (utilise difficulty OU color)
   const calculatePoints = (boulder: Boulder, attempts: number, success: boolean): number => {
     if (!success) return 0;
-    // ✅ Utiliser color si difficulty n'est pas définie
     const difficulty = boulder.color || boulder.difficulty;
     const base = basePoints[difficulty] || 0;
     const deduction = (attempts > 1 ? (attempts - 1) * (deductions[difficulty] || 0) : 0);
@@ -280,7 +272,7 @@ const CompetitionStats: React.FC = () => {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ p: { xs: 1.5, sm: 3 } }}>
       <Typography variant="h4" gutterBottom>
         Statistiques des Compétitions
       </Typography>
@@ -304,10 +296,11 @@ const CompetitionStats: React.FC = () => {
         <LinearProgress />
       ) : selectedCompetition ? (
         <>
-          <Paper sx={{ p: 2, mb: 3 }}>
+          <Paper sx={{ p: { xs: 1.5, sm: 2 }, mb: 3 }}>
             <Typography variant="h6">Classement Global</Typography>
-            <TableContainer>
-              <Table>
+            {/* ✅ Scroll horizontal de secours : 6 colonnes ne tiennent jamais sur mobile */}
+            <TableContainer sx={{ overflowX: 'auto' }}>
+              <Table sx={{ minWidth: 600 }}>
                 <TableHead>
                   <TableRow>
                     <TableCell>Position</TableCell>
@@ -334,14 +327,15 @@ const CompetitionStats: React.FC = () => {
             </TableContainer>
           </Paper>
 
-          <Paper sx={{ p: 2, mb: 3 }}>
+          <Paper sx={{ p: { xs: 1.5, sm: 2 }, mb: 3 }}>
             <Typography variant="h6">Classement par Catégorie d'Âge</Typography>
             {getClassementByCategory('age').map((category) => (
               category.participants.length > 0 && (
                 <Box key={category.category} sx={{ mb: 3 }}>
                   <Typography variant="subtitle1">{category.category}</Typography>
-                  <TableContainer>
-                    <Table size="small">
+                  {/* ✅ Scroll horizontal de secours */}
+                  <TableContainer sx={{ overflowX: 'auto' }}>
+                    <Table size="small" sx={{ minWidth: 400 }}>
                       <TableHead>
                         <TableRow>
                           <TableCell>Position</TableCell>
@@ -367,14 +361,14 @@ const CompetitionStats: React.FC = () => {
             ))}
           </Paper>
 
-          <Paper sx={{ p: 2 }}>
+          <Paper sx={{ p: { xs: 1.5, sm: 2 } }}>
             <Typography variant="h6">Classement par Genre</Typography>
             {getClassementByCategory('gender').map((gender) => (
               gender.participants.length > 0 && (
                 <Box key={gender.category} sx={{ mb: 3 }}>
                   <Typography variant="subtitle1">{gender.category}</Typography>
-                  <TableContainer>
-                    <Table size="small">
+                  <TableContainer sx={{ overflowX: 'auto' }}>
+                    <Table size="small" sx={{ minWidth: 400 }}>
                       <TableHead>
                         <TableRow>
                           <TableCell>Position</TableCell>

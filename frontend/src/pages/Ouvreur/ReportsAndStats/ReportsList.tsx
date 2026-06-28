@@ -92,7 +92,8 @@ export default function ReportsList(): JSX.Element {
 
   return (
     <Box sx={{ mt: 2 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+      {/* ✅ flexWrap pour empiler filtre + bouton sur mobile */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, gap: 1, flexWrap: 'wrap' }}>
         <FormControl sx={{ minWidth: 200 }}>
           <InputLabel>Filtrer par type</InputLabel>
           <Select
@@ -118,8 +119,9 @@ export default function ReportsList(): JSX.Element {
         </Button>
       </Box>
 
-      <TableContainer component={Paper}>
-        <Table>
+      {/* ✅ Scroll horizontal indispensable pour ce tableau à 8 colonnes */}
+      <TableContainer component={Paper} sx={{ overflowX: 'auto' }}>
+        <Table sx={{ minWidth: 900 }}>
           <TableHead>
             <TableRow>
               <TableCell>Type</TableCell>
@@ -144,7 +146,10 @@ export default function ReportsList(): JSX.Element {
                 <TableCell>#{report.boulder_number}</TableCell>
                 <TableCell>{report.wall}</TableCell>
                 <TableCell>{report.user_name}</TableCell>
-                <TableCell>{report.message}</TableCell>
+                {/* ✅ Largeur max + retour à la ligne pour éviter qu'un message long n'étire le tableau à l'infini */}
+                <TableCell sx={{ maxWidth: 220, whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                  {report.message}
+                </TableCell>
                 <TableCell>{new Date(report.created_at).toLocaleDateString()}</TableCell>
                 <TableCell>
                   <Chip

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, ChangeEvent, FormEvent, MouseEvent } from 'react';
+import React, { useState, useRef, useEffect, ChangeEvent, FormEvent, MouseEvent, TouchEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   TextField, Button, MenuItem, Select, InputLabel, FormControl, Box,
@@ -46,7 +46,6 @@ const walls: string[] = [
 const difficultyTypes: string[] = ['technique', 'équilibre', 'force', 'engagement'];
 const difficultyLevels: DifficultyLevel[] = ['Plus', 'Égal', 'Moins'];
 
-// ✅ Ajout de l'option "Bloc Mystère" dans les cotations
 interface ColorRating {
   value: string;
   label: string;
@@ -61,10 +60,9 @@ const colorRatings: ColorRating[] = [
   { value: 'noire', label: 'Noire (6B+-6C+)' },
   { value: 'blanc', label: 'Blanc (7A-7B)' },
   { value: 'rose', label: 'Rose (7B+-8A)' },
-  { value: 'mystere', label: 'Bloc Mystère' } // ✅ NOUVEAU : Option pour les clients
+  { value: 'mystere', label: 'Bloc Mystère' }
 ];
 
-// ✅ Fonction utilitaire pour redimensionner une image
 const resizeAndCompressImage = (file: File, maxWidth: number = 800, quality: number = 0.7): Promise<string> => {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -110,7 +108,7 @@ const resizeAndCompressImage = (file: File, maxWidth: number = 800, quality: num
 export default function DailyBoulderForm(): JSX.Element {
   const { wall } = useParams<{ wall: string }>();
   const navigate = useNavigate();
-  const [user] = useAuthState(auth); // ✅ Utilisateur ouvreur connecté
+  const [user] = useAuthState(auth);
   const [boulders, setBoulders] = useState<Boulder[]>([]);
   const [editingBoulder, setEditingBoulder] = useState<Boulder | null>(null);
   const [formData, setFormData] = useState<{
@@ -141,6 +139,9 @@ export default function DailyBoulderForm(): JSX.Element {
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  // ✅ Clé qui change après chaque création réussie pour forcer le remontage de l'input file
+  const [fileInputKey, setFileInputKey] = useState<number>(0);
 
   useEffect(() => {
     if (!wall) return;
@@ -220,22 +221,32 @@ export default function DailyBoulderForm(): JSX.Element {
     }
   }, [formData.imagePreview, formData.annotations]);
 
-  const handleCanvasClick = (e: MouseEvent<HTMLCanvasElement>): void => {
+  const getRelativePosition = (
+    clientX: number,
+    clientY: number
+  ): { x: number; y: number } | null => {
     const canvas: HTMLCanvasElement | null = canvasRef.current;
-    if (!canvas) return;
-
+    if (!canvas) return null;
     const rect: DOMRect = canvas.getBoundingClientRect();
-    const x: number = (e.clientX - rect.left) / rect.width;
-    const y: number = (e.clientY - rect.top) / rect.height;
+    const x: number = (clientX - rect.left) / rect.width;
+    const y: number = (clientY - rect.top) / rect.height;
+    return { x, y };
+  };
 
-    setFormData({
-      ...formData,
+  const addHoldAtPosition = (x: number, y: number): void => {
+    setFormData((prev) => ({
+      ...prev,
       annotations: {
-        ...formData.annotations,
+        ...prev.annotations,
         [currentMode === 'start' ? 'start_holds' : 'end_holds']:
-          [...(currentMode === 'start' ? formData.annotations.start_holds : formData.annotations.end_holds), { x, y }]
+          [...(currentMode === 'start' ? prev.annotations.start_holds : prev.annotations.end_holds), { x, y }]
       }
-    });
+    }));
+  };
+
+  const handleCanvasClick = (e: MouseEvent<HTMLCanvasElement>): void => {
+    const pos = getRelativePosition(e.clientX, e.clientY);
+    if (pos) addHoldAtPosition(pos.x, pos.y);
   };
 
   const handleImageUpload = (e: ChangeEvent<HTMLInputElement>): void => {
@@ -244,12 +255,12 @@ export default function DailyBoulderForm(): JSX.Element {
 
     resizeAndCompressImage(file, 800, 0.7)
       .then((resizedImageBase64: string) => {
-        setFormData({
-          ...formData,
+        setFormData((prev) => ({
+          ...prev,
           imageFile: file,
           imagePreview: resizedImageBase64,
           annotations: { start_holds: [], end_holds: [] }
-        });
+        }));
       })
       .catch((error: unknown) => {
         console.error('Erreur lors du redimensionnement :', error);
@@ -258,9 +269,30 @@ export default function DailyBoulderForm(): JSX.Element {
   };
 
   const handleDeleteAnnotation = (type: 'start_holds' | 'end_holds', index: number): void => {
-    const newAnnotations = { ...formData.annotations };
-    newAnnotations[type].splice(index, 1);
-    setFormData({ ...formData, annotations: newAnnotations });
+    setFormData((prev) => {
+      const newAnnotations = { ...prev.annotations };
+      newAnnotations[type] = newAnnotations[type].filter((_, i) => i !== index);
+      return { ...prev, annotations: newAnnotations };
+    });
+  };
+
+  const resetForm = (): void => {
+    setFormData({
+      number: '',
+      color: '',
+      difficulty_types: [],
+      instructions: '',
+      imageFile: null,
+      imagePreview: '',
+      annotations: { start_holds: [], end_holds: [] },
+      difficulty_level: 'Égal'
+    });
+    setEditingBoulder(null);
+    // ✅ Force le remontage de l'<input type="file"> natif : c'est ce qui
+    // corrige le bug "il faut tirer pour rafraîchir avant de créer un second bloc".
+    // Sans cela, l'input file natif (non contrôlable par React) garde un état
+    // interne désynchronisé après reset, en particulier sur mobile.
+    setFileInputKey((k) => k + 1);
   };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
@@ -349,7 +381,7 @@ export default function DailyBoulderForm(): JSX.Element {
         competition_id: null,
         is_active: true,
         created_at: new Date().toISOString(),
-        created_by: user.uid, // ✅ Vrai UID de l'ouvreur connecté, plus de placeholder
+        created_by: user.uid,
         difficulty_level: formData.difficulty_level
       };
 
@@ -359,17 +391,7 @@ export default function DailyBoulderForm(): JSX.Element {
         await addDoc(collection(db, 'boulders'), boulderData);
       }
 
-      setFormData({
-        number: '',
-        color: '',
-        difficulty_types: [],
-        instructions: '',
-        imageFile: null,
-        imagePreview: '',
-        annotations: { start_holds: [], end_holds: [] },
-        difficulty_level: 'Égal'
-      });
-      setEditingBoulder(null);
+      resetForm();
 
       const q = query(
         collection(db, 'boulders'),
@@ -411,14 +433,14 @@ export default function DailyBoulderForm(): JSX.Element {
 
   return (
     <Container maxWidth="lg">
-      <Paper sx={{ p: 3, mt: 3 }}>
+      <Paper sx={{ p: { xs: 2, sm: 3 }, mt: 3 }}>
         <Typography variant="h5" gutterBottom>
           {editingBoulder ? `Modifier le bloc n°${editingBoulder.number || '?'}` : 'Créer un bloc quotidien'}
           {wall && ` - Mur: ${wall}`}
         </Typography>
 
         <Box component="form" onSubmit={handleSubmit}>
-          <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+          <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
             <TextField
               label="Numéro du bloc"
               type="number"
@@ -427,8 +449,9 @@ export default function DailyBoulderForm(): JSX.Element {
               fullWidth
               required
               disabled={isUploading}
+              sx={{ minWidth: 150 }}
             />
-            <FormControl fullWidth disabled={isUploading}>
+            <FormControl fullWidth disabled={isUploading} sx={{ minWidth: 200 }}>
               <InputLabel>Cotation</InputLabel>
               <Select
                 value={formData.color}
@@ -436,7 +459,6 @@ export default function DailyBoulderForm(): JSX.Element {
                 label="Cotation"
                 required
               >
-                {/* ✅ Menu déroulant avec "Bloc Mystère" */}
                 {colorRatings.map((c: ColorRating) => (
                   <MenuItem key={c.value} value={c.value}>{c.label}</MenuItem>
                 ))}
@@ -490,7 +512,10 @@ export default function DailyBoulderForm(): JSX.Element {
             disabled={isUploading}
           />
 
+          {/* ✅ key forcée pour remonter l'input natif après chaque création */}
           <input
+            key={fileInputKey}
+            ref={fileInputRef}
             type="file"
             accept="image/*"
             onChange={handleImageUpload}
@@ -518,7 +543,7 @@ export default function DailyBoulderForm(): JSX.Element {
                   cursor: 'crosshair'
                 }}
               />
-              <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+              <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: 'wrap' }}>
                 <Button
                   variant={currentMode === 'start' ? 'contained' : 'outlined'}
                   onClick={(): void => setCurrentMode('start')}
@@ -596,7 +621,7 @@ export default function DailyBoulderForm(): JSX.Element {
             </Box>
           )}
 
-          <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
+          <Box sx={{ display: 'flex', gap: 2, mt: 2, flexWrap: 'wrap' }}>
             <Button
               type="submit"
               variant="contained"
@@ -610,19 +635,7 @@ export default function DailyBoulderForm(): JSX.Element {
               <Button
                 variant="outlined"
                 color="error"
-                onClick={(): void => {
-                  setEditingBoulder(null);
-                  setFormData({
-                    number: '',
-                    color: '',
-                    difficulty_types: [],
-                    instructions: '',
-                    imageFile: null,
-                    imagePreview: '',
-                    annotations: { start_holds: [], end_holds: [] },
-                    difficulty_level: 'Égal'
-                  });
-                }}
+                onClick={resetForm}
                 disabled={isUploading}
               >
                 Annuler
@@ -634,7 +647,7 @@ export default function DailyBoulderForm(): JSX.Element {
         <Typography variant="h6" sx={{ mt: 4, mb: 2 }}>
           Blocs existants pour {wall}
         </Typography>
-        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 2 }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 2 }}>
           {boulders.map((boulder: Boulder) => (
             <Paper key={boulder.id} sx={{ p: 2 }}>
               <Typography variant="subtitle1">

@@ -56,7 +56,6 @@ export default function CompetitionBouldersList(): JSX.Element {
 
     const fetchBoulders = async (): Promise<void> => {
       try {
-        // ✅ Requête simplifiée (sans orderBy pour éviter l'index composite)
         const q = query(
           collection(db, 'boulders'),
           where('competition_id', '==', selectedCompetition),
@@ -64,7 +63,6 @@ export default function CompetitionBouldersList(): JSX.Element {
         );
         const snapshot = await getDocs(q);
 
-        // ✅ Filtrer et trier en mémoire (au lieu de le faire dans la requête)
         const allBoulders = snapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
@@ -100,7 +98,7 @@ export default function CompetitionBouldersList(): JSX.Element {
 
   return (
     <Container maxWidth="lg">
-      <Paper sx={{ p: 3, mt: 3 }}>
+      <Paper sx={{ p: { xs: 2, sm: 3 }, mt: 3 }}>
         <Typography variant="h5" gutterBottom>
           Gérer les blocs de compétition
         </Typography>
@@ -122,7 +120,8 @@ export default function CompetitionBouldersList(): JSX.Element {
 
         {selectedCompetition && (
           <>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
+            {/* ✅ flexWrap pour empiler les deux boutons sur mobile au lieu de les compresser */}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2, gap: 1, flexWrap: 'wrap' }}>
               <Button
                 variant="contained"
                 startIcon={<AddIcon />}
@@ -139,8 +138,9 @@ export default function CompetitionBouldersList(): JSX.Element {
             </Box>
 
             {boulders.length > 0 ? (
-              <TableContainer>
-                <Table>
+              // ✅ Scroll horizontal de secours pour ce tableau à 5 colonnes
+              <TableContainer sx={{ overflowX: 'auto' }}>
+                <Table sx={{ minWidth: 650 }}>
                   <TableHead>
                     <TableRow>
                       <TableCell>N°</TableCell>
@@ -166,7 +166,7 @@ export default function CompetitionBouldersList(): JSX.Element {
                               }
                             }}
                             size="small"
-                            sx={{ width: 60 }}
+                            sx={{ width: 70 }}
                           />
                         </TableCell>
                         <TableCell>{boulder.wall}</TableCell>

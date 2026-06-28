@@ -35,7 +35,7 @@ interface CompetitionResult {
   success: boolean;
   attempts: number;
   rating: number;
-  user_name?: string; // ✅ Ajout pour afficher le nom
+  user_name?: string;
 }
 
 interface User {
@@ -54,7 +54,6 @@ const CompetitionBoulderStats: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [expandedBoulders, setExpandedBoulders] = useState<Record<string, boolean>>({});
 
-  // Charger les utilisateurs
   useEffect(() => {
     const fetchUsers = async () => {
       try {
@@ -73,7 +72,6 @@ const CompetitionBoulderStats: React.FC = () => {
     fetchUsers();
   }, []);
 
-  // Charger les compétitions
   useEffect(() => {
     const fetchCompetitions = async () => {
       try {
@@ -94,7 +92,6 @@ const CompetitionBoulderStats: React.FC = () => {
     fetchCompetitions();
   }, []);
 
-  // Charger les blocs et résultats de la compétition sélectionnée
   useEffect(() => {
     if (!selectedCompetition) return;
 
@@ -102,7 +99,6 @@ const CompetitionBoulderStats: React.FC = () => {
       try {
         setLoading(true);
 
-        // Charger les blocs de la compétition
         const bouldersQuery = query(
           collection(db, 'boulders'),
           where('competition_id', '==', selectedCompetition),
@@ -117,10 +113,9 @@ const CompetitionBoulderStats: React.FC = () => {
           color: doc.data().color,
           competition_id: doc.data().competition_id
         }))
-        .sort((a, b) => a.number - b.number); // ✅ Tri par numéro
+        .sort((a, b) => a.number - b.number);
         setBoulders(bouldersData);
 
-        // Charger les résultats de la compétition
         const resultsQuery = query(
           collection(db, 'competition_results'),
           where('competition_id', '==', selectedCompetition)
@@ -135,7 +130,7 @@ const CompetitionBoulderStats: React.FC = () => {
             success: doc.data().success || false,
             attempts: doc.data().attempts || 0,
             rating: doc.data().rating || 0,
-            user_name: user ? `${user.first_name} ${user.last_name}` : 'Inconnu' // ✅ Nom complet
+            user_name: user ? `${user.first_name} ${user.last_name}` : 'Inconnu'
           };
         });
         setResults(resultsData);
@@ -149,7 +144,6 @@ const CompetitionBoulderStats: React.FC = () => {
     fetchData();
   }, [selectedCompetition, users]);
 
-  // Basculer l'affichage des détails d'un bloc
   const toggleExpand = (boulderId: string) => {
     setExpandedBoulders(prev => ({
       ...prev,
@@ -157,7 +151,6 @@ const CompetitionBoulderStats: React.FC = () => {
     }));
   };
 
-  // Calculer les stats pour un bloc
   const getBoulderStats = (boulderId: string) => {
     const boulderResults = results.filter(r => r.boulder_id === boulderId);
     const successResults = boulderResults.filter(r => r.success);
@@ -177,7 +170,6 @@ const CompetitionBoulderStats: React.FC = () => {
 
   return (
     <Box sx={{ mt: 2 }}>
-      {/* Sélecteur de compétition */}
       <FormControl fullWidth sx={{ mb: 3 }}>
         <InputLabel>Sélectionnez une compétition</InputLabel>
         <Select
@@ -198,8 +190,9 @@ const CompetitionBoulderStats: React.FC = () => {
       ) : selectedCompetition ? (
         <>
           {boulders.length > 0 ? (
-            <TableContainer component={Paper}>
-              <Table>
+            // ✅ Scroll horizontal de secours pour ce tableau à 6 colonnes
+            <TableContainer component={Paper} sx={{ overflowX: 'auto' }}>
+              <Table sx={{ minWidth: 650 }}>
                 <TableHead>
                   <TableRow>
                     <TableCell>Bloc n°</TableCell>
@@ -242,7 +235,6 @@ const CompetitionBoulderStats: React.FC = () => {
                             </IconButton>
                           </TableCell>
                         </TableRow>
-                        {/* ✅ Ligne détaillée (développée) */}
                         <TableRow>
                           <TableCell colSpan={6} style={{ padding: 0 }}>
                             <Collapse in={expandedBoulders[boulder.id] || false} timeout="auto" unmountOnExit>

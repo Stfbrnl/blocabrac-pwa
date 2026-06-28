@@ -8,7 +8,8 @@ import { Delete as DeleteIcon, Check as CheckIcon } from '@mui/icons-material';
 import {
   addDoc, collection, doc, updateDoc, getDoc, query, where, getDocs
 } from 'firebase/firestore';
-import { db } from '../../../services/firebaseConfig';
+import { useAuthState } from 'react-firebase-hooks/auth';
+import { auth, db } from '../../../services/firebaseConfig';
 
 interface RelativeHold {
   x: number;
@@ -43,7 +44,6 @@ interface Competition {
   walls: string[];
 }
 
-// ✅ Ajout des interfaces et constantes pour les couleurs (comme dans DailyBoulderForm)
 interface ColorRating {
   value: string;
   label: string;
@@ -68,7 +68,6 @@ const walls: string[] = [
 const difficultyTypes: string[] = ['technique', 'équilibre', 'force', 'engagement'];
 const difficultyLevels: DifficultyLevel[] = ['Plus', 'Égal', 'Moins'];
 
-// ✅ Fonction utilitaire pour redimensionner une image
 const resizeAndCompressImage = (file: File, maxWidth: number = 800, quality: number = 0.7): Promise<string> => {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -114,11 +113,12 @@ const resizeAndCompressImage = (file: File, maxWidth: number = 800, quality: num
 export default function CompetitionBoulderForm(): JSX.Element {
   const { competitionId, boulderId } = useParams<{ competitionId: string; boulderId?: string }>();
   const navigate = useNavigate();
+  const [user] = useAuthState(auth); // ✅ Utilisateur ouvreur connecté
   const [competition, setCompetition] = useState<Competition | null>(null);
   const [formData, setFormData] = useState<{
     number: string;
     wall: string;
-    difficulty: string; // ✅ Toujours string, mais maintenant avec menu déroulant
+    difficulty: string;
     difficulty_types: string[];
     instructions: string;
     imageFile: File | null;
@@ -128,7 +128,7 @@ export default function CompetitionBoulderForm(): JSX.Element {
   }>({
     number: '',
     wall: '',
-    difficulty: '', // ✅ Valeur initiale vide
+    difficulty: '',
     difficulty_types: [],
     instructions: '',
     imageFile: null,
@@ -143,6 +143,10 @@ export default function CompetitionBoulderForm(): JSX.Element {
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  // ✅ Même correctif que DailyBoulderForm : force le remontage de l'input file
+  // après une création réussie, pour éviter le bug "il faut recharger l'écran"
+  const [fileInputKey, setFileInputKey] = useState<number>(0);
 
   useEffect(() => {
     if (!competitionId) return;
@@ -169,7 +173,7 @@ export default function CompetitionBoulderForm(): JSX.Element {
           setFormData({
             number: data.number.toString(),
             wall: data.wall,
-            difficulty: data.difficulty || '', // ✅ Charger la difficulté existante
+            difficulty: data.difficulty || '',
             difficulty_types: data.difficulty_types || [],
             instructions: data.instructions || '',
             imageFile: null,
@@ -236,14 +240,14 @@ export default function CompetitionBoulderForm(): JSX.Element {
     const x: number = (e.clientX - rect.left) / rect.width;
     const y: number = (e.clientY - rect.top) / rect.height;
 
-    setFormData({
-      ...formData,
+    setFormData((prev) => ({
+      ...prev,
       annotations: {
-        ...formData.annotations,
+        ...prev.annotations,
         [currentMode === 'start' ? 'start_holds' : 'end_holds']:
-          [...(currentMode === 'start' ? formData.annotations.start_holds : formData.annotations.end_holds), { x, y }]
+          [...(currentMode === 'start' ? prev.annotations.start_holds : prev.annotations.end_holds), { x, y }]
       }
-    });
+    }));
   };
 
   const handleImageUpload = (e: ChangeEvent<HTMLInputElement>): void => {
@@ -252,12 +256,12 @@ export default function CompetitionBoulderForm(): JSX.Element {
 
     resizeAndCompressImage(file, 800, 0.7)
       .then((resizedImageBase64: string) => {
-        setFormData({
-          ...formData,
+        setFormData((prev) => ({
+          ...prev,
           imageFile: file,
           imagePreview: resizedImageBase64,
           annotations: { start_holds: [], end_holds: [] }
-        });
+        }));
       })
       .catch((error: unknown) => {
         console.error('Erreur lors du redimensionnement :', error);
@@ -266,15 +270,37 @@ export default function CompetitionBoulderForm(): JSX.Element {
   };
 
   const handleDeleteAnnotation = (type: 'start_holds' | 'end_holds', index: number): void => {
-    const newAnnotations = { ...formData.annotations };
-    newAnnotations[type].splice(index, 1);
-    setFormData({ ...formData, annotations: newAnnotations });
+    setFormData((prev) => {
+      const newAnnotations = { ...prev.annotations };
+      newAnnotations[type] = newAnnotations[type].filter((_, i) => i !== index);
+      return { ...prev, annotations: newAnnotations };
+    });
+  };
+
+  const resetForm = (): void => {
+    setFormData({
+      number: '',
+      wall: '',
+      difficulty: '',
+      difficulty_types: [],
+      instructions: '',
+      imageFile: null,
+      imagePreview: '',
+      annotations: { start_holds: [], end_holds: [] },
+      difficulty_level: 'Égal'
+    });
+    // ✅ Force le remontage de l'input file natif (même correctif que DailyBoulderForm)
+    setFileInputKey((k) => k + 1);
   };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
     if (!competitionId) {
       alert('Erreur : compétition non sélectionnée.');
+      return;
+    }
+    if (!user) {
+      alert('Erreur : utilisateur non authentifié.');
       return;
     }
     if (!formData.number) {
@@ -285,7 +311,7 @@ export default function CompetitionBoulderForm(): JSX.Element {
       alert('Veuillez sélectionner un mur.');
       return;
     }
-    if (!formData.difficulty) { // ✅ Vérification de la difficulté
+    if (!formData.difficulty) {
       alert('Veuillez sélectionner une cotation.');
       return;
     }
@@ -348,7 +374,7 @@ export default function CompetitionBoulderForm(): JSX.Element {
       const boulderData = {
         wall: formData.wall,
         number: parseInt(formData.number),
-        difficulty: formData.difficulty, // ✅ Utilisation de la difficulté sélectionnée
+        difficulty: formData.difficulty,
         difficulty_types: formData.difficulty_types,
         instructions: formData.instructions,
         image_base64: annotatedImageBase64,
@@ -357,7 +383,7 @@ export default function CompetitionBoulderForm(): JSX.Element {
         competition_id: competitionId,
         is_active: true,
         created_at: new Date().toISOString(),
-        created_by: 'ouvreur_uid',
+        created_by: user.uid, // ✅ Vrai UID de l'ouvreur connecté, plus de placeholder
         difficulty_level: formData.difficulty_level
       };
 
@@ -377,19 +403,19 @@ export default function CompetitionBoulderForm(): JSX.Element {
     }
   };
 
-  // ✅ Correction : Gestion de availableWalls avec opérateur optionnel
   const availableWalls = competition?.walls || walls;
 
   return (
     <Container maxWidth="lg">
-      <Paper sx={{ p: 3, mt: 3 }}>
+      <Paper sx={{ p: { xs: 2, sm: 3 }, mt: 3 }}>
         <Typography variant="h5" gutterBottom>
           {boulderId ? `Modifier le bloc de compétition` : `Ajouter un bloc à la compétition`}
           {competition && ` - ${competition.name}`}
         </Typography>
 
         <Box component="form" onSubmit={handleSubmit}>
-          <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+          {/* ✅ flexWrap pour empiler sur mobile au lieu de compresser */}
+          <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
             <TextField
               label="Numéro du bloc"
               type="number"
@@ -398,8 +424,9 @@ export default function CompetitionBoulderForm(): JSX.Element {
               fullWidth
               required
               disabled={isUploading}
+              sx={{ minWidth: 150 }}
             />
-            <FormControl fullWidth disabled={isUploading}>
+            <FormControl fullWidth disabled={isUploading} sx={{ minWidth: 200 }}>
               <InputLabel>Mur</InputLabel>
               <Select
                 value={formData.wall}
@@ -413,9 +440,9 @@ export default function CompetitionBoulderForm(): JSX.Element {
             </FormControl>
           </Box>
 
-          {/* ✅ NOUVEAU : Menu déroulant pour la cotation (comme dans DailyBoulderForm) */}
-          <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
-            <FormControl fullWidth disabled={isUploading}>
+          {/* ✅ flexWrap ici aussi */}
+          <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
+            <FormControl fullWidth disabled={isUploading} sx={{ minWidth: 200 }}>
               <InputLabel>Cotation</InputLabel>
               <Select
                 value={formData.difficulty}
@@ -429,7 +456,7 @@ export default function CompetitionBoulderForm(): JSX.Element {
               </Select>
             </FormControl>
 
-            <FormControl fullWidth disabled={isUploading}>
+            <FormControl fullWidth disabled={isUploading} sx={{ minWidth: 200 }}>
               <InputLabel>Difficulté dans le niveau</InputLabel>
               <Select
                 value={formData.difficulty_level}
@@ -476,7 +503,10 @@ export default function CompetitionBoulderForm(): JSX.Element {
             disabled={isUploading}
           />
 
+          {/* ✅ key forcée pour remonter l'input natif après chaque création */}
           <input
+            key={fileInputKey}
+            ref={fileInputRef}
             type="file"
             accept="image/*"
             onChange={handleImageUpload}
@@ -504,7 +534,7 @@ export default function CompetitionBoulderForm(): JSX.Element {
                   cursor: 'crosshair'
                 }}
               />
-              <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+              <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: 'wrap' }}>
                 <Button
                   variant={currentMode === 'start' ? 'contained' : 'outlined'}
                   onClick={(): void => setCurrentMode('start')}
@@ -582,7 +612,7 @@ export default function CompetitionBoulderForm(): JSX.Element {
             </Box>
           )}
 
-          <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
+          <Box sx={{ display: 'flex', gap: 2, mt: 2, flexWrap: 'wrap' }}>
             <Button
               type="submit"
               variant="contained"
