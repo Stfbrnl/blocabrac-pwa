@@ -8,7 +8,6 @@ import {
 import { collection, query, where, getDocs, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../../../services/firebaseConfig';
 
-// Couleurs des niveaux
 const levelColors: Record<string, string> = {
   jaune: '#FFFF00',
   vert: '#00FF00',
@@ -18,7 +17,7 @@ const levelColors: Record<string, string> = {
   noir: '#000000',
   blanc: '#FFFFFF',
   rose: '#FFC0CB',
-  mystère: '#808080' // ✅ Couleur pour les blocs mystère
+  mystère: '#808080'
 };
 
 const walls: string[] = [
@@ -54,15 +53,53 @@ interface MysteryRatingData {
   users: string[];
 }
 
+// ✅ Annuaire UID -> "Prénom Nom"
+interface UserInfo {
+  id: string;
+  firstName: string;
+  lastName: string;
+}
+
 export default function BoulderStats(): JSX.Element {
   const [selectedWall, setSelectedWall] = useState<string>('');
   const [stats, setStats] = useState<StatsData[]>([]);
-  const [mysteryRatings, setMysteryRatings] = useState<MysteryRatingData[]>([]); // ✅ Nouveau : Cotations proposées
+  const [mysteryRatings, setMysteryRatings] = useState<MysteryRatingData[]>([]);
+  const [usersById, setUsersById] = useState<Record<string, UserInfo>>({}); // ✅ Annuaire chargé une fois
   const [loading, setLoading] = useState<boolean>(false);
   const [openResetDialog, setOpenResetDialog] = useState(false);
   const [period, setPeriod] = useState<'day' | 'week' | 'month' | 'year' | 'custom'>('week');
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
+
+  // ✅ Construit "Prénom Nom" à partir d'un UID, avec fallback sur l'UID lui-même
+  const getUserFullName = (uid: string): string => {
+    const found = usersById[uid];
+    if (!found) return uid;
+    const composed = [found.firstName, found.lastName].filter(Boolean).join(' ').trim();
+    return composed || uid;
+  };
+
+  // ✅ Charger l'annuaire des utilisateurs une seule fois
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const snapshot = await getDocs(collection(db, 'users'));
+        const map: Record<string, UserInfo> = {};
+        snapshot.docs.forEach((userDoc) => {
+          const data = userDoc.data();
+          map[userDoc.id] = {
+            id: userDoc.id,
+            firstName: data.first_name || '',
+            lastName: data.last_name || '',
+          };
+        });
+        setUsersById(map);
+      } catch (err) {
+        console.error('Erreur lors du chargement des utilisateurs:', err);
+      }
+    };
+    fetchUsers();
+  }, []);
 
   useEffect(() => {
     if (!selectedWall) return;
@@ -70,7 +107,6 @@ export default function BoulderStats(): JSX.Element {
     const fetchStats = async (): Promise<void> => {
       setLoading(true);
       try {
-        // Calculer les dates en fonction de la période
         const now = new Date();
         let startDateFilter: Date | null = null;
         let endDateFilter: Date | null = null;
@@ -101,7 +137,6 @@ export default function BoulderStats(): JSX.Element {
             break;
         }
 
-        // Charger les blocs du mur sélectionné
         const bouldersQuery = query(
           collection(db, 'boulders'),
           where('wall', '==', selectedWall),
@@ -124,7 +159,6 @@ export default function BoulderStats(): JSX.Element {
           const resultsSnapshot = await getDocs(resultsQuery);
           const results = resultsSnapshot.docs.map(doc => doc.data());
 
-          // Filtrer par période
           const filteredResults = results.filter((result: any) => {
             const resultDate = new Date(result.createdAt);
             if (startDateFilter && resultDate < startDateFilter) return false;
@@ -132,7 +166,6 @@ export default function BoulderStats(): JSX.Element {
             return true;
           });
 
-          // Calculer les stats générales
           const ratings: number[] = filteredResults
             .filter((result: any) => result.rating !== undefined)
             .map((result: any) => result.rating);
@@ -158,12 +191,10 @@ export default function BoulderStats(): JSX.Element {
             validatedBy: validatedBy
           });
 
-          // ✅ Calculer les cotations proposées pour les blocs mystère
           const proposedDifficulties: any[] = filteredResults
             .filter((result: any) => result.proposedDifficulty !== undefined && result.proposedDifficulty !== null);
 
           if (proposedDifficulties.length > 0) {
-            // Grouper par cotation proposée
             const difficultyGroups: Record<string, { count: number; users: string[] }> = {};
             proposedDifficulties.forEach((result: any) => {
               const difficulty = result.proposedDifficulty;
@@ -176,7 +207,6 @@ export default function BoulderStats(): JSX.Element {
               }
             });
 
-            // Ajouter au tableau des cotations proposées
             Object.entries(difficultyGroups).forEach(([difficulty, data]) => {
               mysteryRatingsData.push({
                 boulderId: boulder.id,
@@ -202,7 +232,6 @@ export default function BoulderStats(): JSX.Element {
     fetchStats();
   }, [selectedWall, period, startDate, endDate]);
 
-  // Réinitialiser les stats pour un mur
   const handleResetStats = async (): Promise<void> => {
     try {
       setLoading(true);
@@ -224,11 +253,10 @@ export default function BoulderStats(): JSX.Element {
     }
   };
 
-  // Sélecteur de période
   const periodSelector = (
     <Paper sx={{ p: 2, mb: 2 }}>
       <Typography variant="h6" sx={{ mb: 2 }}>Filtrer par période:</Typography>
-      <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2 }}>
+      <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2, flexWrap: 'wrap' }}>
         <FormControl sx={{ minWidth: 120 }}>
           <InputLabel>Période</InputLabel>
           <Select
@@ -268,7 +296,6 @@ export default function BoulderStats(): JSX.Element {
     </Paper>
   );
 
-  // Calcul des moyennes pour le mur
   const wallAverageRating = stats.length > 0
     ? stats.reduce((sum: number, s: StatsData) => sum + s.averageRating, 0) / stats.length
     : 0;
@@ -283,7 +310,6 @@ export default function BoulderStats(): JSX.Element {
 
   return (
     <Box sx={{ mt: 2 }}>
-      {/* Sélecteur de mur */}
       <FormControl fullWidth sx={{ mb: 3 }}>
         <InputLabel>Sélectionnez un mur</InputLabel>
         <Select
@@ -304,8 +330,8 @@ export default function BoulderStats(): JSX.Element {
           {stats.length > 0 || mysteryRatings.length > 0 ? (
             <>
               {/* Résumé du mur */}
-              <Paper sx={{ p: 2, mb: 3, backgroundColor: '#f5f5f5' }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Paper sx={{ p: { xs: 1.5, sm: 2 }, mb: 3, backgroundColor: '#f5f5f5' }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
                   <Box>
                     <Typography variant="h6">
                       Moyenne du mur: {wallAverageRating.toFixed(2)}/5
@@ -331,12 +357,12 @@ export default function BoulderStats(): JSX.Element {
               {periodSelector}
 
               {/* TABLEAU 1 : Notes des blocs */}
-              <Paper sx={{ p: 2, mb: 3 }}>
+              <Paper sx={{ p: { xs: 1.5, sm: 2 }, mb: 3 }}>
                 <Typography variant="h6" gutterBottom>
                   Notes des blocs
                 </Typography>
-                <TableContainer>
-                  <Table>
+                <TableContainer sx={{ overflowX: 'auto' }}>
+                  <Table sx={{ minWidth: 450 }}>
                     <TableHead>
                       <TableRow>
                         <TableCell>Bloc n°</TableCell>
@@ -374,12 +400,12 @@ export default function BoulderStats(): JSX.Element {
               </Paper>
 
               {/* TABLEAU 2 : Essais et validations */}
-              <Paper sx={{ p: 2, mb: 3 }}>
+              <Paper sx={{ p: { xs: 1.5, sm: 2 }, mb: 3 }}>
                 <Typography variant="h6" gutterBottom>
                   Essais et validations
                 </Typography>
-                <TableContainer>
-                  <Table>
+                <TableContainer sx={{ overflowX: 'auto' }}>
+                  <Table sx={{ minWidth: 550 }}>
                     <TableHead>
                       <TableRow>
                         <TableCell>Bloc n°</TableCell>
@@ -402,7 +428,8 @@ export default function BoulderStats(): JSX.Element {
                                 {stat.validatedBy.map((userId: string, index: number) => (
                                   <Chip
                                     key={`${stat.boulderId}_${index}`}
-                                    label={userId}
+                                    // ✅ Nom complet résolu depuis l'annuaire, au lieu de l'UID brut
+                                    label={getUserFullName(userId)}
                                     size="small"
                                     sx={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis' }}
                                   />
@@ -419,14 +446,14 @@ export default function BoulderStats(): JSX.Element {
                 </TableContainer>
               </Paper>
 
-              {/* ✅ TABLEAU 3 : Cotations proposées pour les blocs mystère */}
+              {/* TABLEAU 3 : Cotations proposées pour les blocs mystère */}
               {mysteryRatings.length > 0 && (
-                <Paper sx={{ p: 2, mb: 3 }}>
+                <Paper sx={{ p: { xs: 1.5, sm: 2 }, mb: 3 }}>
                   <Typography variant="h6" gutterBottom>
                     Cotations proposées pour les blocs mystère
                   </Typography>
-                  <TableContainer>
-                    <Table>
+                  <TableContainer sx={{ overflowX: 'auto' }}>
+                    <Table sx={{ minWidth: 550 }}>
                       <TableHead>
                         <TableRow>
                           <TableCell>Bloc n°</TableCell>
@@ -458,7 +485,8 @@ export default function BoulderStats(): JSX.Element {
                                   {rating.users.map((userId: string, index: number) => (
                                     <Chip
                                       key={`${rating.boulderId}_${rating.proposedDifficulty}_${index}`}
-                                      label={userId}
+                                      // ✅ Nom complet résolu depuis l'annuaire, au lieu de l'UID brut
+                                      label={getUserFullName(userId)}
                                       size="small"
                                       sx={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis' }}
                                     />
@@ -484,7 +512,6 @@ export default function BoulderStats(): JSX.Element {
         <Typography>Sélectionnez un mur pour afficher les statistiques.</Typography>
       )}
 
-      {/* Dialogue de confirmation pour la réinitialisation */}
       <Dialog
         open={openResetDialog}
         onClose={() => setOpenResetDialog(false)}
