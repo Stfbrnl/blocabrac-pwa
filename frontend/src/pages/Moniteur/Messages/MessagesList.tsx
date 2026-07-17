@@ -41,7 +41,9 @@ import {
   MenuItem,
   Checkbox,
   ListItemText,
-  OutlinedInput
+  OutlinedInput,
+  useTheme,
+  useMediaQuery
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -82,6 +84,8 @@ interface Group {
 
 const MessagesList: React.FC = () => {
   const [user, loadingAuth] = useAuthState(auth);
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
@@ -168,17 +172,22 @@ const MessagesList: React.FC = () => {
     if (!user?.uid) return;
     const fetchData = async () => {
       try {
-        // Charger les clients
-        const clientsQuery = query(
-          collection(db, 'users'),
-          where('role', '==', 'client')
-        );
-        const clientsSnapshot = await getDocs(clientsQuery);
-        const clientsList = clientsSnapshot.docs.map(doc => ({
-          id: doc.id,
-          displayName: doc.data().displayName || doc.data().email || doc.id,
-          email: doc.data().email || ''
-        }));
+        // Charger les clients. Le champ identifiant un client existe sous deux formes
+        // selon les documents (`role` == 'client' ou tableau `roles` contenant 'client')
+        // On interroge les deux et on fusionne pour ne perdre aucun client.
+        const [clientsByRoleSnapshot, clientsByRolesArraySnapshot] = await Promise.all([
+          getDocs(query(collection(db, 'users'), where('role', '==', 'client'))),
+          getDocs(query(collection(db, 'users'), where('roles', 'array-contains', 'client'))),
+        ]);
+        const clientsById = new Map<string, Client>();
+        [...clientsByRoleSnapshot.docs, ...clientsByRolesArraySnapshot.docs].forEach((doc) => {
+          clientsById.set(doc.id, {
+            id: doc.id,
+            displayName: doc.data().displayName || doc.data().email || doc.id,
+            email: doc.data().email || '',
+          });
+        });
+        const clientsList = Array.from(clientsById.values());
         setClients(clientsList);
 
         // Charger les groupes du moniteur
@@ -321,17 +330,29 @@ const MessagesList: React.FC = () => {
 
   return (
     <Container maxWidth="lg">
-      <Paper sx={{ p: 3, mt: 3 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+      <Paper sx={{ p: { xs: 2, sm: 3 }, mt: { xs: 2, sm: 3 } }}>
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: { xs: 'column', sm: 'row' },
+            justifyContent: 'space-between',
+            alignItems: { xs: 'stretch', sm: 'center' },
+            gap: 2,
+            mb: 3,
+          }}
+        >
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <MailIcon color="primary" sx={{ fontSize: 40 }} />
-            <Typography variant="h4">Messagerie</Typography>
+            <MailIcon color="primary" sx={{ fontSize: { xs: 32, sm: 40 } }} />
+            <Typography variant="h4" sx={{ fontSize: { xs: '1.5rem', sm: '2.125rem' } }}>
+              Messagerie
+            </Typography>
           </Box>
           <Button
             variant="contained"
             color="primary"
             startIcon={<AddIcon />}
             onClick={() => setOpenNewMessageDialog(true)}
+            sx={{ width: { xs: '100%', sm: 'auto' } }}
           >
             Nouveau message
           </Button>
@@ -340,8 +361,8 @@ const MessagesList: React.FC = () => {
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
         {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
 
-        <TableContainer>
-          <Table>
+        <TableContainer sx={{ overflowX: 'auto' }}>
+          <Table sx={{ minWidth: 750 }}>
             <TableHead>
               <TableRow>
                 <TableCell></TableCell>
@@ -372,8 +393,12 @@ const MessagesList: React.FC = () => {
                           </IconButton>
                         </TableCell>
                         <TableCell>{message.title}</TableCell>
-                        <TableCell>{isReceived ? `De: ${displayName}` : `À: ${displayName}`}</TableCell>
-                        <TableCell>{message.createdAt.toLocaleDateString('fr-FR')}</TableCell>
+                        <TableCell>
+                          {isReceived ? `De: ${displayName}` : `À: ${displayName}`}
+                        </TableCell>
+                        <TableCell>
+                          {message.createdAt.toLocaleDateString('fr-FR')}
+                        </TableCell>
                         <TableCell>
                           <Chip label={isReceived ? 'Reçu' : 'Envoyé'} color={isReceived ? 'success' : 'primary'} size="small" />
                         </TableCell>
@@ -420,7 +445,7 @@ const MessagesList: React.FC = () => {
         </TableContainer>
       </Paper>
 
-      <Dialog open={openDeleteDialog} onClose={() => setOpenDeleteDialog(false)}>
+      <Dialog open={openDeleteDialog} onClose={() => setOpenDeleteDialog(false)} fullWidth maxWidth="xs">
         <DialogTitle>Supprimer le message</DialogTitle>
         <DialogContent>Êtes-vous sûr de vouloir supprimer ce message ?<br /><strong>Cette action est irréversible.</strong></DialogContent>
         <DialogActions>
@@ -429,7 +454,7 @@ const MessagesList: React.FC = () => {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={openReplyDialog} onClose={() => setOpenReplyDialog(false)} fullWidth maxWidth="md">
+      <Dialog open={openReplyDialog} onClose={() => setOpenReplyDialog(false)} fullWidth maxWidth="md" fullScreen={isMobile}>
         <DialogTitle>Répondre au message</DialogTitle>
         <DialogContent>
           {selectedMessage && (
@@ -446,7 +471,7 @@ const MessagesList: React.FC = () => {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={openNewMessageDialog} onClose={() => setOpenNewMessageDialog(false)} fullWidth maxWidth="md">
+      <Dialog open={openNewMessageDialog} onClose={() => setOpenNewMessageDialog(false)} fullWidth maxWidth="md" fullScreen={isMobile}>
         <DialogTitle>Nouveau message</DialogTitle>
         <DialogContent>
           <TextField label="Titre" value={newMessageTitle} onChange={(e) => setNewMessageTitle(e.target.value)} fullWidth margin="normal" required />

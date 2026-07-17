@@ -101,7 +101,7 @@ const ExercisesList: React.FC = () => {
       setOpenDeleteDialog(false);
       setExerciseToDelete(null);
     } catch (error) {
-      setError(`Erreur lors de la suppression de l\\'exercice : ${error}`);
+      setError(`Erreur lors de la suppression de l'exercice : ${error}`);
       setOpenDeleteDialog(false);
     }
   };
@@ -116,18 +116,29 @@ const ExercisesList: React.FC = () => {
 
   return (
     <Container maxWidth="lg">
-      <Paper sx={{ p: 3, mt: 3 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+      <Paper sx={{ p: { xs: 2, sm: 3 }, mt: { xs: 2, sm: 3 } }}>
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: { xs: 'column', sm: 'row' },
+            justifyContent: 'space-between',
+            alignItems: { xs: 'stretch', sm: 'center' },
+            gap: 2,
+            mb: 3,
+          }}
+        >
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <FitnessCenterIcon color="primary" sx={{ fontSize: 40 }} />
-            <Typography variant="h4">Gestion des exercices</Typography>
+            <FitnessCenterIcon color="primary" sx={{ fontSize: { xs: 32, sm: 40 } }} />
+            <Typography variant="h4" sx={{ fontSize: { xs: '1.5rem', sm: '2.125rem' } }}>
+              Gestion des exercices
+            </Typography>
           </Box>
           <Button
             variant="contained"
             color="primary"
             startIcon={<AddIcon />}
             onClick={() => navigate('/moniteur/exercises/new')}
-            sx={{ height: '48px' }}
+            sx={{ height: '48px', width: { xs: '100%', sm: 'auto' } }}
           >
             Nouvel exercice
           </Button>
@@ -139,8 +150,8 @@ const ExercisesList: React.FC = () => {
           </Box>
         )}
 
-        <TableContainer>
-          <Table>
+        <TableContainer sx={{ overflowX: 'auto' }}>
+          <Table sx={{ minWidth: 600 }}>
             <TableHead>
               <TableRow>
                 <TableCell>Nom</TableCell>
@@ -161,7 +172,9 @@ const ExercisesList: React.FC = () => {
                 exercises.map((exercise) => (
                   <TableRow key={exercise.id} hover>
                     <TableCell>{exercise.name}</TableCell>
-                    <TableCell>{exercise.category}</TableCell>
+                    <TableCell>
+                      {exercise.category}
+                    </TableCell>
                     <TableCell>
                       <Chip
                         label={exercise.difficulty}
@@ -173,7 +186,9 @@ const ExercisesList: React.FC = () => {
                         size="small"
                       />
                     </TableCell>
-                    <TableCell>{exercise.createdAt.toLocaleDateString('fr-FR')}</TableCell>
+                    <TableCell>
+                      {exercise.createdAt.toLocaleDateString('fr-FR')}
+                    </TableCell>
                     <TableCell>
                       <Tooltip title="Modifier l'exercice">
                         <IconButton
@@ -205,6 +220,8 @@ const ExercisesList: React.FC = () => {
         <Dialog
           open={openDeleteDialog}
           onClose={() => setOpenDeleteDialog(false)}
+          fullWidth
+          maxWidth="xs"
         >
           <DialogTitle>Supprimer l'exercice</DialogTitle>
           <DialogContent>

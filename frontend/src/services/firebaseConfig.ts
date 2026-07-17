@@ -3,7 +3,7 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage"; // ✅ CORRECTION : Import de getStorage depuis firebase/storage
 
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: "AIzaSyCKVWoaCQI2PhnOAjJBokKoXuzzmnDa9hg",
   authDomain: "blocabrac.firebaseapp.com",
   projectId: "blocabrac",

@@ -104,7 +104,7 @@ const CourseDetail: React.FC = () => {
       setSuccess('Vous avez été ajouté aux participants !');
       setOpenDialog(false);
     } catch (err) {
-      setError(`Erreur lors de l\\'ajout : ${err}`);
+      setError(`Erreur lors de l'ajout : ${err}`);
     }
   };
 
@@ -139,15 +139,27 @@ const CourseDetail: React.FC = () => {
 
   return (
     <Container maxWidth="md">
-      <Paper sx={{ p: 3, mt: 3 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h4">{course.title}</Typography>
+      <Paper sx={{ p: { xs: 2, sm: 3 }, mt: { xs: 2, sm: 3 } }}>
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: { xs: 'column', sm: 'row' },
+            justifyContent: 'space-between',
+            alignItems: { xs: 'stretch', sm: 'center' },
+            gap: 2,
+            mb: 2,
+          }}
+        >
+          <Typography variant="h4" sx={{ fontSize: { xs: '1.5rem', sm: '2.125rem' } }}>
+            {course.title}
+          </Typography>
           {canEdit && (
             <Button
               variant="contained"
               color="primary"
               startIcon={<EditIcon />}
               onClick={() => navigate(`/moniteur/courses/edit/${course.id}`)}
+              sx={{ width: { xs: '100%', sm: 'auto' } }}
             >
               Modifier
             </Button>
@@ -191,13 +203,21 @@ const CourseDetail: React.FC = () => {
           )}
         </List>
 
-        <Box sx={{ mt: 2, display: 'flex', gap: 2 }}>
+        <Box
+          sx={{
+            mt: 2,
+            display: 'flex',
+            flexDirection: { xs: 'column', sm: 'row' },
+            gap: 2,
+          }}
+        >
           {!isParticipant ? (
             <Button
               variant="contained"
               color="success"
               startIcon={<GroupAddIcon />}
               onClick={() => setOpenDialog(true)}
+              sx={{ width: { xs: '100%', sm: 'auto' } }}
             >
               Rejoindre la séance
             </Button>
@@ -207,6 +227,7 @@ const CourseDetail: React.FC = () => {
               color="error"
               startIcon={<DeleteIcon />}
               onClick={() => setOpenDialog(true)}
+              sx={{ width: { xs: '100%', sm: 'auto' } }}
             >
               Quitter la séance
             </Button>
@@ -214,6 +235,7 @@ const CourseDetail: React.FC = () => {
           <Button
             variant="outlined"
             onClick={() => navigate('/moniteur/courses')}
+            sx={{ width: { xs: '100%', sm: 'auto' } }}
           >
             Retour à la liste
           </Button>
@@ -222,6 +244,8 @@ const CourseDetail: React.FC = () => {
         <Dialog
           open={openDialog}
           onClose={() => setOpenDialog(false)}
+          fullWidth
+          maxWidth="xs"
         >
           <DialogTitle>
             {isParticipant ? 'Quitter la séance' : 'Rejoindre la séance'}

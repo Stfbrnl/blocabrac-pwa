@@ -77,7 +77,11 @@ const GroupForm: React.FC = () => {
         querySnapshot.forEach((doc) => {
           const data = doc.data();
           // ✅ Filtrer : seuls les clients avec inscritAuxCours === true
-          if (data.inscritAuxCours === true && data.roles?.includes('client')) {
+          // Le champ "rôle client" existe sous deux formes selon les documents
+          // (tableau `roles` ou champ `role` simple) : on vérifie les deux pour éviter
+          // d'exclure des clients par erreur si l'un des deux schémas est utilisé.
+          const isClient = data.roles?.includes('client') || data.role === 'client';
+          if (data.inscritAuxCours === true && isClient) {
             clients.push({
               uid: doc.id,
               displayName: `${data.first_name || ''} ${data.last_name || ''}`.trim() || data.email?.split('@')[0] || doc.id,
@@ -186,8 +190,8 @@ const GroupForm: React.FC = () => {
 
   return (
     <Container maxWidth="md">
-      <Paper sx={{ p: 3, mt: 3 }}>
-        <Typography variant="h4" gutterBottom>
+      <Paper sx={{ p: { xs: 2, sm: 3 }, mt: { xs: 2, sm: 3 } }}>
+        <Typography variant="h4" gutterBottom sx={{ fontSize: { xs: '1.5rem', sm: '2.125rem' } }}>
           {isEditMode ? 'Modifier le groupe' : 'Nouveau groupe'}
         </Typography>
 
@@ -254,12 +258,20 @@ const GroupForm: React.FC = () => {
             )}
           </FormControl>
 
-          <Box sx={{ mt: 4, display: 'flex', gap: 2 }}>
+          <Box
+            sx={{
+              mt: 4,
+              display: 'flex',
+              flexDirection: { xs: 'column-reverse', sm: 'row' },
+              gap: 2,
+            }}
+          >
             <Button
               type="button"
               variant="outlined"
               onClick={() => navigate('/moniteur/groups')}
               disabled={isSubmitting}
+              sx={{ width: { xs: '100%', sm: 'auto' } }}
             >
               Annuler
             </Button>
@@ -268,6 +280,7 @@ const GroupForm: React.FC = () => {
               variant="contained"
               color="primary"
               disabled={isSubmitting || allClients.length === 0} // ✅ Désactiver si aucun client disponible
+              sx={{ width: { xs: '100%', sm: 'auto' } }}
             >
               {isSubmitting
                 ? <CircularProgress size={24} />

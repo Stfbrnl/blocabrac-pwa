@@ -237,8 +237,8 @@ const ExerciseForm: React.FC = () => {
 
   return (
     <Container maxWidth="md">
-      <Paper sx={{ p: 3, mt: 3 }}>
-        <Typography variant="h4" gutterBottom>
+      <Paper sx={{ p: { xs: 2, sm: 3 }, mt: { xs: 2, sm: 3 } }}>
+        <Typography variant="h4" gutterBottom sx={{ fontSize: { xs: '1.5rem', sm: '2.125rem' } }}>
           {isEditMode ? "Modifier l'exercice" : 'Nouvel exercice'}
         </Typography>
 
@@ -282,8 +282,8 @@ const ExerciseForm: React.FC = () => {
             />
           </FormControl>
 
-          <Box sx={{ display: 'flex', gap: 2 }}>
-            <FormControl fullWidth margin="normal">
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+            <FormControl margin="normal" sx={{ flex: '1 1 200px' }}>
               <FormLabel>Difficulté *</FormLabel>
               <TextField
                 select
@@ -296,7 +296,7 @@ const ExerciseForm: React.FC = () => {
                 ))}
               </TextField>
             </FormControl>
-            <FormControl fullWidth margin="normal">
+            <FormControl margin="normal" sx={{ flex: '1 1 200px' }}>
               <FormLabel>Catégorie *</FormLabel>
               <TextField
                 select
@@ -375,7 +375,16 @@ const ExerciseForm: React.FC = () => {
               ) : (
                 <Box sx={{ mt: 1 }}>
                   {dataFields.map((field, index) => (
-                    <Box key={index} sx={{ display: 'flex', gap: 1, mb: 1, alignItems: 'center' }}>
+                    <Box
+                      key={index}
+                      sx={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        gap: 1,
+                        mb: 1,
+                        alignItems: 'center',
+                      }}
+                    >
                       <TextField
                         label="Nom du champ"
                         value={field.label}
@@ -384,29 +393,31 @@ const ExerciseForm: React.FC = () => {
                         fullWidth
                         placeholder="Ex: Nombre de tractions"
                       />
-                      <TextField
-                        select
-                        label="Type"
-                        value={field.type}
-                        onChange={(e) => handleUpdateDataField(index, 'type', e.target.value as 'number' | 'text' | 'time')}
-                        variant="outlined"
-                        sx={{ minWidth: 120 }}
-                      >
-                        {fieldTypes.map((type) => (
-                          <MenuItem key={type} value={type}>
-                            {type === 'number' ? 'Nombre' : type === 'time' ? 'Temps' : 'Texte'}
-                          </MenuItem>
-                        ))}
-                      </TextField>
-                      <Tooltip title="Supprimer ce champ">
-                        <IconButton
-                          color="error"
-                          onClick={() => handleRemoveDataField(index)}
-                          sx={{ height: '40px', width: '40px' }}
+                      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                        <TextField
+                          select
+                          label="Type"
+                          value={field.type}
+                          onChange={(e) => handleUpdateDataField(index, 'type', e.target.value as 'number' | 'text' | 'time')}
+                          variant="outlined"
+                          sx={{ minWidth: 120, flexGrow: { xs: 1, sm: 0 } }}
                         >
-                          <DeleteIcon />
-                        </IconButton>
-                      </Tooltip>
+                          {fieldTypes.map((type) => (
+                            <MenuItem key={type} value={type}>
+                              {type === 'number' ? 'Nombre' : type === 'time' ? 'Temps' : 'Texte'}
+                            </MenuItem>
+                          ))}
+                        </TextField>
+                        <Tooltip title="Supprimer ce champ">
+                          <IconButton
+                            color="error"
+                            onClick={() => handleRemoveDataField(index)}
+                            sx={{ height: '40px', width: '40px', flexShrink: 0 }}
+                          >
+                            <DeleteIcon />
+                          </IconButton>
+                        </Tooltip>
+                      </Box>
                     </Box>
                   ))}
                 </Box>
@@ -422,12 +433,20 @@ const ExerciseForm: React.FC = () => {
             </FormControl>
           )}
 
-          <Box sx={{ mt: 4, display: 'flex', gap: 2 }}>
+          <Box
+            sx={{
+              mt: 4,
+              display: 'flex',
+              flexDirection: { xs: 'column-reverse', sm: 'row' },
+              gap: 2,
+            }}
+          >
             <Button
               type="button"
               variant="outlined"
               onClick={() => navigate('/moniteur/exercises')}
               disabled={isSubmitting}
+              sx={{ width: { xs: '100%', sm: 'auto' } }}
             >
               Annuler
             </Button>
@@ -436,6 +455,7 @@ const ExerciseForm: React.FC = () => {
               variant="contained"
               color="primary"
               disabled={isSubmitting}
+              sx={{ width: { xs: '100%', sm: 'auto' } }}
             >
               {isSubmitting ? <CircularProgress size={24} /> : isEditMode ? 'Mettre à jour' : 'Créer'}
             </Button>

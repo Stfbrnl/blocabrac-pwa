@@ -43,6 +43,7 @@ interface Course {
   createdBy: string;
   createdAt: Date;
   isActive: boolean;
+  MaxParticipants: number;
 }
 
 const levels = ['Débutant', 'Intermédiaire', 'Avancé', 'Expert'];
@@ -63,6 +64,7 @@ const CourseForm: React.FC = () => {
     isActive: false,
     createdBy: user?.uid || '',
     createdAt: new Date(),
+    MaxParticipants: 10,
   });
   const [groups, setGroups] = useState<{ id: string; name: string }[]>([]);
   const [exercises, setExercises] = useState<{ id: string; name: string; type: 'validation' | 'data' }[]>([]);
@@ -90,8 +92,8 @@ const CourseForm: React.FC = () => {
           });
         });
         setGroups(groupsData);
-        if (groupsData.length > 0 && !course.groupId && !isEditMode) {
-          setCourse({ ...course, groupId: groupsData[0].id });
+        if (groupsData.length > 0 && !isEditMode) {
+          setCourse((prev) => (prev.groupId ? prev : { ...prev, groupId: groupsData[0].id }));
         }
       } catch (err) {
         setError(`Erreur lors du chargement des groupes : ${err}`);
@@ -132,6 +134,7 @@ const CourseForm: React.FC = () => {
             date: data.date?.toDate() || new Date(),
             createdAt: data.createdAt?.toDate() || new Date(),
             isActive: data.isActive || false,
+            MaxParticipants: data.MaxParticipants || 10,
           } as Course);
           if (data.exercises && data.exercises.length > 0) {
             const selectedExercisesData = exercises.filter(ex => data.exercises.includes(ex.id));
@@ -148,7 +151,8 @@ const CourseForm: React.FC = () => {
     Promise.all([fetchGroups(), fetchExercises()]).then(() => {
       fetchCourse();
     });
-  }, [user, isEditMode, courseId, course.groupId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, isEditMode, courseId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -181,14 +185,16 @@ const CourseForm: React.FC = () => {
         createdBy: user.uid,
         createdAt: isEditMode ? course.createdAt : new Date(),
         isActive: shouldBeActive,
-        Participants: [],
+        MaxParticipants: course.MaxParticipants,
       };
 
       if (isEditMode && courseId) {
+        // ✅ On ne touche pas au tableau Participants existant lors d'une mise à jour :
+        // l'écraser ici retirait auparavant tous les participants inscrits à chaque édition.
         await updateDoc(doc(db, 'courses', courseId), courseData);
         setSuccess('Séance mise à jour avec succès !');
       } else {
-        await addDoc(collection(db, 'courses'), courseData);
+        await addDoc(collection(db, 'courses'), { ...courseData, Participants: [] });
         setSuccess('Séance créée avec succès !');
       }
 
@@ -236,8 +242,8 @@ const CourseForm: React.FC = () => {
 
   return (
     <Container maxWidth="md">
-      <Paper sx={{ p: 3, mt: 3 }}>
-        <Typography variant="h4" gutterBottom>
+      <Paper sx={{ p: { xs: 2, sm: 3 }, mt: { xs: 2, sm: 3 } }}>
+        <Typography variant="h4" gutterBottom sx={{ fontSize: { xs: '1.5rem', sm: '2.125rem' } }}>
           {isEditMode ? 'Modifier la séance' : 'Nouvelle séance'}
         </Typography>
 
@@ -266,8 +272,8 @@ const CourseForm: React.FC = () => {
             />
           </FormControl>
 
-          <Box sx={{ display: 'flex', gap: 2 }}>
-            <FormControl fullWidth margin="normal">
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+            <FormControl margin="normal" sx={{ flex: '1 1 200px' }}>
               <FormLabel>Date *</FormLabel>
               <TextField
                 type="date"
@@ -276,7 +282,7 @@ const CourseForm: React.FC = () => {
                 variant="outlined"
               />
             </FormControl>
-            <FormControl fullWidth margin="normal">
+            <FormControl margin="normal" sx={{ flex: '1 1 200px' }}>
               <FormLabel>Heure *</FormLabel>
               <TextField
                 type="time"
@@ -287,8 +293,8 @@ const CourseForm: React.FC = () => {
             </FormControl>
           </Box>
 
-          <Box sx={{ display: 'flex', gap: 2 }}>
-            <FormControl fullWidth margin="normal">
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+            <FormControl margin="normal" sx={{ flex: '1 1 200px' }}>
               <FormLabel>Niveau *</FormLabel>
               <TextField
                 select
@@ -300,6 +306,18 @@ const CourseForm: React.FC = () => {
                   <MenuItem key={level} value={level}>{level}</MenuItem>
                 ))}
               </TextField>
+            </FormControl>
+            <FormControl margin="normal" sx={{ flex: '1 1 200px' }}>
+              <FormLabel>Nombre de places *</FormLabel>
+              <TextField
+                type="number"
+                value={course.MaxParticipants}
+                onChange={(e) =>
+                  setCourse({ ...course, MaxParticipants: Math.max(1, parseInt(e.target.value, 10) || 1) })
+                }
+                variant="outlined"
+                slotProps={{ htmlInput: { min: 1 } }}
+              />
             </FormControl>
           </Box>
 
@@ -357,12 +375,20 @@ const CourseForm: React.FC = () => {
             )}
           </FormControl>
 
-          <Box sx={{ mt: 4, display: 'flex', gap: 2 }}>
+          <Box
+            sx={{
+              mt: 4,
+              display: 'flex',
+              flexDirection: { xs: 'column-reverse', sm: 'row' },
+              gap: 2,
+            }}
+          >
             <Button
               type="button"
               variant="outlined"
               onClick={() => navigate('/moniteur/courses')}
               disabled={isSubmitting}
+              sx={{ width: { xs: '100%', sm: 'auto' } }}
             >
               Annuler
             </Button>
@@ -371,6 +397,7 @@ const CourseForm: React.FC = () => {
               variant="contained"
               color="primary"
               disabled={isSubmitting}
+              sx={{ width: { xs: '100%', sm: 'auto' } }}
             >
               {isSubmitting ? <CircularProgress size={24} /> : isEditMode ? 'Mettre à jour' : 'Créer'}
             </Button>

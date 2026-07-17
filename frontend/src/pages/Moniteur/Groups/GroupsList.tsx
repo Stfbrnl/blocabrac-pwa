@@ -112,18 +112,29 @@ const GroupsList: React.FC = () => {
 
   return (
     <Container maxWidth="lg">
-      <Paper sx={{ p: 3, mt: 3 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+      <Paper sx={{ p: { xs: 2, sm: 3 }, mt: { xs: 2, sm: 3 } }}>
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: { xs: 'column', sm: 'row' },
+            justifyContent: 'space-between',
+            alignItems: { xs: 'stretch', sm: 'center' },
+            gap: 2,
+            mb: 3,
+          }}
+        >
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <GroupIcon color="primary" sx={{ fontSize: 40 }} />
-            <Typography variant="h4">Gestion des groupes</Typography>
+            <GroupIcon color="primary" sx={{ fontSize: { xs: 32, sm: 40 } }} />
+            <Typography variant="h4" sx={{ fontSize: { xs: '1.5rem', sm: '2.125rem' } }}>
+              Gestion des groupes
+            </Typography>
           </Box>
           <Button
             variant="contained"
             color="primary"
             startIcon={<AddIcon />}
             onClick={() => navigate('/moniteur/groups/new')}
-            sx={{ height: '48px' }}
+            sx={{ height: '48px', width: { xs: '100%', sm: 'auto' } }}
           >
             Nouveau groupe
           </Button>
@@ -135,8 +146,8 @@ const GroupsList: React.FC = () => {
           </Box>
         )}
 
-        <TableContainer>
-          <Table>
+        <TableContainer sx={{ overflowX: 'auto' }}>
+          <Table sx={{ minWidth: 500 }}>
             <TableHead>
               <TableRow>
                 <TableCell>Nom</TableCell>
@@ -156,7 +167,9 @@ const GroupsList: React.FC = () => {
                 groups.map((group) => (
                   <TableRow key={group.id} hover>
                     <TableCell>{group.name}</TableCell>
-                    <TableCell>{group.description}</TableCell>
+                    <TableCell>
+                      {group.description}
+                    </TableCell>
                     <TableCell>{group.students.length}</TableCell>
                     <TableCell>
                       <Tooltip title="Modifier le groupe">
@@ -189,6 +202,8 @@ const GroupsList: React.FC = () => {
         <Dialog
           open={openDeleteDialog}
           onClose={() => setOpenDeleteDialog(false)}
+          fullWidth
+          maxWidth="xs"
         >
           <DialogTitle>Supprimer le groupe</DialogTitle>
           <DialogContent>

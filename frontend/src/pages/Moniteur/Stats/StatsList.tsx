@@ -758,14 +758,21 @@ const StatsList: React.FC = () => {
 
   return (
     <Container maxWidth="lg">
-      <Paper sx={{ p: 3, mt: 3 }}>
-        <Typography variant="h4" gutterBottom>
+      <Paper sx={{ p: { xs: 2, sm: 3 }, mt: { xs: 2, sm: 3 } }}>
+        <Typography variant="h4" gutterBottom sx={{ fontSize: { xs: '1.5rem', sm: '2.125rem' } }}>
           Statistiques des exercices
         </Typography>
 
         {/* Filtres */}
-        <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
-          <FormControl sx={{ minWidth: 120 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            gap: 2,
+            mb: 3,
+            flexWrap: 'wrap',
+          }}
+        >
+          <FormControl sx={{ minWidth: 140, flex: '1 1 140px' }}>
             <InputLabel>Période</InputLabel>
             <Select
               value={filters.period}
@@ -781,7 +788,7 @@ const StatsList: React.FC = () => {
             </Select>
           </FormControl>
 
-          <FormControl sx={{ minWidth: 200 }}>
+          <FormControl sx={{ minWidth: 200, flex: '1 1 200px' }}>
             <InputLabel>Exercice</InputLabel>
             <Select
               value={filters.exercise || ''}
@@ -797,7 +804,7 @@ const StatsList: React.FC = () => {
             </Select>
           </FormControl>
 
-          <FormControl sx={{ minWidth: 200 }}>
+          <FormControl sx={{ minWidth: 200, flex: '1 1 200px' }}>
             <InputLabel>Type d'exercice</InputLabel>
             <Select
               value={filters.exerciseType || ''}
@@ -813,7 +820,7 @@ const StatsList: React.FC = () => {
             </Select>
           </FormControl>
 
-          <FormControl sx={{ minWidth: 200 }}>
+          <FormControl sx={{ minWidth: 200, flex: '1 1 200px' }}>
             <InputLabel>Utilisateur</InputLabel>
             <Select
               value={filters.user || ''}
@@ -829,7 +836,7 @@ const StatsList: React.FC = () => {
             </Select>
           </FormControl>
 
-          <FormControl sx={{ minWidth: 200 }}>
+          <FormControl sx={{ minWidth: 200, flex: '1 1 200px' }}>
             <InputLabel>Groupe</InputLabel>
             <Select
               value={filters.group || ''}
@@ -845,7 +852,7 @@ const StatsList: React.FC = () => {
             </Select>
           </FormControl>
 
-          <FormControl sx={{ minWidth: 200 }}>
+          <FormControl sx={{ minWidth: 200, flex: '1 1 200px' }}>
             <InputLabel>Couleur de bloc</InputLabel>
             <Select
               value={filters.boulderColor || ''}
@@ -863,8 +870,8 @@ const StatsList: React.FC = () => {
         </Box>
 
         {/* Tableau des résultats */}
-        <TableContainer>
-          <Table>
+        <TableContainer sx={{ overflowX: 'auto' }}>
+          <Table sx={{ minWidth: 850 }}>
             <TableHead>
               <TableRow>
                 <TableCell>Utilisateur</TableCell>
@@ -911,7 +918,9 @@ const StatsList: React.FC = () => {
                           <Chip label="Échoué" color="error" />
                         )}
                       </TableCell>
-                      <TableCell>{formatDate(result.date)}</TableCell>
+                      <TableCell>
+                        {formatDate(result.date)}
+                      </TableCell>
                       <TableCell>
                         {result.badgeAwarded ? (
                           <Chip label="Badge attribué" color="primary" />
@@ -920,23 +929,24 @@ const StatsList: React.FC = () => {
                         )}
                       </TableCell>
                       <TableCell>
-                        <Button
-                          variant="outlined"
-                          color="secondary"
-                          size="small"
-                          onClick={() => handleManualAwardBadge(userResult.id, userResult.displayName)}
-                        >
-                          Attribuer un badge
-                        </Button>
-                        <Button
-                          variant="outlined"
-                          color="info"
-                          size="small"
-                          sx={{ ml: 1 }}
-                          onClick={() => handleAwardDiploma(userResult.id, userResult.displayName)}
-                        >
-                          Attribuer un diplôme
-                        </Button>
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                          <Button
+                            variant="outlined"
+                            color="secondary"
+                            size="small"
+                            onClick={() => handleManualAwardBadge(userResult.id, userResult.displayName)}
+                          >
+                            Attribuer un badge
+                          </Button>
+                          <Button
+                            variant="outlined"
+                            color="info"
+                            size="small"
+                            onClick={() => handleAwardDiploma(userResult.id, userResult.displayName)}
+                          >
+                            Attribuer un diplôme
+                          </Button>
+                        </Box>
                       </TableCell>
                     </TableRow>
                   ))
@@ -947,7 +957,7 @@ const StatsList: React.FC = () => {
         </TableContainer>
 
         {/* Dialogue pour attribuer un badge manuellement */}
-        <Dialog open={openManualBadgeDialog} onClose={() => setOpenManualBadgeDialog(false)}>
+        <Dialog open={openManualBadgeDialog} onClose={() => setOpenManualBadgeDialog(false)} fullWidth maxWidth="xs">
           <DialogTitle>Attribuer un badge manuellement</DialogTitle>
           <DialogContent>
             <Typography>
@@ -977,7 +987,7 @@ const StatsList: React.FC = () => {
         </Dialog>
 
         {/* Dialogue pour attribuer un diplôme */}
-        <Dialog open={openDiplomaDialog} onClose={() => setOpenDiplomaDialog(false)}>
+        <Dialog open={openDiplomaDialog} onClose={() => setOpenDiplomaDialog(false)} fullWidth maxWidth="xs">
           <DialogTitle>Attribuer un diplôme</DialogTitle>
           <DialogContent>
             <FormControl fullWidth sx={{ mt: 2 }}>
