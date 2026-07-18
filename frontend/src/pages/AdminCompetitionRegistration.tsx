@@ -11,17 +11,17 @@ import { useLocation, useNavigate } from 'react-router-dom';
 
 type UserRole = 'admin' | 'ouvreur' | 'moniteur' | 'client';
 type CompetitionStatus = 'à venir' | 'en cours' | 'terminée' | 'annulée';
-type Level = 'jaune' | 'vert' | 'bleu' | 'violet' | 'rouge' | 'noire' | 'blanc' | 'rose';
+type Level = 'jaune' | 'vert' | 'bleu' | 'violet' | 'rouge' | 'noir' | 'blanc' | 'rose';
 
 // ✅ Liste des niveaux (pour les comparaisons)
-const levelOrder: Level[] = ['jaune', 'vert', 'bleu', 'violet', 'rouge', 'noire', 'blanc', 'rose'];
+const levelOrder: Level[] = ['jaune', 'vert', 'bleu', 'violet', 'rouge', 'noir', 'blanc', 'rose'];
 
 interface User {
   uid: string;
   email: string;
   first_name: string;
   last_name: string;
-  role: UserRole;
+  roles: UserRole[];
   age?: number;
   gender?: string;
   level?: Level;
@@ -94,7 +94,7 @@ const AdminCompetitionRegistration: React.FC = () => {
           email: doc.data().email || '',
           first_name: doc.data().first_name || '',
           last_name: doc.data().last_name || '',
-          role: doc.data().role || 'client',
+          roles: doc.data().roles || [],
           age: doc.data().age,
           gender: doc.data().gender,
           level: doc.data().level,
@@ -202,7 +202,7 @@ const AdminCompetitionRegistration: React.FC = () => {
         email: doc.data().email || '',
         first_name: doc.data().first_name || '',
         last_name: doc.data().last_name || '',
-        role: doc.data().role || 'client',
+        roles: doc.data().roles || [],
         age: doc.data().age,
         gender: doc.data().gender,
         level: doc.data().level,
@@ -253,7 +253,7 @@ const AdminCompetitionRegistration: React.FC = () => {
         gender: user.gender,
         level: user.level,
         registered_at: new Date().toISOString(),
-        is_client: user.role === 'client'
+        is_client: user.roles?.includes('client') ?? true
       });
 
       await updateDoc(doc(db, 'competitions', selectedCompetition.id), {
@@ -295,8 +295,8 @@ const AdminCompetitionRegistration: React.FC = () => {
 
   return (
     <Container maxWidth="lg">
-      <Paper sx={{ p: 3, mt: 3 }}>
-        <Typography variant="h4" gutterBottom>
+      <Paper sx={{ p: { xs: 2, sm: 3 }, mt: { xs: 2, sm: 3 } }}>
+        <Typography variant="h4" gutterBottom sx={{ fontSize: { xs: '1.5rem', sm: '2.125rem' } }}>
           Gestion des Inscriptions aux Compétitions
         </Typography>
 
@@ -324,7 +324,16 @@ const AdminCompetitionRegistration: React.FC = () => {
 
         {selectedCompetition && (
           <>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Box
+              sx={{
+                display: 'flex',
+                flexDirection: { xs: 'column', sm: 'row' },
+                justifyContent: 'space-between',
+                alignItems: { xs: 'stretch', sm: 'center' },
+                gap: 2,
+                mb: 2,
+              }}
+            >
               <Box>
                 <Typography variant="h6" gutterBottom>
                   Participants inscrits ({participants.length} / {selectedCompetition.max_participants})
@@ -345,13 +354,14 @@ const AdminCompetitionRegistration: React.FC = () => {
               <Button
                 variant="outlined"
                 onClick={() => navigate('/admin/competitions/list')}
+                sx={{ width: { xs: '100%', sm: 'auto' } }}
               >
                 Retour à la liste
               </Button>
             </Box>
 
-            <TableContainer sx={{ mb: 3 }}>
-              <Table>
+            <TableContainer sx={{ mb: 3, overflowX: 'auto' }}>
+              <Table sx={{ minWidth: 950 }}>
                 <TableHead>
                   <TableRow>
                     <TableCell>Email</TableCell>
@@ -433,7 +443,7 @@ const AdminCompetitionRegistration: React.FC = () => {
                       value={user.uid}
                       onClick={() => handleAddParticipant(user)}
                     >
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', width: '100%', gap: 1 }}>
                         <span>
                           {user.email} - {user.first_name} {user.last_name} (Niveau: {user.level || 'N/A'})
                         </span>

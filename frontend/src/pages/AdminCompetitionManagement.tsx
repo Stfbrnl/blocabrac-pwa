@@ -3,7 +3,8 @@ import {
   Typography, Paper, Container, Button, TextField, Box,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   IconButton, Dialog, DialogTitle, DialogContent, DialogActions,
-  Snackbar, Alert, FormControl, InputLabel, Select, MenuItem, Chip
+  Snackbar, Alert, FormControl, InputLabel, Select, MenuItem, Chip,
+  useTheme, useMediaQuery
 } from '@mui/material';
 import { Delete as DeleteIcon, Edit as EditIcon, Add as AddIcon } from '@mui/icons-material';
 import { db } from '../services/firebaseConfig';
@@ -11,10 +12,10 @@ import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc } from 'firebase
 import { useNavigate } from 'react-router-dom';
 
 type CompetitionStatus = 'à venir' | 'en cours' | 'terminée' | 'annulée';
-type Level = 'jaune' | 'vert' | 'bleu' | 'violet' | 'rouge' | 'noire' | 'blanc' | 'rose';
+type Level = 'jaune' | 'vert' | 'bleu' | 'violet' | 'rouge' | 'noir' | 'blanc' | 'rose';
 
 // ✅ Liste des niveaux (pour les sélecteurs)
-const levelOptions: Level[] = ['jaune', 'vert', 'bleu', 'violet', 'rouge', 'noire', 'blanc', 'rose'];
+const levelOptions: Level[] = ['jaune', 'vert', 'bleu', 'violet', 'rouge', 'noir', 'blanc', 'rose'];
 
 interface Competition {
   id: string;
@@ -29,10 +30,14 @@ interface Competition {
 }
 
 const AdminCompetitionManagement: React.FC = () => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [competitions, setCompetitions] = useState<Competition[]>([]);
   const [loading, setLoading] = useState(true);
   const [openCreateDialog, setOpenCreateDialog] = useState(false);
   const [openEditDialog, setOpenEditDialog] = useState(false);
+  const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
+  const [competitionToDelete, setCompetitionToDelete] = useState<string | null>(null);
   const [openSnackbar, setOpenSnackbar] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [selectedCompetition, setSelectedCompetition] = useState<Competition | null>(null);
@@ -172,16 +177,20 @@ const AdminCompetitionManagement: React.FC = () => {
     }
   };
 
-  const handleDeleteCompetition = async (competitionId: string) => {
+  const handleDeleteCompetition = async () => {
+    if (!competitionToDelete) return;
     try {
-      await deleteDoc(doc(db, 'competitions', competitionId));
-      setCompetitions(competitions.filter(comp => comp.id !== competitionId));
+      await deleteDoc(doc(db, 'competitions', competitionToDelete));
+      setCompetitions(competitions.filter(comp => comp.id !== competitionToDelete));
       setSnackbarMessage("Compétition supprimée avec succès !");
       setOpenSnackbar(true);
     } catch (error: any) {
       console.error("Erreur :", error);
       setSnackbarMessage("Erreur lors de la suppression de la compétition.");
       setOpenSnackbar(true);
+    } finally {
+      setOpenDeleteDialog(false);
+      setCompetitionToDelete(null);
     }
   };
 
@@ -191,22 +200,32 @@ const AdminCompetitionManagement: React.FC = () => {
 
   return (
     <Container maxWidth="lg">
-      <Paper sx={{ p: 3, mt: 3 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h4" gutterBottom>
+      <Paper sx={{ p: { xs: 2, sm: 3 }, mt: { xs: 2, sm: 3 } }}>
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: { xs: 'column', sm: 'row' },
+            justifyContent: 'space-between',
+            alignItems: { xs: 'stretch', sm: 'center' },
+            gap: 2,
+            mb: 2,
+          }}
+        >
+          <Typography variant="h4" gutterBottom sx={{ fontSize: { xs: '1.5rem', sm: '2.125rem' } }}>
             Gestion des Compétitions
           </Typography>
           <Button
             variant="contained"
             startIcon={<AddIcon />}
             onClick={() => setOpenCreateDialog(true)}
+            sx={{ width: { xs: '100%', sm: 'auto' }, height: '48px' }}
           >
             Créer une compétition
           </Button>
         </Box>
 
-        <TableContainer>
-          <Table>
+        <TableContainer sx={{ overflowX: 'auto' }}>
+          <Table sx={{ minWidth: 900 }}>
             <TableHead>
               <TableRow>
                 <TableCell>Nom</TableCell>
@@ -242,7 +261,7 @@ const AdminCompetitionManagement: React.FC = () => {
                     )}
                   </TableCell>
                   <TableCell>{competition.registered_count} / {competition.max_participants}</TableCell>
-                  <TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>
                     <IconButton
                       color="primary"
                       onClick={() => handleOpenEditDialog(competition)}
@@ -251,7 +270,10 @@ const AdminCompetitionManagement: React.FC = () => {
                     </IconButton>
                     <IconButton
                       color="error"
-                      onClick={() => handleDeleteCompetition(competition.id)}
+                      onClick={() => {
+                        setCompetitionToDelete(competition.id);
+                        setOpenDeleteDialog(true);
+                      }}
                     >
                       <DeleteIcon />
                     </IconButton>
@@ -270,7 +292,7 @@ const AdminCompetitionManagement: React.FC = () => {
         </TableContainer>
 
         {/* Dialogue de création */}
-        <Dialog open={openCreateDialog} onClose={() => setOpenCreateDialog(false)}>
+        <Dialog open={openCreateDialog} onClose={() => setOpenCreateDialog(false)} fullWidth maxWidth="sm" fullScreen={isMobile}>
           <DialogTitle>Créer une compétition</DialogTitle>
           <DialogContent>
             <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -316,8 +338,8 @@ const AdminCompetitionManagement: React.FC = () => {
               </FormControl>
 
               {/* ✅ Sélecteurs de niveau minimum/maximum */}
-              <Box sx={{ display: 'flex', gap: 2 }}>
-                <FormControl fullWidth>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+                <FormControl sx={{ flex: '1 1 200px' }}>
                   <InputLabel>Niveau minimum (optionnel)</InputLabel>
                   <Select
                     value={createForm.minLevel || ''}
@@ -332,7 +354,7 @@ const AdminCompetitionManagement: React.FC = () => {
                     ))}
                   </Select>
                 </FormControl>
-                <FormControl fullWidth>
+                <FormControl sx={{ flex: '1 1 200px' }}>
                   <InputLabel>Niveau maximum (optionnel)</InputLabel>
                   <Select
                     value={createForm.maxLevel || ''}
@@ -359,7 +381,7 @@ const AdminCompetitionManagement: React.FC = () => {
         </Dialog>
 
         {/* Dialogue d'édition */}
-        <Dialog open={openEditDialog} onClose={() => setOpenEditDialog(false)}>
+        <Dialog open={openEditDialog} onClose={() => setOpenEditDialog(false)} fullWidth maxWidth="sm" fullScreen={isMobile}>
           <DialogTitle>Modifier la compétition</DialogTitle>
           <DialogContent>
             <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -405,8 +427,8 @@ const AdminCompetitionManagement: React.FC = () => {
               </FormControl>
 
               {/* ✅ Sélecteurs de niveau minimum/maximum */}
-              <Box sx={{ display: 'flex', gap: 2 }}>
-                <FormControl fullWidth>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+                <FormControl sx={{ flex: '1 1 200px' }}>
                   <InputLabel>Niveau minimum (optionnel)</InputLabel>
                   <Select
                     value={editForm.minLevel || ''}
@@ -421,7 +443,7 @@ const AdminCompetitionManagement: React.FC = () => {
                     ))}
                   </Select>
                 </FormControl>
-                <FormControl fullWidth>
+                <FormControl sx={{ flex: '1 1 200px' }}>
                   <InputLabel>Niveau maximum (optionnel)</InputLabel>
                   <Select
                     value={editForm.maxLevel || ''}
@@ -443,6 +465,27 @@ const AdminCompetitionManagement: React.FC = () => {
             <Button onClick={() => setOpenEditDialog(false)}>Annuler</Button>
             <Button onClick={handleUpdateCompetition} color="primary">
               Enregistrer
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Dialogue de confirmation de suppression */}
+        <Dialog
+          open={openDeleteDialog}
+          onClose={() => setOpenDeleteDialog(false)}
+          fullWidth
+          maxWidth="xs"
+        >
+          <DialogTitle>Supprimer la compétition</DialogTitle>
+          <DialogContent>
+            Êtes-vous sûr de vouloir supprimer cette compétition ?
+            <br />
+            <strong>Cette action est irréversible.</strong>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setOpenDeleteDialog(false)}>Annuler</Button>
+            <Button onClick={handleDeleteCompetition} color="error" variant="contained" autoFocus>
+              Supprimer
             </Button>
           </DialogActions>
         </Dialog>

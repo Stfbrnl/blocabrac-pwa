@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Typography, Paper, Box, MenuItem, Select, InputLabel, FormControl,
+  Typography, Paper, Container, Box, MenuItem, Select, InputLabel, FormControl,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   LinearProgress, Chip, Button, Dialog, DialogTitle, DialogContent,
-  DialogActions, TextField, Alert
+  DialogActions, TextField, Alert, useTheme, useMediaQuery
 } from '@mui/material';
 import { collection, query, where, getDocs, doc, addDoc } from 'firebase/firestore';
 import { db } from '../services/firebaseConfig';
@@ -77,6 +77,8 @@ interface User {
 }
 
 const AdminCompetitionStats: React.FC = () => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [competitions, setCompetitions] = useState<Competition[]>([]);
   const [selectedCompetition, setSelectedCompetition] = useState<string>('');
   const [results, setResults] = useState<CompetitionResult[]>([]);
@@ -340,181 +342,185 @@ const AdminCompetitionStats: React.FC = () => {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Typography variant="h4" gutterBottom>
-        Classement et Statistiques des Compétitions
-      </Typography>
-      {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
+    <Container maxWidth="lg">
+      <Paper sx={{ p: { xs: 2, sm: 3 }, mt: { xs: 2, sm: 3 } }}>
+        <Typography variant="h4" gutterBottom sx={{ fontSize: { xs: '1.5rem', sm: '2.125rem' } }}>
+          Classement et Statistiques des Compétitions
+        </Typography>
+        {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
 
-      <FormControl fullWidth sx={{ mb: 3 }}>
-        <InputLabel>Sélectionnez une compétition</InputLabel>
-        <Select
-          value={selectedCompetition}
-          onChange={(e) => setSelectedCompetition(e.target.value)}
-          label="Compétition"
+        <FormControl fullWidth sx={{ mb: 3 }}>
+          <InputLabel>Sélectionnez une compétition</InputLabel>
+          <Select
+            value={selectedCompetition}
+            onChange={(e) => setSelectedCompetition(e.target.value)}
+            label="Compétition"
+          >
+            {competitions.map(comp => (
+              <MenuItem key={comp.id} value={comp.id}>
+                {comp.name} - {new Date(comp.date).toLocaleDateString()}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        {loading ? (
+          <LinearProgress />
+        ) : selectedCompetition ? (
+          <>
+            <Box sx={{ display: 'flex', justifyContent: { xs: 'stretch', sm: 'flex-end' }, mb: 2 }}>
+              <Button
+                variant="contained"
+                color="primary"
+                onClick={generateClassementMessage}
+                sx={{ width: { xs: '100%', sm: 'auto' } }}
+              >
+                Publier le classement
+              </Button>
+            </Box>
+
+            <Paper variant="outlined" sx={{ p: 2, mb: 3 }}>
+              <Typography variant="h6">Classement Global</Typography>
+              <TableContainer sx={{ overflowX: 'auto' }}>
+                <Table sx={{ minWidth: 600 }}>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Position</TableCell>
+                      <TableCell>Participant</TableCell>
+                      <TableCell>Score</TableCell>
+                      <TableCell>Blocs validés</TableCell>
+                      <TableCell>Âge</TableCell>
+                      <TableCell>Genre</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {getClassementByCategory('global').map((item, index) => (
+                      <TableRow key={index}>
+                        <TableCell>{index + 1}</TableCell>
+                        <TableCell>
+                          <strong>{item.participant.first_name} {item.participant.last_name}</strong>
+                        </TableCell>
+                        <TableCell>
+                          <Chip label={item.score} color="primary" />
+                        </TableCell>
+                        <TableCell>{item.boulders}</TableCell>
+                        <TableCell>{getAgeCategory(item.participant.age)}</TableCell>
+                        <TableCell>{item.participant.gender || 'Inconnu'}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Paper>
+
+            <Paper variant="outlined" sx={{ p: 2, mb: 3 }}>
+              <Typography variant="h6">Classement par Catégorie d'Âge</Typography>
+              {getClassementByCategory('age').map((category) => (
+                category.participants.length > 0 && (
+                  <Box key={category.category} sx={{ mb: 3 }}>
+                    <Typography variant="subtitle1">{category.category}</Typography>
+                    <TableContainer sx={{ overflowX: 'auto' }}>
+                      <Table size="small" sx={{ minWidth: 450 }}>
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Position</TableCell>
+                            <TableCell>Participant</TableCell>
+                            <TableCell>Score</TableCell>
+                            <TableCell>Blocs validés</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {category.participants.map((item: any, index: number) => (
+                            <TableRow key={index}>
+                              <TableCell>{index + 1}</TableCell>
+                              <TableCell>{item.participant.first_name} {item.participant.last_name}</TableCell>
+                              <TableCell>{item.score}</TableCell>
+                              <TableCell>{item.boulders}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </Box>
+                )
+              ))}
+            </Paper>
+
+            <Paper variant="outlined" sx={{ p: 2 }}>
+              <Typography variant="h6">Classement par Genre</Typography>
+              {getClassementByCategory('gender').map((gender) => (
+                gender.participants.length > 0 && (
+                  <Box key={gender.category} sx={{ mb: 3 }}>
+                    <Typography variant="subtitle1">{gender.category}</Typography>
+                    <TableContainer sx={{ overflowX: 'auto' }}>
+                      <Table size="small" sx={{ minWidth: 450 }}>
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Position</TableCell>
+                            <TableCell>Participant</TableCell>
+                            <TableCell>Score</TableCell>
+                            <TableCell>Blocs validés</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {gender.participants.map((item: any, index: number) => (
+                            <TableRow key={index}>
+                              <TableCell>{index + 1}</TableCell>
+                              <TableCell>{item.participant.first_name} {item.participant.last_name}</TableCell>
+                              <TableCell>{item.score}</TableCell>
+                              <TableCell>{item.boulders}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </Box>
+                )
+              ))}
+            </Paper>
+          </>
+        ) : (
+          <Typography>Sélectionnez une compétition pour voir les classements.</Typography>
+        )}
+
+        <Dialog
+          open={openPublishDialog}
+          onClose={() => setOpenPublishDialog(false)}
+          maxWidth="md"
+          fullWidth
+          fullScreen={isMobile}
         >
-          {competitions.map(comp => (
-            <MenuItem key={comp.id} value={comp.id}>
-              {comp.name} - {new Date(comp.date).toLocaleDateString()}
-            </MenuItem>
-          ))}
-        </Select>
-      </FormControl>
-
-      {loading ? (
-        <LinearProgress />
-      ) : selectedCompetition ? (
-        <>
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+          <DialogTitle>Publier le classement</DialogTitle>
+          <DialogContent>
+            <TextField
+              label="Titre du message"
+              value={messageTitle}
+              onChange={(e) => setMessageTitle(e.target.value)}
+              fullWidth
+              sx={{ mb: 2, mt: 1 }}
+            />
+            <TextField
+              label="Contenu du message"
+              value={messageContent}
+              onChange={(e) => setMessageContent(e.target.value)}
+              multiline
+              rows={10}
+              fullWidth
+            />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setOpenPublishDialog(false)}>Annuler</Button>
             <Button
               variant="contained"
               color="primary"
-              onClick={generateClassementMessage}
+              onClick={handlePublishResults}
             >
-              Publier le classement
+              Publier
             </Button>
-          </Box>
-
-          <Paper sx={{ p: 2, mb: 3 }}>
-            <Typography variant="h6">Classement Global</Typography>
-            <TableContainer>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Position</TableCell>
-                    <TableCell>Participant</TableCell>
-                    <TableCell>Score</TableCell>
-                    <TableCell>Blocs validés</TableCell>
-                    <TableCell>Âge</TableCell>
-                    <TableCell>Genre</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {getClassementByCategory('global').map((item, index) => (
-                    <TableRow key={index}>
-                      <TableCell>{index + 1}</TableCell>
-                      <TableCell>
-                        <strong>{item.participant.first_name} {item.participant.last_name}</strong>
-                      </TableCell>
-                      <TableCell>
-                        <Chip label={item.score} color="primary" />
-                      </TableCell>
-                      <TableCell>{item.boulders}</TableCell>
-                      <TableCell>{getAgeCategory(item.participant.age)}</TableCell>
-                      <TableCell>{item.participant.gender || 'Inconnu'}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Paper>
-
-          <Paper sx={{ p: 2, mb: 3 }}>
-            <Typography variant="h6">Classement par Catégorie d'Âge</Typography>
-            {getClassementByCategory('age').map((category) => (
-              category.participants.length > 0 && (
-                <Box key={category.category} sx={{ mb: 3 }}>
-                  <Typography variant="subtitle1">{category.category}</Typography>
-                  <TableContainer>
-                    <Table size="small">
-                      <TableHead>
-                        <TableRow>
-                          <TableCell>Position</TableCell>
-                          <TableCell>Participant</TableCell>
-                          <TableCell>Score</TableCell>
-                          <TableCell>Blocs validés</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {category.participants.map((item: any, index: number) => (
-                          <TableRow key={index}>
-                            <TableCell>{index + 1}</TableCell>
-                            <TableCell>{item.participant.first_name} {item.participant.last_name}</TableCell>
-                            <TableCell>{item.score}</TableCell>
-                            <TableCell>{item.boulders}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                </Box>
-              )
-            ))}
-          </Paper>
-
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="h6">Classement par Genre</Typography>
-            {getClassementByCategory('gender').map((gender) => (
-              gender.participants.length > 0 && (
-                <Box key={gender.category} sx={{ mb: 3 }}>
-                  <Typography variant="subtitle1">{gender.category}</Typography>
-                  <TableContainer>
-                    <Table size="small">
-                      <TableHead>
-                        <TableRow>
-                          <TableCell>Position</TableCell>
-                          <TableCell>Participant</TableCell>
-                          <TableCell>Score</TableCell>
-                          <TableCell>Blocs validés</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {gender.participants.map((item: any, index: number) => (
-                          <TableRow key={index}>
-                            <TableCell>{index + 1}</TableCell>
-                            <TableCell>{item.participant.first_name} {item.participant.last_name}</TableCell>
-                            <TableCell>{item.score}</TableCell>
-                            <TableCell>{item.boulders}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                </Box>
-              )
-            ))}
-          </Paper>
-        </>
-      ) : (
-        <Typography>Sélectionnez une compétition pour voir les classements.</Typography>
-      )}
-
-      <Dialog
-        open={openPublishDialog}
-        onClose={() => setOpenPublishDialog(false)}
-        maxWidth="md"
-        fullWidth
-      >
-        <DialogTitle>Publier le classement</DialogTitle>
-        <DialogContent>
-          <TextField
-            label="Titre du message"
-            value={messageTitle}
-            onChange={(e) => setMessageTitle(e.target.value)}
-            fullWidth
-            sx={{ mb: 2 }}
-          />
-          <TextField
-            label="Contenu du message"
-            value={messageContent}
-            onChange={(e) => setMessageContent(e.target.value)}
-            multiline
-            rows={10}
-            fullWidth
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenPublishDialog(false)}>Annuler</Button>
-          <Button
-            variant="contained"
-            color="primary"
-            onClick={handlePublishResults}
-          >
-            Publier
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </Box>
+          </DialogActions>
+        </Dialog>
+      </Paper>
+    </Container>
   );
 };
 

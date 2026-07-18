@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Typography, Paper, Container, Box, Button } from '@mui/material';
+import { Typography, Paper, Container, Box, Button, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
 import { db } from '../services/firebaseConfig';
 import { collection, getDocs, deleteDoc, doc } from 'firebase/firestore';
 import { Link } from 'react-router-dom';
@@ -19,6 +19,8 @@ interface Competition {
 const AdminCompetitionList: React.FC = () => {
   const [competitions, setCompetitions] = useState<Competition[]>([]);
   const [loading, setLoading] = useState(true);
+  const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
+  const [competitionToDelete, setCompetitionToDelete] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchCompetitions = async () => {
@@ -44,12 +46,16 @@ const AdminCompetitionList: React.FC = () => {
     fetchCompetitions();
   }, []);
 
-  const handleDeleteCompetition = async (competitionId: string) => {
+  const handleDeleteCompetition = async () => {
+    if (!competitionToDelete) return;
     try {
-      await deleteDoc(doc(db, 'competitions', competitionId));
-      setCompetitions(competitions.filter(comp => comp.id !== competitionId));
+      await deleteDoc(doc(db, 'competitions', competitionToDelete));
+      setCompetitions(competitions.filter(comp => comp.id !== competitionToDelete));
     } catch (error) {
       console.error("Erreur :", error);
+    } finally {
+      setOpenDeleteDialog(false);
+      setCompetitionToDelete(null);
     }
   };
 
@@ -59,8 +65,8 @@ const AdminCompetitionList: React.FC = () => {
 
   return (
     <Container maxWidth="lg">
-      <Paper sx={{ p: 3, mt: 3 }}>
-        <Typography variant="h4" gutterBottom>
+      <Paper sx={{ p: { xs: 2, sm: 3 }, mt: { xs: 2, sm: 3 } }}>
+        <Typography variant="h4" gutterBottom sx={{ fontSize: { xs: '1.5rem', sm: '2.125rem' } }}>
           Liste des Compétitions
         </Typography>
         {competitions.length === 0 ? (
@@ -76,8 +82,10 @@ const AdminCompetitionList: React.FC = () => {
                   border: '1px solid #eee',
                   borderRadius: 1,
                   display: 'flex',
+                  flexDirection: { xs: 'column', md: 'row' },
                   justifyContent: 'space-between',
-                  alignItems: 'center'
+                  alignItems: { xs: 'stretch', md: 'center' },
+                  gap: 2,
                 }}
               >
                 <Box>
@@ -87,7 +95,7 @@ const AdminCompetitionList: React.FC = () => {
                     Code: {comp.access_code} | Participants: {comp.registered_count} / {comp.max_participants}
                   </Typography>
                 </Box>
-                <Box sx={{ display: 'flex', gap: 1 }}>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
                   <Button
                     variant="contained"
                     color="primary"
@@ -109,7 +117,10 @@ const AdminCompetitionList: React.FC = () => {
                     variant="outlined"
                     color="error"
                     size="small"
-                    onClick={() => handleDeleteCompetition(comp.id)}
+                    onClick={() => {
+                      setCompetitionToDelete(comp.id);
+                      setOpenDeleteDialog(true);
+                    }}
                   >
                     Supprimer
                   </Button>
@@ -118,6 +129,26 @@ const AdminCompetitionList: React.FC = () => {
             ))}
           </Box>
         )}
+
+        <Dialog
+          open={openDeleteDialog}
+          onClose={() => setOpenDeleteDialog(false)}
+          fullWidth
+          maxWidth="xs"
+        >
+          <DialogTitle>Supprimer la compétition</DialogTitle>
+          <DialogContent>
+            Êtes-vous sûr de vouloir supprimer cette compétition ?
+            <br />
+            <strong>Cette action est irréversible.</strong>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setOpenDeleteDialog(false)}>Annuler</Button>
+            <Button onClick={handleDeleteCompetition} color="error" variant="contained" autoFocus>
+              Supprimer
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Paper>
     </Container>
   );
