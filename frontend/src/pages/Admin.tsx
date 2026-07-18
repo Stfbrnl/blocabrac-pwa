@@ -4,8 +4,8 @@ import { Typography, Container, Paper, Box } from '@mui/material';
 const Admin: React.FC = () => {
   return (
     <Container maxWidth="lg">
-      <Paper sx={{ p: 3, mt: 3 }}>
-        <Typography variant="h4" gutterBottom>
+      <Paper sx={{ p: { xs: 2, sm: 3 }, mt: { xs: 2, sm: 3 } }}>
+        <Typography variant="h4" gutterBottom sx={{ fontSize: { xs: '1.5rem', sm: '2.125rem' } }}>
           Tableau de bord Administrateur
         </Typography>
         <Box sx={{ mt: 2 }}>

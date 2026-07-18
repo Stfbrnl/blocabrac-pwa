@@ -4,14 +4,15 @@ import {
   TableContainer, TableHead, TableRow, Button, Dialog, DialogTitle,
   DialogContent, DialogActions, TextField, MenuItem, Select,
   FormControl, InputLabel, Box, IconButton, Snackbar, Alert, Chip,
-  TableSortLabel, Tooltip
+  TableSortLabel, Tooltip, useTheme, useMediaQuery
 } from '@mui/material';
 import { Delete as DeleteIcon, Edit as EditIcon, Add as AddIcon, ArrowUpward as ArrowUpwardIcon, ArrowDownward as ArrowDownwardIcon } from '@mui/icons-material';
 import { db, auth } from '../services/firebaseConfig';
 import {
   collection, getDocs, doc, updateDoc, deleteDoc, setDoc, query, orderBy
 } from 'firebase/firestore';
-import { createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
+import { createUserWithEmailAndPassword, sendPasswordResetEmail, getAuth, signOut } from 'firebase/auth';
+import { initializeApp, deleteApp } from 'firebase/app';
 
 // ✅ Tableau de correspondance code-couleur/cotations
 const levelOptions = [
@@ -20,7 +21,7 @@ const levelOptions = [
   { value: 'bleu', label: 'Bleu (4C-5A+) - En formation de grimpeur' },
   { value: 'violet', label: 'Violet (5B-5C+) - En formation de grimpeur' },
   { value: 'rouge', label: 'Rouge (6A-6B) - Grimpeur confirmé' },
-  { value: 'noire', label: 'Noire (6B+-6C+) - Grimpeur confirmé' },
+  { value: 'noir', label: 'Noire (6B+-6C+) - Grimpeur confirmé' },
   { value: 'blanc', label: 'Blanc (7A-7B) - Grimpeur expert' },
   { value: 'rose', label: 'Rose (7B+-8A) - Grimpeur mutant' }
 ];
@@ -53,10 +54,14 @@ type SortConfig = {
 };
 
 const AdminUsers: React.FC = () => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [openEditDialog, setOpenEditDialog] = useState(false);
   const [openCreateDialog, setOpenCreateDialog] = useState(false);
+  const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<string | null>(null);
   const [openSnackbar, setOpenSnackbar] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -218,9 +223,16 @@ const AdminUsers: React.FC = () => {
       return;
     }
 
+    // ✅ On utilise une instance Firebase secondaire temporaire pour créer le compte :
+    // createUserWithEmailAndPassword connecte automatiquement l'utilisateur nouvellement
+    // créé sur l'instance auth utilisée. En la créant sur une instance à part, la session
+    // de l'admin sur l'app principale n'est jamais affectée.
+    const secondaryApp = initializeApp(auth.app.options, `Secondary-${Date.now()}`);
+    const secondaryAuth = getAuth(secondaryApp);
+
     try {
       const userCredential = await createUserWithEmailAndPassword(
-        auth,
+        secondaryAuth,
         createForm.email,
         createForm.password
       );
@@ -244,7 +256,7 @@ const AdminUsers: React.FC = () => {
         created_at: new Date().toISOString()
       });
 
-      await sendPasswordResetEmail(auth, createForm.email);
+      await sendPasswordResetEmail(secondaryAuth, createForm.email);
 
       const querySnapshot = await getDocs(collection(db, 'users'));
       const usersData: User[] = querySnapshot.docs.map(doc => {
@@ -266,7 +278,7 @@ const AdminUsers: React.FC = () => {
       setUsers(usersData);
 
       setOpenCreateDialog(false);
-      setSnackbarMessage("Utilisateur créé avec succès ! Un email de réinitialisation a été envoyé. NOTE: Vous êtes maintenant déconnecté. Veuillez vous reconnecter avec votre compte admin.");
+      setSnackbarMessage("Utilisateur créé avec succès ! Un email de réinitialisation a été envoyé.");
       setOpenSnackbar(true);
     } catch (error: any) {
       console.error("Erreur :", error);
@@ -284,6 +296,10 @@ const AdminUsers: React.FC = () => {
 
       setSnackbarMessage(message);
       setOpenSnackbar(true);
+    } finally {
+      // On nettoie systématiquement l'instance secondaire, qu'il y ait eu succès ou erreur
+      await signOut(secondaryAuth).catch(() => {});
+      await deleteApp(secondaryApp).catch(() => {});
     }
   };
 
@@ -303,12 +319,15 @@ const AdminUsers: React.FC = () => {
     setOpenEditDialog(true);
   };
 
-  const handleDeleteUser = async (userId: string) => {
-    if (!window.confirm("Êtes-vous sûr de vouloir supprimer cet utilisateur ? Cette action est irréversible.")) {
-      return;
-    }
+  const handleOpenDeleteDialog = (userId: string) => {
+    setUserToDelete(userId);
+    setOpenDeleteDialog(true);
+  };
+
+  const handleDeleteUser = async () => {
+    if (!userToDelete) return;
     try {
-      await deleteDoc(doc(db, 'users', userId));
+      await deleteDoc(doc(db, 'users', userToDelete));
       const querySnapshot = await getDocs(collection(db, 'users'));
       const usersData: User[] = querySnapshot.docs.map(doc => {
         const data = doc.data();
@@ -333,6 +352,9 @@ const AdminUsers: React.FC = () => {
       console.error("Erreur :", error);
       setSnackbarMessage("Erreur lors de la suppression de l'utilisateur : " + error);
       setOpenSnackbar(true);
+    } finally {
+      setOpenDeleteDialog(false);
+      setUserToDelete(null);
     }
   };
 
@@ -351,21 +373,31 @@ const AdminUsers: React.FC = () => {
   return (
     <Container maxWidth={false} sx={{ px: 2 }}> {/* ✅ Largeur maximale */}
       <Paper sx={{ p: 3, mt: 3 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h4" gutterBottom>
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: { xs: 'column', sm: 'row' },
+            justifyContent: 'space-between',
+            alignItems: { xs: 'stretch', sm: 'center' },
+            gap: 2,
+            mb: 2,
+          }}
+        >
+          <Typography variant="h4" gutterBottom sx={{ fontSize: { xs: '1.5rem', sm: '2.125rem' } }}>
             Gestion des Utilisateurs
           </Typography>
           <Button
             variant="contained"
             startIcon={<AddIcon />}
             onClick={() => setOpenCreateDialog(true)}
+            sx={{ width: { xs: '100%', sm: 'auto' }, height: '48px' }}
           >
             Créer un utilisateur
           </Button>
         </Box>
 
         <TableContainer sx={{ overflowX: 'auto' }}> {/* ✅ Défilement horizontal si nécessaire */}
-          <Table>
+          <Table sx={{ minWidth: 900 }}>
             <TableHead>
               <TableRow>
                 <TableCell>
@@ -486,7 +518,7 @@ const AdminUsers: React.FC = () => {
                     <IconButton color="primary" onClick={() => handleOpenEditDialog(user)} aria-label="Modifier">
                       <EditIcon />
                     </IconButton>
-                    <IconButton color="error" onClick={() => handleDeleteUser(user.uid)} aria-label="Supprimer">
+                    <IconButton color="error" onClick={() => handleOpenDeleteDialog(user.uid)} aria-label="Supprimer">
                       <DeleteIcon />
                     </IconButton>
                   </TableCell>
@@ -497,7 +529,7 @@ const AdminUsers: React.FC = () => {
         </TableContainer>
 
         {/* Dialogue de modification */}
-        <Dialog open={openEditDialog} onClose={() => setOpenEditDialog(false)}>
+        <Dialog open={openEditDialog} onClose={() => setOpenEditDialog(false)} fullWidth maxWidth="sm" fullScreen={isMobile}>
           <DialogTitle>Modifier l'utilisateur</DialogTitle>
           <DialogContent>
             <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -536,9 +568,9 @@ const AdminUsers: React.FC = () => {
               <FormControl fullWidth>
                 <InputLabel>Genre</InputLabel>
                 <Select value={editForm.gender || ''} onChange={(e) => setEditForm({...editForm, gender: e.target.value})} label="Genre">
-                  <MenuItem value="homme">Homme</MenuItem>
-                  <MenuItem value="femme">Femme</MenuItem>
-                  <MenuItem value="autre">Autre</MenuItem>
+                  <MenuItem value="Homme">Homme</MenuItem>
+                  <MenuItem value="Femme">Femme</MenuItem>
+                  <MenuItem value="Autre">Autre</MenuItem>
                 </Select>
               </FormControl>
               <FormControl fullWidth>
@@ -564,7 +596,7 @@ const AdminUsers: React.FC = () => {
         </Dialog>
 
         {/* Dialogue de création */}
-        <Dialog open={openCreateDialog} onClose={() => setOpenCreateDialog(false)}>
+        <Dialog open={openCreateDialog} onClose={() => setOpenCreateDialog(false)} fullWidth maxWidth="sm" fullScreen={isMobile}>
           <DialogTitle>Créer un nouvel utilisateur</DialogTitle>
           <DialogContent>
             <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -604,9 +636,9 @@ const AdminUsers: React.FC = () => {
               <FormControl fullWidth>
                 <InputLabel>Genre</InputLabel>
                 <Select value={createForm.gender || ''} onChange={(e) => setCreateForm({...createForm, gender: e.target.value})} label="Genre">
-                  <MenuItem value="homme">Homme</MenuItem>
-                  <MenuItem value="femme">Femme</MenuItem>
-                  <MenuItem value="autre">Autre</MenuItem>
+                  <MenuItem value="Homme">Homme</MenuItem>
+                  <MenuItem value="Femme">Femme</MenuItem>
+                  <MenuItem value="Autre">Autre</MenuItem>
                 </Select>
               </FormControl>
               <FormControl fullWidth>
@@ -628,6 +660,27 @@ const AdminUsers: React.FC = () => {
           <DialogActions>
             <Button onClick={() => setOpenCreateDialog(false)}>Annuler</Button>
             <Button onClick={handleCreateUser} color="primary">Créer</Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Dialogue de confirmation de suppression */}
+        <Dialog
+          open={openDeleteDialog}
+          onClose={() => setOpenDeleteDialog(false)}
+          fullWidth
+          maxWidth="xs"
+        >
+          <DialogTitle>Supprimer l'utilisateur</DialogTitle>
+          <DialogContent>
+            Êtes-vous sûr de vouloir supprimer cet utilisateur ?
+            <br />
+            <strong>Cette action est irréversible.</strong>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setOpenDeleteDialog(false)}>Annuler</Button>
+            <Button onClick={handleDeleteUser} color="error" variant="contained" autoFocus>
+              Supprimer
+            </Button>
           </DialogActions>
         </Dialog>
 
