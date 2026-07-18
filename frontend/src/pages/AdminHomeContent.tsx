@@ -38,6 +38,14 @@ const AdminHomeContent: React.FC = () => {
               Consultez les données des compétitions.
             </Typography>
           </Paper>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              Informations Clients
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Publiez les dernières infos de la salle (horaires, cours, compétitions) affichées aux clients.
+            </Typography>
+          </Paper>
         </Box>
       </Paper>
     </Container>

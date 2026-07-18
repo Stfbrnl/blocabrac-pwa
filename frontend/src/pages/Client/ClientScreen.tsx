@@ -11,6 +11,7 @@ import {
   CircularProgress
 } from '@mui/material';
 import { doc, getDoc } from 'firebase/firestore';
+import AnnouncementBanner from '../../components/AnnouncementBanner';
 
 const ClientScreen: React.FC = () => {
   const [user, loading] = useAuthState(auth);
@@ -59,6 +60,8 @@ const ClientScreen: React.FC = () => {
         <Typography variant="h4" gutterBottom sx={{ textAlign: 'center' }}>
           Mon espace personnel
         </Typography>
+
+        <AnnouncementBanner />
 
         <Box sx={{
           display: 'flex',

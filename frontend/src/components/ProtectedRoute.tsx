@@ -26,7 +26,12 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles,
         const userDoc = await getDoc(doc(db, 'users', user.uid));
         if (userDoc.exists()) {
           const userData = userDoc.data();
-          setUserRoles(userData.roles || [userData.role].filter(Boolean));
+          // ✅ Fusionne les deux formats possibles plutôt qu'un simple "||" :
+          // un "roles" vide ([]), bien que présent, ne doit pas masquer un "role"
+          // hérité encore valide sur le même document.
+          const rolesArray: string[] = Array.isArray(userData.roles) ? userData.roles : [];
+          const legacyRole: string[] = userData.role ? [userData.role] : [];
+          setUserRoles(Array.from(new Set([...rolesArray, ...legacyRole])));
         }
       } catch (err) {
         console.error('Erreur lors de la récupération des rôles :', err);

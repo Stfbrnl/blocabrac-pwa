@@ -43,8 +43,13 @@ const Navbar: React.FC = () => {
         try {
           const userDoc = await getDoc(doc(db, 'users', user.uid));
           if (userDoc.exists()) {
-            const roles = userDoc.data().roles || (userDoc.data().role ? [userDoc.data().role] : []);
-            setUserRoles(roles);
+            const userData = userDoc.data();
+            // ✅ Fusionne les deux formats possibles plutôt qu'un simple "||" :
+            // un "roles" vide ([]), bien que présent, ne doit pas masquer un "role"
+            // hérité encore valide sur le même document.
+            const rolesArray: string[] = Array.isArray(userData.roles) ? userData.roles : [];
+            const legacyRole: string[] = userData.role ? [userData.role] : [];
+            setUserRoles(Array.from(new Set([...rolesArray, ...legacyRole])) as UserRole[]);
           }
         } catch (error) {
           console.error("Erreur :", error);
@@ -82,6 +87,7 @@ const Navbar: React.FC = () => {
         { label: 'CRÉER/GÉRER LES COMPÉTITIONS', to: '/admin/competitions/create' },
         { label: 'GÉRER LES INSCRIPTIONS', to: '/admin/competitions/list' },
         { label: 'STATISTIQUES', to: '/admin/competitions/stats' },
+        { label: 'INFORMATIONS CLIENTS', to: '/admin/announcements' },
       );
     }
     if (userRoles.includes('ouvreur')) {

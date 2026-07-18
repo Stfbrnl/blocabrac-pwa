@@ -52,6 +52,7 @@ import AdminCompetitionManagement from './pages/AdminCompetitionManagement';
 import AdminCompetitionList from './pages/AdminCompetitionList';
 import AdminCompetitionRegistration from './pages/AdminCompetitionRegistration';
 import AdminCompetitionStats from './pages/AdminCompetitionStats';
+import AdminAnnouncements from './pages/AdminAnnouncements';
 
 // Composants partagés
 import ProtectedRoute from './components/ProtectedRoute';
@@ -118,6 +119,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             <Route path="/admin/competitions/list" element={<ProtectedRoute role="admin"><AdminCompetitionList /></ProtectedRoute>} />
             <Route path="/admin/competitions/register" element={<ProtectedRoute role="admin"><AdminCompetitionRegistration /></ProtectedRoute>} />
             <Route path="/admin/competitions/stats" element={<ProtectedRoute role="admin"><AdminCompetitionStats /></ProtectedRoute>} />
+            <Route path="/admin/announcements" element={<ProtectedRoute role="admin"><AdminAnnouncements /></ProtectedRoute>} />
           </Routes>
         </AuthProvider>
       </BrowserRouter>
