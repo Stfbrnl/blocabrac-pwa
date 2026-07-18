@@ -63,27 +63,24 @@ const ClientMessages: React.FC = () => {
       ]);
 
       const moniteursMap = new Map<string, {id: string, displayName: string}>();
-      receivedSnapshot.docs.forEach(doc => {
-        const data = doc.data() as DocumentData;
-        if (data.senderId && data.senderName) {
-          moniteursMap.set(data.senderId, {
-            id: data.senderId,
-            displayName: data.senderName
-          });
-        }
-      });
 
-      if (moniteursMap.size === 0) {
-        sentSnapshot.docs.forEach(doc => {
-          const data = doc.data() as DocumentData;
-          if (data.receiverId && data.receiverName) {
-            moniteursMap.set(data.receiverId, {
-              id: data.receiverId,
-              displayName: data.receiverName
-            });
-          }
-        });
-      }
+      // ✅ Source unique : le vrai annuaire des moniteurs actuels (users), pas
+      // l'historique des messages. Un compte qui n'est plus moniteur disparaît donc
+      // automatiquement de la liste, même s'il reste visible dans l'historique des
+      // conversations passées (ça, c'est normal : les anciens messages ne changent pas).
+      // Deux requêtes pour couvrir les deux formats de rôle existants (roles[] et role).
+      const [moniteursByRoleSnapshot, moniteursByRolesArraySnapshot] = await Promise.all([
+        getDocs(query(collection(db, 'users'), where('role', '==', 'moniteur'))),
+        getDocs(query(collection(db, 'users'), where('roles', 'array-contains', 'moniteur'))),
+      ]);
+      [...moniteursByRoleSnapshot.docs, ...moniteursByRolesArraySnapshot.docs].forEach((docSnap) => {
+        const data = docSnap.data() as DocumentData;
+        const displayName =
+          `${data.first_name || ''} ${data.last_name || ''}`.trim() ||
+          data.email?.split('@')[0] ||
+          docSnap.id;
+        moniteursMap.set(docSnap.id, { id: docSnap.id, displayName });
+      });
 
       const moniteursList = Array.from(moniteursMap.values());
       setMoniteurs(moniteursList);
@@ -315,7 +312,7 @@ const ClientMessages: React.FC = () => {
           </Box>
         ) : (
           <Alert severity="info">
-            Aucun moniteur trouvé. Envoyez un premier message pour démarrer la conversation.
+            Aucun moniteur disponible pour le moment. Contactez la salle si le problème persiste.
           </Alert>
         )}
       </Paper>
