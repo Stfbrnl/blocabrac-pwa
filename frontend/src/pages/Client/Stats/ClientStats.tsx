@@ -86,6 +86,12 @@ interface Badge {
   feminineName?: string;
   description: string;
   color?: string;
+  criteria?: {
+    color?: string;
+    // "all" signifie : il faut posséder la totalité des blocs de cette couleur
+    // actuellement en salle (cas du badge "master"). Sinon, un nombre fixe.
+    count?: string | number;
+  };
 }
 
 interface ClientBadge {
@@ -121,6 +127,12 @@ const ClientStats: React.FC = () => {
   // Genre du client connecté, récupéré depuis Firestore "users"
   const [userGender, setUserGender] = useState<string>('Homme');
 
+  // Pour chaque couleur : nombre de blocs DISTINCTS encore présents en salle
+  // que le client a validés (tous historiques confondus, indépendamment du filtre de période)
+  const [validatedExistingByColor, setValidatedExistingByColor] = useState<Record<string, number>>({});
+  // Pour chaque couleur : nombre total de blocs actuellement en salle (inventaire courant)
+  const [totalInventoryByColor, setTotalInventoryByColor] = useState<Record<string, number>>({});
+
   // États pour les statistiques par période
   const [period, setPeriod] = useState<'day' | 'week' | 'month' | 'year' | 'custom'>('week');
   const [startDate, setStartDate] = useState<string>('');
@@ -155,6 +167,28 @@ const ClientStats: React.FC = () => {
       return levelColors[badge.color];
     }
     return badge.color || '#9E9E9E';
+  };
+
+  // Un badge reste actif tant que le client a encore, dans ses stats, au moins
+  // "count" bloc(s) validé(s) de la couleur du badge qui existent toujours en salle.
+  // Dès qu'un mur change et que ces blocs disparaissent, le badge repasse en grisé,
+  // et redevient coloré automatiquement dès qu'un bloc de cette couleur est de nouveau validé.
+  const isBadgeActive = (badge: Badge): boolean => {
+    const color = badge.criteria?.color || badge.color;
+    if (!color) return true; // badge non lié à une couleur -> toujours actif
+
+    const validated = validatedExistingByColor[color] || 0;
+    const rawCount = badge.criteria?.count;
+
+    // Cas "master" : count === "all" -> il faut posséder tous les blocs de cette
+    // couleur actuellement en salle
+    if (String(rawCount).toLowerCase() === 'all') {
+      const total = totalInventoryByColor[color] || 0;
+      return total > 0 && validated >= total;
+    }
+
+    const required = parseInt(String(rawCount ?? '1'), 10) || 1;
+    return validated >= required;
   };
 
   useEffect(() => {
@@ -217,6 +251,9 @@ const ClientStats: React.FC = () => {
 
         const boulderStatsData: any[] = [];
         const colorCounts: Record<string, number> = {};
+        // Blocs distincts, encore existants en salle, validés par le client, groupés par couleur
+        // (tout l'historique confondu, indépendant du filtre de période choisi à l'écran)
+        const existingValidatedBoulderIdsByColor: Record<string, Set<string>> = {};
 
         for (const resultDoc of boulderResultsSnapshot.docs) {
           const result = resultDoc.data();
@@ -226,33 +263,60 @@ const ClientStats: React.FC = () => {
               ? new Date(result.createdAt.seconds * 1000)
               : new Date();
 
+          // ✅ Vérifier si le bloc existe toujours en salle, indépendamment de la période
+          // affichée à l'écran : c'est ce qui détermine si un badge reste actif ou non.
+          const boulderDoc = await getDoc(doc(db, 'boulders', result.boulderId));
+          if (!boulderDoc.exists()) continue; // bloc supprimé/remplacé lors d'un changement de mur
+
+          const boulderData = boulderDoc.data() as BoulderData;
+          const color = boulderData.color || boulderData.difficulty || 'Inconnu';
+
+          if (result.success === true) {
+            if (!existingValidatedBoulderIdsByColor[color]) {
+              existingValidatedBoulderIdsByColor[color] = new Set();
+            }
+            existingValidatedBoulderIdsByColor[color].add(result.boulderId);
+          }
+
+          // Le filtrage par période ne s'applique qu'à l'affichage des tableaux de stats
           if (startDateFilter && resultDate < startDateFilter) continue;
           if (endDateFilter && resultDate >= endDateFilter) continue;
 
-          const boulderDoc = await getDoc(doc(db, 'boulders', result.boulderId));
-          if (boulderDoc.exists()) {
-            const boulderData = boulderDoc.data() as BoulderData;
-            const color = boulderData.color || boulderData.difficulty || 'Inconnu';
+          boulderStatsData.push({
+            ...result,
+            boulderNumber: boulderData.number || result.boulderId,
+            wall: boulderData.wall || 'Inconnu',
+            difficulty: boulderData.difficulty || boulderData.color || 'Inconnu',
+            difficulty_level: boulderData.difficulty_level || 'Inconnu',
+            difficulty_type: boulderData.difficulty_types ? boulderData.difficulty_types[0] : 'Inconnu',
+            created_at: boulderData.created_at || 'Inconnu',
+            color: color,
+            createdAt: resultDate,
+          });
 
-            boulderStatsData.push({
-              ...result,
-              boulderNumber: boulderData.number || result.boulderId,
-              wall: boulderData.wall || 'Inconnu',
-              difficulty: boulderData.difficulty || boulderData.color || 'Inconnu',
-              difficulty_level: boulderData.difficulty_level || 'Inconnu',
-              difficulty_type: boulderData.difficulty_types ? boulderData.difficulty_types[0] : 'Inconnu',
-              created_at: boulderData.created_at || 'Inconnu',
-              color: color,
-              createdAt: resultDate,
-            });
-
-            if (result.success === true) {
-              colorCounts[color] = (colorCounts[color] || 0) + 1;
-            }
+          if (result.success === true) {
+            colorCounts[color] = (colorCounts[color] || 0) + 1;
           }
         }
         setBoulderStats(boulderStatsData);
         setColorStats(colorCounts);
+        setValidatedExistingByColor(
+          Object.fromEntries(
+            Object.entries(existingValidatedBoulderIdsByColor).map(([color, ids]) => [color, ids.size])
+          )
+        );
+
+        // Inventaire courant des blocs en salle, par couleur (sert au badge "master"
+        // qui exige la totalité des blocs d'une couleur, et pourra servir à d'autres
+        // badges du même type à l'avenir)
+        const bouldersSnapshot = await getDocs(collection(db, 'boulders'));
+        const inventoryByColor: Record<string, number> = {};
+        bouldersSnapshot.forEach((boulderDoc) => {
+          const data = boulderDoc.data() as BoulderData;
+          const color = data.color || data.difficulty || 'Inconnu';
+          inventoryByColor[color] = (inventoryByColor[color] || 0) + 1;
+        });
+        setTotalInventoryByColor(inventoryByColor);
 
         // Requête pour client_course_results
         const courseResultsSnapshot = await getDocs(
@@ -309,6 +373,7 @@ const ClientStats: React.FC = () => {
                 feminineName: badgeData.feminineName,
                 description: badgeData.description || '',
                 color: badgeData.color,
+                criteria: badgeData.criteria,
               };
 
               return {
@@ -750,28 +815,36 @@ const ClientStats: React.FC = () => {
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
               {clientBadges.map((cb, index) => {
                 const badgeColor = getBadgeColor(cb.badge);
+                const active = isBadgeActive(cb.badge);
+                const displayColor = active ? badgeColor : '#BDBDBD';
                 return (
-                  <Card key={index} sx={{ width: 250, mb: 2, overflow: 'hidden' }}>
+                  <Card
+                    key={index}
+                    sx={{ width: 250, mb: 2, overflow: 'hidden', opacity: active ? 1 : 0.65 }}
+                  >
                     <Box
                       sx={{
-                        backgroundColor: badgeColor,
+                        backgroundColor: displayColor,
                         display: 'flex',
                         justifyContent: 'center',
                         alignItems: 'center',
                         py: 2,
+                        filter: active ? 'none' : 'grayscale(1)',
                       }}
                     >
                       <MilitaryTechIcon
                         sx={{
                           fontSize: 56,
-                          color: ['#000000', '#800080', '#0000FF', '#FF0000'].includes(badgeColor)
-                            ? '#FFFFFF'
-                            : '#000000',
+                          color: !active
+                            ? '#757575'
+                            : ['#000000', '#800080', '#0000FF', '#FF0000'].includes(badgeColor)
+                              ? '#FFFFFF'
+                              : '#000000',
                         }}
                       />
                     </Box>
                     <CardContent>
-                      <Typography variant="h6" sx={{ color: badgeColor }}>
+                      <Typography variant="h6" sx={{ color: active ? badgeColor : 'text.disabled' }}>
                         {getBadgeDisplayName(cb.badge)}
                       </Typography>
                       <Typography variant="body2" sx={{ mb: 1 }}>
@@ -780,6 +853,13 @@ const ClientStats: React.FC = () => {
                       <Typography variant="caption" sx={{ display: 'block', mt: 1 }}>
                         Décerné par {cb.awardedByName} le {formatDate(cb.awardedAt)}
                       </Typography>
+                      {!active && (
+                        <Chip
+                          label="Badge inactif : aucun bloc de cette couleur en salle"
+                          size="small"
+                          sx={{ mt: 1, backgroundColor: '#E0E0E0', color: '#616161', height: 'auto', '& .MuiChip-label': { whiteSpace: 'normal', py: 0.5 } }}
+                        />
+                      )}
                     </CardContent>
                   </Card>
                 );
