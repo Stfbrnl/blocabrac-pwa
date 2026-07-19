@@ -6,10 +6,10 @@ import {
   FormControl, InputLabel, Box, IconButton, Snackbar, Alert, Chip,
   TableSortLabel, Tooltip, useTheme, useMediaQuery, Checkbox, FormControlLabel
 } from '@mui/material';
-import { Delete as DeleteIcon, Edit as EditIcon, Add as AddIcon, ArrowUpward as ArrowUpwardIcon, ArrowDownward as ArrowDownwardIcon, Lock as LockIcon } from '@mui/icons-material';
+import { Delete as DeleteIcon, Edit as EditIcon, Add as AddIcon, ArrowUpward as ArrowUpwardIcon, ArrowDownward as ArrowDownwardIcon, Lock as LockIcon, LockOpen as LockOpenIcon } from '@mui/icons-material';
 import { db, auth } from '../services/firebaseConfig';
 import {
-  collection, getDocs, doc, updateDoc, deleteDoc, setDoc, query, orderBy
+  collection, getDocs, doc, updateDoc, deleteDoc, setDoc, query, orderBy, writeBatch
 } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, sendPasswordResetEmail, getAuth, signOut } from 'firebase/auth';
 import { initializeApp, deleteApp } from 'firebase/app';
@@ -65,6 +65,8 @@ const AdminUsers: React.FC = () => {
   const [openCreateDialog, setOpenCreateDialog] = useState(false);
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
   const [userToDelete, setUserToDelete] = useState<string | null>(null);
+  const [openUnlockAllDialog, setOpenUnlockAllDialog] = useState(false);
+  const [unlockingAll, setUnlockingAll] = useState(false);
   const [openSnackbar, setOpenSnackbar] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -370,6 +372,34 @@ const AdminUsers: React.FC = () => {
     }
   };
 
+  const handleUnlockAllLevels = async () => {
+    const lockedUsers = users.filter(u => u.levelOverride);
+    if (lockedUsers.length === 0) {
+      setOpenUnlockAllDialog(false);
+      return;
+    }
+    setUnlockingAll(true);
+    try {
+      // Un batch Firestore accepte au maximum 500 opérations : on découpe par sécurité.
+      for (let i = 0; i < lockedUsers.length; i += 450) {
+        const chunk = lockedUsers.slice(i, i + 450);
+        const batch = writeBatch(db);
+        chunk.forEach(u => batch.update(doc(db, 'users', u.uid), { levelOverride: false }));
+        await batch.commit();
+      }
+      setUsers(prev => prev.map(u => (u.levelOverride ? { ...u, levelOverride: false } : u)));
+      setSnackbarMessage(`${lockedUsers.length} niveau(x) déverrouillé(s) avec succès !`);
+      setOpenSnackbar(true);
+    } catch (error) {
+      console.error("Erreur :", error);
+      setSnackbarMessage("Erreur lors du déverrouillage en masse : " + error);
+      setOpenSnackbar(true);
+    } finally {
+      setUnlockingAll(false);
+      setOpenUnlockAllDialog(false);
+    }
+  };
+
   // ✅ Fonction pour obtenir l'icône de tri
   const getSortIcon = (key: keyof User) => {
     if (!sortConfig || sortConfig.key !== key) {
@@ -381,6 +411,8 @@ const AdminUsers: React.FC = () => {
   if (loading) {
     return <Typography>Chargement des utilisateurs...</Typography>;
   }
+
+  const lockedCount = users.filter(u => u.levelOverride).length;
 
   return (
     <Container maxWidth={false} sx={{ px: 2 }}> {/* ✅ Largeur maximale */}
@@ -398,14 +430,25 @@ const AdminUsers: React.FC = () => {
           <Typography variant="h4" gutterBottom sx={{ fontSize: { xs: '1.5rem', sm: '2.125rem' } }}>
             Gestion des Utilisateurs
           </Typography>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => setOpenCreateDialog(true)}
-            sx={{ width: { xs: '100%', sm: 'auto' }, height: '48px' }}
-          >
-            Créer un utilisateur
-          </Button>
+          <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1, width: { xs: '100%', sm: 'auto' } }}>
+            <Button
+              variant="outlined"
+              startIcon={<LockOpenIcon />}
+              onClick={() => setOpenUnlockAllDialog(true)}
+              disabled={lockedCount === 0}
+              sx={{ width: { xs: '100%', sm: 'auto' }, height: '48px' }}
+            >
+              Déverrouiller tous les niveaux{lockedCount > 0 ? ` (${lockedCount})` : ''}
+            </Button>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => setOpenCreateDialog(true)}
+              sx={{ width: { xs: '100%', sm: 'auto' }, height: '48px' }}
+            >
+              Créer un utilisateur
+            </Button>
+          </Box>
         </Box>
 
         <TableContainer sx={{ overflowX: 'auto' }}> {/* ✅ Défilement horizontal si nécessaire */}
@@ -717,6 +760,36 @@ const AdminUsers: React.FC = () => {
             <Button onClick={() => setOpenDeleteDialog(false)}>Annuler</Button>
             <Button onClick={handleDeleteUser} color="error" variant="contained" autoFocus>
               Supprimer
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Dialogue de confirmation du déverrouillage en masse */}
+        <Dialog
+          open={openUnlockAllDialog}
+          onClose={() => !unlockingAll && setOpenUnlockAllDialog(false)}
+          fullWidth
+          maxWidth="xs"
+        >
+          <DialogTitle>Déverrouiller tous les niveaux</DialogTitle>
+          <DialogContent>
+            {lockedCount} compte(s) ont actuellement leur niveau verrouillé.
+            <br />
+            Êtes-vous sûr de vouloir tous les déverrouiller ? Leur niveau redeviendra mis à jour
+            automatiquement d'après leurs badges à leur prochaine visite sur leurs statistiques.
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setOpenUnlockAllDialog(false)} disabled={unlockingAll}>
+              Annuler
+            </Button>
+            <Button
+              onClick={handleUnlockAllLevels}
+              color="primary"
+              variant="contained"
+              disabled={unlockingAll}
+              autoFocus
+            >
+              {unlockingAll ? 'Déverrouillage...' : 'Déverrouiller'}
             </Button>
           </DialogActions>
         </Dialog>
