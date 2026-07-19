@@ -39,3 +39,4 @@ firestore-migration/
 GCloudSDK/
 *serviceAccountKey*.json
 *adminsdk*.json
+scripts/serviceAccountKey.json
