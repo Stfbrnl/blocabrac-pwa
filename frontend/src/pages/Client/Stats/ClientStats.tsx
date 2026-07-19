@@ -412,18 +412,21 @@ const ClientStats: React.FC = () => {
         // Comme il n'existe pas de badge en dessous de violet, ce mécanisme ne
         // s'applique qu'à partir de ce niveau ; en dessous, le niveau reste géré
         // manuellement (profil du client ou administration).
-        const activeBadgeColors = clientBadgesList
-          .filter((cb) => computeBadgeActive(cb.badge, validatedExistingByColorLocal, inventoryByColor))
-          .map((cb) => cb.badge.criteria?.color || cb.badge.color)
-          .filter((color): color is string => !!color && colorOrder.includes(color));
+        // Si un admin a verrouillé le niveau (levelOverride), on ne le touche jamais.
+        if (!userData?.levelOverride) {
+          const activeBadgeColors = clientBadgesList
+            .filter((cb) => computeBadgeActive(cb.badge, validatedExistingByColorLocal, inventoryByColor))
+            .map((cb) => cb.badge.criteria?.color || cb.badge.color)
+            .filter((color): color is string => !!color && colorOrder.includes(color));
 
-        if (activeBadgeColors.length > 0) {
-          const highestActiveColor = activeBadgeColors.reduce((highest, color) =>
-            colorOrder.indexOf(color) > colorOrder.indexOf(highest) ? color : highest
-          );
+          if (activeBadgeColors.length > 0) {
+            const highestActiveColor = activeBadgeColors.reduce((highest, color) =>
+              colorOrder.indexOf(color) > colorOrder.indexOf(highest) ? color : highest
+            );
 
-          if (userData && userData.level !== highestActiveColor) {
-            await updateDoc(doc(db, 'users', user.uid), { level: highestActiveColor });
+            if (userData && userData.level !== highestActiveColor) {
+              await updateDoc(doc(db, 'users', user.uid), { level: highestActiveColor });
+            }
           }
         }
 

@@ -4,9 +4,9 @@ import {
   TableContainer, TableHead, TableRow, Button, Dialog, DialogTitle,
   DialogContent, DialogActions, TextField, MenuItem, Select,
   FormControl, InputLabel, Box, IconButton, Snackbar, Alert, Chip,
-  TableSortLabel, Tooltip, useTheme, useMediaQuery
+  TableSortLabel, Tooltip, useTheme, useMediaQuery, Checkbox, FormControlLabel
 } from '@mui/material';
-import { Delete as DeleteIcon, Edit as EditIcon, Add as AddIcon, ArrowUpward as ArrowUpwardIcon, ArrowDownward as ArrowDownwardIcon } from '@mui/icons-material';
+import { Delete as DeleteIcon, Edit as EditIcon, Add as AddIcon, ArrowUpward as ArrowUpwardIcon, ArrowDownward as ArrowDownwardIcon, Lock as LockIcon } from '@mui/icons-material';
 import { db, auth } from '../services/firebaseConfig';
 import {
   collection, getDocs, doc, updateDoc, deleteDoc, setDoc, query, orderBy
@@ -43,6 +43,9 @@ interface User {
   age?: number;
   gender?: string;
   level?: string;
+  // ✅ Si true, le niveau ci-dessus est verrouillé par un admin : la synchronisation
+  // automatique basée sur les badges (ClientStats.tsx) ne doit plus l'écraser.
+  levelOverride?: boolean;
   created_at?: string;
   inscritAuxCours?: boolean;
   inscritAuxCompetitions?: boolean;
@@ -73,6 +76,7 @@ const AdminUsers: React.FC = () => {
     age: undefined,
     gender: '',
     level: '',
+    levelOverride: false,
     inscritAuxCours: false,
     inscritAuxCompetitions: false,
   });
@@ -84,6 +88,7 @@ const AdminUsers: React.FC = () => {
     age: undefined,
     gender: '',
     level: '',
+    levelOverride: false,
     inscritAuxCours: false,
     inscritAuxCompetitions: true,
     password: '',
@@ -155,6 +160,7 @@ const AdminUsers: React.FC = () => {
             age: data.age,
             gender: data.gender,
             level: data.level,
+          levelOverride: data.levelOverride || false,
             created_at: data.created_at,
             inscritAuxCours: data.inscritAuxCours ?? false,
             inscritAuxCompetitions: data.inscritAuxCompetitions ?? true,
@@ -184,6 +190,7 @@ const AdminUsers: React.FC = () => {
         age: editForm.age,
         gender: editForm.gender,
         level: editForm.level,
+        levelOverride: editForm.levelOverride ?? false,
         inscritAuxCours: editForm.inscritAuxCours,
         inscritAuxCompetitions: editForm.inscritAuxCompetitions,
       });
@@ -199,6 +206,7 @@ const AdminUsers: React.FC = () => {
           age: data.age,
           gender: data.gender,
           level: data.level,
+          levelOverride: data.levelOverride || false,
           created_at: data.created_at,
           inscritAuxCours: data.inscritAuxCours ?? false,
           inscritAuxCompetitions: data.inscritAuxCompetitions ?? true,
@@ -251,6 +259,7 @@ const AdminUsers: React.FC = () => {
         age: createForm.age,
         gender: createForm.gender,
         level: createForm.level,
+        levelOverride: createForm.levelOverride ?? false,
         inscritAuxCours: createForm.inscritAuxCours,
         inscritAuxCompetitions: createForm.inscritAuxCompetitions,
         created_at: new Date().toISOString()
@@ -270,6 +279,7 @@ const AdminUsers: React.FC = () => {
           age: data.age,
           gender: data.gender,
           level: data.level,
+          levelOverride: data.levelOverride || false,
           created_at: data.created_at,
           inscritAuxCours: data.inscritAuxCours ?? false,
           inscritAuxCompetitions: data.inscritAuxCompetitions ?? true,
@@ -313,6 +323,7 @@ const AdminUsers: React.FC = () => {
       age: user.age,
       gender: user.gender || '',
       level: user.level || '',
+      levelOverride: user.levelOverride || false,
       inscritAuxCours: user.inscritAuxCours ?? false,
       inscritAuxCompetitions: user.inscritAuxCompetitions ?? true,
     });
@@ -340,6 +351,7 @@ const AdminUsers: React.FC = () => {
           age: data.age,
           gender: data.gender,
           level: data.level,
+          levelOverride: data.levelOverride || false,
           created_at: data.created_at,
           inscritAuxCours: data.inscritAuxCours ?? false,
           inscritAuxCompetitions: data.inscritAuxCompetitions ?? true,
@@ -497,13 +509,20 @@ const AdminUsers: React.FC = () => {
                   </TableCell>
                   <TableCell>
                     {user.level ? (
-                      <Chip
-                        label={levelOptions.find(opt => opt.value === user.level)?.label || user.level}
-                        sx={{
-                          backgroundColor: levelColors[user.level],
-                          color: ['noir', 'blanc'].includes(user.level) ? 'black' : 'white'
-                        }}
-                      />
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        <Chip
+                          label={levelOptions.find(opt => opt.value === user.level)?.label || user.level}
+                          sx={{
+                            backgroundColor: levelColors[user.level],
+                            color: ['noir', 'blanc'].includes(user.level) ? 'black' : 'white'
+                          }}
+                        />
+                        {user.levelOverride && (
+                          <Tooltip title="Niveau verrouillé manuellement : pas de mise à jour automatique par les badges">
+                            <LockIcon fontSize="small" color="action" />
+                          </Tooltip>
+                        )}
+                      </Box>
                     ) : 'N/A'}
                   </TableCell>
                   <TableCell>{user.age || 'N/A'}</TableCell>
@@ -564,6 +583,15 @@ const AdminUsers: React.FC = () => {
                   {levelOptions.map(option => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
                 </Select>
               </FormControl>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={editForm.levelOverride ?? false}
+                    onChange={(e) => setEditForm({ ...editForm, levelOverride: e.target.checked })}
+                  />
+                }
+                label="Verrouiller ce niveau (empêche la mise à jour automatique par les badges du client)"
+              />
               <TextField label="Âge" type="number" value={editForm.age || ''} onChange={(e) => setEditForm({...editForm, age: e.target.value ? parseInt(e.target.value) : undefined})} fullWidth slotProps={{ inputLabel: { shrink: true } }} />
               <FormControl fullWidth>
                 <InputLabel>Genre</InputLabel>
@@ -632,6 +660,15 @@ const AdminUsers: React.FC = () => {
                   {levelOptions.map(option => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
                 </Select>
               </FormControl>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={createForm.levelOverride ?? false}
+                    onChange={(e) => setCreateForm({ ...createForm, levelOverride: e.target.checked })}
+                  />
+                }
+                label="Verrouiller ce niveau (empêche la mise à jour automatique par les badges du client)"
+              />
               <TextField label="Âge" type="number" value={createForm.age || ''} onChange={(e) => setCreateForm({...createForm, age: e.target.value ? parseInt(e.target.value) : undefined})} fullWidth slotProps={{ inputLabel: { shrink: true } }} />
               <FormControl fullWidth>
                 <InputLabel>Genre</InputLabel>

@@ -24,9 +24,9 @@ service cloud.firestore {
                       (
                         isUserRole("admin") ||
                         (request.auth.uid == userId &&
-                         // ✅ "roles" ajouté à la liste protégée : avant, un client pouvait
-                         // s'attribuer n'importe quel rôle via ce champ, seul "role" était bloqué.
-                         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['inscritAuxCours', 'inscritAuxCompetitions', 'role', 'roles']))
+                         // ✅ "levelOverride" ajouté : seul un admin doit pouvoir verrouiller/déverrouiller
+                         // le niveau d'un client, sinon celui-ci pourrait geler son propre niveau à volonté.
+                         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['inscritAuxCours', 'inscritAuxCompetitions', 'role', 'roles', 'levelOverride']))
                       );
       // ✅ Un admin peut désormais supprimer un compte (bloqué avant par "if false")
       allow delete: if request.auth != null && isUserRole("admin");
