@@ -57,7 +57,7 @@ const colorRatings: ColorRating[] = [
   { value: 'bleu', label: 'Bleu (4C-5A+)' },
   { value: 'violet', label: 'Violet (5B-5C+)' },
   { value: 'rouge', label: 'Rouge (6A-6B)' },
-  { value: 'noire', label: 'Noire (6B+-6C+)' },
+  { value: 'noir', label: 'Noire (6B+-6C+)' },
   { value: 'blanc', label: 'Blanc (7A-7B)' },
   { value: 'rose', label: 'Rose (7B+-8A)' },
   { value: 'mystere', label: 'Bloc Mystère' }
@@ -380,9 +380,11 @@ export default function DailyBoulderForm(): JSX.Element {
         type: 'daily',
         competition_id: null,
         is_active: true,
-        created_at: new Date().toISOString(),
-        created_by: user.uid,
-        difficulty_level: formData.difficulty_level
+        difficulty_level: formData.difficulty_level,
+        // ✅ Ne pas écraser la date/l'auteur de création d'origine lors d'une modification
+        ...(editingBoulder
+          ? {}
+          : { created_at: new Date().toISOString(), created_by: user.uid }),
       };
 
       if (editingBoulder) {
@@ -452,8 +454,9 @@ export default function DailyBoulderForm(): JSX.Element {
               sx={{ minWidth: 150 }}
             />
             <FormControl fullWidth disabled={isUploading} sx={{ minWidth: 200 }}>
-              <InputLabel>Cotation</InputLabel>
+              <InputLabel id="cotation-select-label" htmlFor="cotation-select">Cotation</InputLabel>
               <Select
+                labelId="cotation-select-label" id="cotation-select"
                 value={formData.color}
                 onChange={(e: any): void => setFormData({ ...formData, color: e.target.value as string })}
                 label="Cotation"
@@ -467,8 +470,9 @@ export default function DailyBoulderForm(): JSX.Element {
           </Box>
 
           <FormControl fullWidth margin="normal" disabled={isUploading}>
-            <InputLabel>Difficulté dans le niveau</InputLabel>
+            <InputLabel id="difficulte-dans-le-niveau-select-label" htmlFor="difficulte-dans-le-niveau-select">Difficulté dans le niveau</InputLabel>
             <Select
+              labelId="difficulte-dans-le-niveau-select-label" id="difficulte-dans-le-niveau-select"
               value={formData.difficulty_level}
               onChange={(e: any): void => setFormData({ ...formData, difficulty_level: e.target.value as DifficultyLevel })}
               label="Difficulté dans le niveau"
@@ -485,8 +489,9 @@ export default function DailyBoulderForm(): JSX.Element {
           </FormControl>
 
           <FormControl fullWidth margin="normal" disabled={isUploading}>
-            <InputLabel>Types de difficulté (multiple)</InputLabel>
+            <InputLabel id="types-de-difficulte-multiple-select-label" htmlFor="types-de-difficulte-multiple-select">Types de difficulté (multiple)</InputLabel>
             <Select
+              labelId="types-de-difficulte-multiple-select-label" id="types-de-difficulte-multiple-select"
               multiple
               value={formData.difficulty_types}
               onChange={(e: any): void => setFormData({

@@ -95,8 +95,9 @@ export default function ReportsList(): JSX.Element {
       {/* ✅ flexWrap pour empiler filtre + bouton sur mobile */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, gap: 1, flexWrap: 'wrap' }}>
         <FormControl sx={{ minWidth: 200 }}>
-          <InputLabel>Filtrer par type</InputLabel>
+          <InputLabel id="filtrer-par-type-select-label" htmlFor="filtrer-par-type-select">Filtrer par type</InputLabel>
           <Select
+            labelId="filtrer-par-type-select-label" id="filtrer-par-type-select"
             value={filterType}
             onChange={(e: any): void => setFilterType(e.target.value as ReportType | 'all')}
             label="Filtrer par type"

@@ -301,8 +301,9 @@ const AdminCompetitionRegistration: React.FC = () => {
         </Typography>
 
         <FormControl fullWidth sx={{ mb: 3 }}>
-          <InputLabel>Sélectionnez une compétition</InputLabel>
+          <InputLabel id="selectionnez-une-competition-select-label" htmlFor="selectionnez-une-competition-select">Sélectionnez une compétition</InputLabel>
           <Select
+            labelId="selectionnez-une-competition-select-label" id="selectionnez-une-competition-select"
             value={selectedCompetition?.id || ''}
             onChange={(e) => loadParticipants(e.target.value)}
             label="Sélectionnez une compétition"
@@ -389,7 +390,7 @@ const AdminCompetitionRegistration: React.FC = () => {
                               label={participant.level}
                               sx={{
                                 backgroundColor: levelColors[participant.level] || '#CCCCCC',
-                                color: ['noir', 'blanc'].includes(participant.level) ? 'black' : 'white'
+                                color: participant.level === 'blanc' ? 'black' : 'white'
                               }}
                             />
                           ) : 'N/A'}
@@ -425,8 +426,9 @@ const AdminCompetitionRegistration: React.FC = () => {
               Ajouter un participant
             </Typography>
             <FormControl fullWidth sx={{ mb: 2 }}>
-              <InputLabel>Utilisateur</InputLabel>
+              <InputLabel id="utilisateur-select-label" htmlFor="utilisateur-select">Utilisateur</InputLabel>
               <Select
+                labelId="utilisateur-select-label" id="utilisateur-select"
                 label="Utilisateur"
                 defaultValue=""
               >

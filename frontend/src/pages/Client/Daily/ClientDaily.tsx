@@ -337,7 +337,7 @@ const ClientDaily: React.FC = () => {
                 <Typography variant="body2">Niveau: </Typography>
                 <Box sx={{
                   backgroundColor: levelColors[selectedBoulder.color || selectedBoulder.difficulty] || '#CCCCCC',
-                  color: ['noir', 'blanc', 'mystère', 'mystere'].includes(selectedBoulder.color || selectedBoulder.difficulty) ? 'black' : 'white',
+                  color: ['blanc', 'mystère', 'mystere'].includes(selectedBoulder.color || selectedBoulder.difficulty) ? 'black' : 'white',
                   padding: '2px 8px',
                   borderRadius: '4px',
                   marginLeft: '8px'
@@ -380,8 +380,10 @@ const ClientDaily: React.FC = () => {
               </Box>
 
               <FormControl fullWidth sx={{ mb: 2 }}>
-                <InputLabel>Nombre d'essais</InputLabel>
+                <InputLabel id="nombre-d-essais-select-label" htmlFor="nombre-d-essais-select">Nombre d'essais</InputLabel>
                 <Select
+                  labelId="nombre-d-essais-select-label"
+                  id="nombre-d-essais-select"
                   value={attempts[selectedBoulder.id] || 1}
                   onChange={(e) => setAttempts(prev => ({
                     ...prev,
@@ -399,8 +401,10 @@ const ClientDaily: React.FC = () => {
 
               {isMysteryBoulder(selectedBoulder) && (
                 <FormControl fullWidth sx={{ mb: 2 }}>
-                  <InputLabel>Proposer une cotation</InputLabel>
+                  <InputLabel id="proposer-une-cotation-select-label" htmlFor="proposer-une-cotation-select">Proposer une cotation</InputLabel>
                   <Select
+                    labelId="proposer-une-cotation-select-label"
+                    id="proposer-une-cotation-select"
                     value={proposedDifficulties[selectedBoulder.id] || ''}
                     onChange={(e) => setProposedDifficulties(prev => ({
                       ...prev,
@@ -436,8 +440,10 @@ const ClientDaily: React.FC = () => {
               />
 
               <FormControl fullWidth sx={{ mt: 2, mb: 2 }}>
-                <InputLabel>Type de signalement</InputLabel>
+                <InputLabel id="type-de-signalement-select-label" htmlFor="type-de-signalement-select">Type de signalement</InputLabel>
                 <Select
+                  labelId="type-de-signalement-select-label"
+                  id="type-de-signalement-select"
                   value={reportTypesSelected[selectedBoulder.id] || ''}
                   onChange={(e) => setReportTypesSelected(prev => ({
                     ...prev,

@@ -23,7 +23,7 @@ const levelOptions = [
   { value: 'bleu', label: 'Bleu (4C-5A+) - En formation de grimpeur' },
   { value: 'violet', label: 'Violet (5B-5C+) - En formation de grimpeur' },
   { value: 'rouge', label: 'Rouge (6A-6B) - Grimpeur confirmé' },
-  { value: 'noire', label: 'Noire (6B+-6C+) - Grimpeur confirmé' },
+  { value: 'noir', label: 'Noire (6B+-6C+) - Grimpeur confirmé' },
   { value: 'blanc', label: 'Blanc (7A-7B) - Grimpeur expert' },
   { value: 'rose', label: 'Rose (7B+-8A) - Grimpeur mutant' }
 ];
@@ -72,11 +72,13 @@ export default function Register() {
         age: age,
         gender: gender,
         level: level,
-        role: 'client',
+        // ✅ "roles" est le seul format écrit désormais (comme AdminUsers.tsx) :
+        // écrire aussi "role" ici était justement à l'origine de la double
+        // convention role/roles qui a causé plusieurs bugs de droits dans l'app.
         roles: ['client'],
         inscritAuxCours: false, // ✅ NOUVEAU CHAMP : Créé automatiquement à false
         inscritAuxCompetitions: false, // ✅ NOUVEAU CHAMP : Créé automatiquement à false
-        created_at: new Date().toISOString()
+        createdAt: new Date().toISOString()
       });
 
       setSuccess('Compte créé avec succès ! Vous pouvez maintenant vous connecter.');
@@ -175,22 +177,24 @@ export default function Register() {
 
           {/* Genre (obligatoire) */}
           <FormControl fullWidth margin="normal" required>
-            <InputLabel>Genre</InputLabel>
+            <InputLabel id="genre-select-label" htmlFor="genre-select">Genre</InputLabel>
             <Select
+              labelId="genre-select-label" id="genre-select"
               value={gender}
               onChange={(e) => setGender(e.target.value)}
               label="Genre"
             >
-              <MenuItem value="homme">Homme</MenuItem>
-              <MenuItem value="femme">Femme</MenuItem>
-              <MenuItem value="autre">Autre</MenuItem>
+              <MenuItem value="Homme">Homme</MenuItem>
+              <MenuItem value="Femme">Femme</MenuItem>
+              <MenuItem value="Autre">Autre</MenuItem>
             </Select>
           </FormControl>
 
           {/* Niveau en salle (obligatoire) */}
           <FormControl fullWidth margin="normal" required>
-            <InputLabel>Niveau en salle</InputLabel>
+            <InputLabel id="niveau-en-salle-select-label" htmlFor="niveau-en-salle-select">Niveau en salle</InputLabel>
             <Select
+              labelId="niveau-en-salle-select-label" id="niveau-en-salle-select"
               value={level}
               onChange={(e) => setLevel(e.target.value)}
               label="Niveau en salle"

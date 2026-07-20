@@ -293,11 +293,15 @@ const StatsList: React.FC = () => {
 
         for (const resultDoc of resultsSnapshot.docs) {
           const data = resultDoc.data();
-          const resultDate = data.date instanceof Timestamp
-            ? data.date.toDate()
-            : data.date?.seconds
-              ? new Date(data.date.seconds * 1000)
-              : new Date();
+          // ✅ Même correctif que côté client : le champ réellement écrit est "createdAt"
+          const rawResultDate = data.createdAt ?? data.date;
+          const resultDate = rawResultDate instanceof Timestamp
+            ? rawResultDate.toDate()
+            : rawResultDate?.seconds
+              ? new Date(rawResultDate.seconds * 1000)
+              : rawResultDate
+                ? new Date(rawResultDate)
+                : new Date();
 
           const userResult = resultsData.find((ur) => ur.id === data.userId);
           if (userResult) {
@@ -343,7 +347,9 @@ const StatsList: React.FC = () => {
             ? data.awardedAt.toDate()
             : data.awardedAt?.seconds
               ? new Date(data.awardedAt.seconds * 1000)
-              : new Date();
+              : data.awardedAt
+                ? new Date(data.awardedAt)
+                : new Date();
 
           return {
             id: badgeLinkDoc.id,
@@ -367,7 +373,9 @@ const StatsList: React.FC = () => {
             ? data.awardedAt.toDate()
             : data.awardedAt?.seconds
               ? new Date(data.awardedAt.seconds * 1000)
-              : new Date();
+              : data.awardedAt
+                ? new Date(data.awardedAt)
+                : new Date();
 
           // ✅ Récupérer Prénom Nom depuis users plutôt que displayName/email
           const matchedUser = usersList.find((u) => u.id === data.userId);
@@ -449,7 +457,7 @@ const StatsList: React.FC = () => {
       filteredData = filteredData.map((userResult) => ({
         ...userResult,
         results: userResult.results.filter((result) =>
-          result.exerciseName.toLowerCase().includes(filters.exerciseType?.toLowerCase() || '')
+          (result.exerciseName || '').toLowerCase().includes(filters.exerciseType?.toLowerCase() || '')
         ),
       }));
     }
@@ -773,8 +781,9 @@ const StatsList: React.FC = () => {
           }}
         >
           <FormControl sx={{ minWidth: 140, flex: '1 1 140px' }}>
-            <InputLabel>Période</InputLabel>
+            <InputLabel id="periode-select-label" htmlFor="periode-select">Période</InputLabel>
             <Select
+              labelId="periode-select-label" id="periode-select"
               value={filters.period}
               onChange={(e: SelectChangeEvent<string>) => handleFilterChange('period', e.target.value)}
               label="Période"
@@ -789,8 +798,9 @@ const StatsList: React.FC = () => {
           </FormControl>
 
           <FormControl sx={{ minWidth: 200, flex: '1 1 200px' }}>
-            <InputLabel>Exercice</InputLabel>
+            <InputLabel id="exercice-select-label" htmlFor="exercice-select">Exercice</InputLabel>
             <Select
+              labelId="exercice-select-label" id="exercice-select"
               value={filters.exercise || ''}
               onChange={(e: SelectChangeEvent<string>) => handleFilterChange('exercise', e.target.value)}
               label="Exercice"
@@ -805,8 +815,9 @@ const StatsList: React.FC = () => {
           </FormControl>
 
           <FormControl sx={{ minWidth: 200, flex: '1 1 200px' }}>
-            <InputLabel>Type d'exercice</InputLabel>
+            <InputLabel id="type-d-exercice-select-label" htmlFor="type-d-exercice-select">Type d'exercice</InputLabel>
             <Select
+              labelId="type-d-exercice-select-label" id="type-d-exercice-select"
               value={filters.exerciseType || ''}
               onChange={(e: SelectChangeEvent<string>) => handleFilterChange('exerciseType', e.target.value)}
               label="Type d'exercice"
@@ -821,8 +832,9 @@ const StatsList: React.FC = () => {
           </FormControl>
 
           <FormControl sx={{ minWidth: 200, flex: '1 1 200px' }}>
-            <InputLabel>Utilisateur</InputLabel>
+            <InputLabel id="utilisateur-select-label" htmlFor="utilisateur-select">Utilisateur</InputLabel>
             <Select
+              labelId="utilisateur-select-label" id="utilisateur-select"
               value={filters.user || ''}
               onChange={(e: SelectChangeEvent<string>) => handleFilterChange('user', e.target.value)}
               label="Utilisateur"
@@ -837,8 +849,9 @@ const StatsList: React.FC = () => {
           </FormControl>
 
           <FormControl sx={{ minWidth: 200, flex: '1 1 200px' }}>
-            <InputLabel>Groupe</InputLabel>
+            <InputLabel id="groupe-select-label" htmlFor="groupe-select">Groupe</InputLabel>
             <Select
+              labelId="groupe-select-label" id="groupe-select"
               value={filters.group || ''}
               onChange={(e: SelectChangeEvent<string>) => handleFilterChange('group', e.target.value)}
               label="Groupe"
@@ -853,8 +866,9 @@ const StatsList: React.FC = () => {
           </FormControl>
 
           <FormControl sx={{ minWidth: 200, flex: '1 1 200px' }}>
-            <InputLabel>Couleur de bloc</InputLabel>
+            <InputLabel id="couleur-de-bloc-select-label" htmlFor="couleur-de-bloc-select">Couleur de bloc</InputLabel>
             <Select
+              labelId="couleur-de-bloc-select-label" id="couleur-de-bloc-select"
               value={filters.boulderColor || ''}
               onChange={(e: SelectChangeEvent<string>) => handleFilterChange('boulderColor', e.target.value)}
               label="Couleur de bloc"
@@ -904,7 +918,7 @@ const StatsList: React.FC = () => {
                             label={result.boulderColor}
                             sx={{
                               backgroundColor: result.boulderColor,
-                              color: ['noir', 'blanc'].includes(result.boulderColor) ? 'black' : 'white',
+                              color: result.boulderColor === 'blanc' ? 'black' : 'white',
                             }}
                           />
                         ) : (
@@ -964,8 +978,9 @@ const StatsList: React.FC = () => {
               Attribuer un badge à {selectedResult?.exerciseName.split(' pour ')[1]} ?
             </Typography>
             <FormControl fullWidth sx={{ mt: 2 }}>
-              <InputLabel>Badge</InputLabel>
+              <InputLabel id="badge-select-label" htmlFor="badge-select">Badge</InputLabel>
               <Select
+                labelId="badge-select-label" id="badge-select"
                 value={selectedBadgeId || ''}
                 onChange={(e: SelectChangeEvent<string>) => setSelectedBadgeId(e.target.value)}
                 label="Badge"
@@ -991,8 +1006,9 @@ const StatsList: React.FC = () => {
           <DialogTitle>Attribuer un diplôme</DialogTitle>
           <DialogContent>
             <FormControl fullWidth sx={{ mt: 2 }}>
-              <InputLabel>Type de diplôme</InputLabel>
+              <InputLabel id="type-de-diplome-select-label" htmlFor="type-de-diplome-select">Type de diplôme</InputLabel>
               <Select
+                labelId="type-de-diplome-select-label" id="type-de-diplome-select"
                 value={selectedDiplomaType}
                 onChange={(e: SelectChangeEvent<string>) => setSelectedDiplomaType(e.target.value)}
                 label="Type de diplôme"

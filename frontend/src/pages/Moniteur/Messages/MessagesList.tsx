@@ -477,15 +477,17 @@ const MessagesList: React.FC = () => {
           <TextField label="Titre" value={newMessageTitle} onChange={(e) => setNewMessageTitle(e.target.value)} fullWidth margin="normal" required />
           <TextField label="Contenu" value={newMessageContent} onChange={(e) => setNewMessageContent(e.target.value)} fullWidth margin="normal" multiline rows={4} required />
           <FormControl fullWidth margin="normal">
-            <InputLabel>Type de destinataire</InputLabel>
-            <Select value={recipientType} onChange={(e) => { setRecipientType(e.target.value as 'client' | 'group'); setRecipients([]); }} label="Type de destinataire">
+            <InputLabel id="type-de-destinataire-select-label" htmlFor="type-de-destinataire-select">Type de destinataire</InputLabel>
+            <Select
+              labelId="type-de-destinataire-select-label" id="type-de-destinataire-select" value={recipientType} onChange={(e) => { setRecipientType(e.target.value as 'client' | 'group'); setRecipients([]); }} label="Type de destinataire">
               <MenuItem value="client">Client individuel</MenuItem>
               <MenuItem value="group">Groupe</MenuItem>
             </Select>
           </FormControl>
           <FormControl fullWidth margin="normal">
-            <InputLabel>{recipientType === 'client' ? 'Destinataires' : 'Groupes'}</InputLabel>
+            <InputLabel id="recipients-select-label" htmlFor="recipients-select">{recipientType === 'client' ? 'Destinataires' : 'Groupes'}</InputLabel>
             <Select
+              labelId="recipients-select-label" id="recipients-select"
               multiple
               value={recipients}
               onChange={(e) => setRecipients(e.target.value as string[])}

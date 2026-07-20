@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import {
   Typography, Paper, Container, Button, Box,
   MenuItem, Select, InputLabel, FormControl, IconButton, Table, TableBody,
-  TableCell, TableContainer, TableHead, TableRow, TextField, Chip
+  TableCell, TableContainer, TableHead, TableRow, TextField, Chip,
+  Dialog, DialogTitle, DialogContent, DialogActions
 } from '@mui/material';
 import { Delete as DeleteIcon, Edit as EditIcon, Add as AddIcon } from '@mui/icons-material';
 import { collection, query, where, getDocs, orderBy, updateDoc, doc } from 'firebase/firestore';
@@ -35,6 +36,8 @@ export default function CompetitionBouldersList(): JSX.Element {
   const [competitions, setCompetitions] = useState<Competition[]>([]);
   const [selectedCompetition, setSelectedCompetition] = useState<string>('');
   const [boulders, setBoulders] = useState<Boulder[]>([]);
+  const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
+  const [boulderToDelete, setBoulderToDelete] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchCompetitions = async (): Promise<void> => {
@@ -82,6 +85,19 @@ export default function CompetitionBouldersList(): JSX.Element {
     fetchBoulders();
   }, [selectedCompetition]);
 
+  const handleOpenDeleteDialog = (boulderId: string): void => {
+    setBoulderToDelete(boulderId);
+    setOpenDeleteDialog(true);
+  };
+
+  const handleConfirmDelete = async (): Promise<void> => {
+    if (!boulderToDelete) return;
+    await updateDoc(doc(db, 'boulders', boulderToDelete), { is_active: false });
+    setBoulders(boulders.filter(b => b.id !== boulderToDelete));
+    setOpenDeleteDialog(false);
+    setBoulderToDelete(null);
+  };
+
   const handleReorder = async (): Promise<void> => {
     try {
       for (const boulder of boulders) {
@@ -104,8 +120,9 @@ export default function CompetitionBouldersList(): JSX.Element {
         </Typography>
 
         <FormControl fullWidth sx={{ mb: 3 }}>
-          <InputLabel>Sélectionnez une compétition</InputLabel>
+          <InputLabel id="selectionnez-une-competition-select-label" htmlFor="selectionnez-une-competition-select">Sélectionnez une compétition</InputLabel>
           <Select
+            labelId="selectionnez-une-competition-select-label" id="selectionnez-une-competition-select"
             value={selectedCompetition}
             onChange={(e: any): void => setSelectedCompetition(e.target.value as string)}
             label="Compétition"
@@ -194,12 +211,7 @@ export default function CompetitionBouldersList(): JSX.Element {
                           </IconButton>
                           <IconButton
                             color="error"
-                            onClick={async (): Promise<void> => {
-                              if (window.confirm('Supprimer ce bloc ?')) {
-                                await updateDoc(doc(db, 'boulders', boulder.id), { is_active: false });
-                                setBoulders(boulders.filter(b => b.id !== boulder.id));
-                              }
-                            }}
+                            onClick={() => handleOpenDeleteDialog(boulder.id)}
                           >
                             <DeleteIcon />
                           </IconButton>
@@ -215,6 +227,26 @@ export default function CompetitionBouldersList(): JSX.Element {
           </>
         )}
       </Paper>
+
+      <Dialog
+        open={openDeleteDialog}
+        onClose={() => setOpenDeleteDialog(false)}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>Supprimer le bloc</DialogTitle>
+        <DialogContent>
+          Êtes-vous sûr de vouloir supprimer ce bloc ?
+          <br />
+          <strong>Il sera marqué comme inactif mais ne sera plus visible.</strong>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenDeleteDialog(false)}>Annuler</Button>
+          <Button onClick={handleConfirmDelete} color="error" variant="contained" autoFocus>
+            Supprimer
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 }

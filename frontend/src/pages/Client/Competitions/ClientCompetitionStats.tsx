@@ -29,6 +29,7 @@ interface CompetitionResult {
   attempts: number;
   rating: number;
   proposed_difficulty: string;
+  createdAt?: string;
 }
 
 interface Boulder {
@@ -106,7 +107,8 @@ const ClientCompetitionStats: React.FC = () => {
           success: doc.data().success || false,
           attempts: doc.data().attempts || 0,
           rating: doc.data().rating || 0,
-          proposed_difficulty: doc.data().proposed_difficulty || ''
+          proposed_difficulty: doc.data().proposed_difficulty || '',
+          createdAt: doc.data().createdAt || doc.data().created_at
         }));
         setResults(resultsData);
 
@@ -149,8 +151,9 @@ const ClientCompetitionStats: React.FC = () => {
       <Typography variant="h4" sx={{ mt: 4, mb: 2 }}>Mes statistiques de compétition</Typography>
 
       <FormControl fullWidth sx={{ mb: 3 }}>
-        <InputLabel>Sélectionnez une compétition</InputLabel>
+        <InputLabel id="selectionnez-une-competition-select-label" htmlFor="selectionnez-une-competition-select">Sélectionnez une compétition</InputLabel>
         <Select
+          labelId="selectionnez-une-competition-select-label" id="selectionnez-une-competition-select"
           value={selectedCompetition}
           onChange={(e) => setSelectedCompetition(e.target.value)}
           label="Compétition"
@@ -202,7 +205,7 @@ const ClientCompetitionStats: React.FC = () => {
                           label={result.proposed_difficulty}
                           sx={{
                             backgroundColor: levelColors[result.proposed_difficulty] || '#CCCCCC',
-                            color: ['noir', 'blanc'].includes(result.proposed_difficulty) ? 'black' : 'white'
+                            color: result.proposed_difficulty === 'blanc' ? 'black' : 'white'
                           }}
                         />
                       </TableCell>

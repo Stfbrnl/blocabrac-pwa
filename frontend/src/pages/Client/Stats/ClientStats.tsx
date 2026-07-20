@@ -278,7 +278,9 @@ const ClientStats: React.FC = () => {
             ? result.createdAt.toDate()
             : result.createdAt?.seconds
               ? new Date(result.createdAt.seconds * 1000)
-              : new Date();
+              : result.createdAt
+                ? new Date(result.createdAt)
+                : new Date();
 
           // ✅ Vérifier si le bloc existe toujours en salle, indépendamment de la période
           // affichée à l'écran : c'est ce qui détermine si un badge reste actif ou non.
@@ -342,11 +344,17 @@ const ClientStats: React.FC = () => {
         const courseStatsData: any[] = [];
         for (const resultDoc of courseResultsSnapshot.docs) {
           const result = resultDoc.data();
-          const resultDate = result.date instanceof Timestamp
-            ? result.date.toDate()
-            : result.date?.seconds
-              ? new Date(result.date.seconds * 1000)
-              : new Date();
+          // ✅ ClientCourseSession.tsx enregistre la date de validation sous "createdAt",
+          // pas "date" : on lit le bon champ (avec repli sur "date" pour d'éventuels
+          // anciens documents qui l'auraient sous cet autre nom).
+          const rawResultDate = result.createdAt ?? result.date;
+          const resultDate = rawResultDate instanceof Timestamp
+            ? rawResultDate.toDate()
+            : rawResultDate?.seconds
+              ? new Date(rawResultDate.seconds * 1000)
+              : rawResultDate
+                ? new Date(rawResultDate)
+                : new Date();
 
           const courseDoc = await getDoc(doc(db, 'courses', result.courseId));
           if (courseDoc.exists()) {
@@ -381,7 +389,9 @@ const ClientStats: React.FC = () => {
                 ? data.awardedAt.toDate()
                 : data.awardedAt?.seconds
                   ? new Date(data.awardedAt.seconds * 1000)
-                  : new Date();
+                  : data.awardedAt
+                    ? new Date(data.awardedAt)
+                    : new Date();
 
               const badge: Badge = {
                 id: badgeData.id,
@@ -442,7 +452,9 @@ const ClientStats: React.FC = () => {
             ? data.awardedAt.toDate()
             : data.awardedAt?.seconds
               ? new Date(data.awardedAt.seconds * 1000)
-              : new Date();
+              : data.awardedAt
+                ? new Date(data.awardedAt)
+                : new Date();
 
           return {
             id: diplomaDoc.id,
@@ -679,7 +691,7 @@ const ClientStats: React.FC = () => {
         {/* ✅ flexWrap pour que les champs date passent à la ligne sur mobile */}
         <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
           <FormControl sx={{ minWidth: 120 }}>
-            <InputLabel id="period-select-label">Période</InputLabel>
+            <InputLabel id="period-select-label" htmlFor="period-select">Période</InputLabel>
             <Select
               labelId="period-select-label"
               id="period-select"
@@ -785,7 +797,7 @@ const ClientStats: React.FC = () => {
                         <TableCell>
                           <Box sx={{
                             backgroundColor: levelColors[stat.difficulty] || '#CCCCCC',
-                            color: ['noir', 'blanc'].includes(stat.difficulty) ? 'black' : 'white',
+                            color: stat.difficulty === 'blanc' ? 'black' : 'white',
                             padding: '2px 8px',
                             borderRadius: '4px',
                             display: 'inline-block'

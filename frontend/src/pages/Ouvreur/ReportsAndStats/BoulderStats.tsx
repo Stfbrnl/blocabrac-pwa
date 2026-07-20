@@ -235,13 +235,23 @@ export default function BoulderStats(): JSX.Element {
   const handleResetStats = async (): Promise<void> => {
     try {
       setLoading(true);
-      const resultsQuery = query(
-        collection(db, 'client_boulder_results'),
-        where('boulderId', 'in', stats.map(s => s.boulderId))
-      );
-      const resultsSnapshot = await getDocs(resultsQuery);
-      for (const resultDoc of resultsSnapshot.docs) {
-        await deleteDoc(doc(db, 'client_boulder_results', resultDoc.id));
+      const boulderIds = stats.map(s => s.boulderId);
+      // ✅ Firestore limite les clauses "in" à 10 valeurs : on découpe par lots de 10
+      // pour ne pas planter dès qu'un mur a plus de 10 blocs actifs.
+      const chunks: string[][] = [];
+      for (let i = 0; i < boulderIds.length; i += 10) {
+        chunks.push(boulderIds.slice(i, i + 10));
+      }
+      for (const chunk of chunks) {
+        if (chunk.length === 0) continue;
+        const resultsQuery = query(
+          collection(db, 'client_boulder_results'),
+          where('boulderId', 'in', chunk)
+        );
+        const resultsSnapshot = await getDocs(resultsQuery);
+        for (const resultDoc of resultsSnapshot.docs) {
+          await deleteDoc(doc(db, 'client_boulder_results', resultDoc.id));
+        }
       }
       setStats([]);
       setMysteryRatings([]);
@@ -258,8 +268,9 @@ export default function BoulderStats(): JSX.Element {
       <Typography variant="h6" sx={{ mb: 2 }}>Filtrer par période:</Typography>
       <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2, flexWrap: 'wrap' }}>
         <FormControl sx={{ minWidth: 120 }}>
-          <InputLabel>Période</InputLabel>
+          <InputLabel id="periode-select-label" htmlFor="periode-select">Période</InputLabel>
           <Select
+            labelId="periode-select-label" id="periode-select"
             value={period}
             onChange={(e) => setPeriod(e.target.value as 'day' | 'week' | 'month' | 'year' | 'custom')}
             label="Période"
@@ -311,8 +322,9 @@ export default function BoulderStats(): JSX.Element {
   return (
     <Box sx={{ mt: 2 }}>
       <FormControl fullWidth sx={{ mb: 3 }}>
-        <InputLabel>Sélectionnez un mur</InputLabel>
+        <InputLabel id="selectionnez-un-mur-select-label" htmlFor="selectionnez-un-mur-select">Sélectionnez un mur</InputLabel>
         <Select
+          labelId="selectionnez-un-mur-select-label" id="selectionnez-un-mur-select"
           value={selectedWall}
           onChange={(e: any): void => setSelectedWall(e.target.value as string)}
           label="Mur"

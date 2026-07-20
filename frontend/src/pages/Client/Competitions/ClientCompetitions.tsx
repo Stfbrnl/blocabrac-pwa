@@ -268,7 +268,7 @@ const ClientCompetitions: React.FC = () => {
           attempts: result.attempts,
           rating: result.rating,
           proposed_difficulty: result.proposedDifficulty,
-          created_at: new Date().toISOString()
+          createdAt: new Date().toISOString()
         });
       }
       setSuccess("Résultats soumis avec succès !");
@@ -488,8 +488,9 @@ const ClientCompetitions: React.FC = () => {
                           </Button>
                         </Box>
                         <FormControl fullWidth sx={{ mt: 1 }}>
-                          <InputLabel>Nombre d'essais</InputLabel>
+                          <InputLabel id="nombre-d-essais-select-label" htmlFor="nombre-d-essais-select">Nombre d'essais</InputLabel>
                           <Select
+                            labelId="nombre-d-essais-select-label" id="nombre-d-essais-select"
                             value={result.attempts}
                             onChange={(e) => handleValidateBoulder(
                               boulder.id,
@@ -520,8 +521,9 @@ const ClientCompetitions: React.FC = () => {
                           />
                         </Box>
                         <FormControl fullWidth sx={{ mt: 1 }}>
-                          <InputLabel>Cotation proposée</InputLabel>
+                          <InputLabel id="cotation-proposee-select-label" htmlFor="cotation-proposee-select">Cotation proposée</InputLabel>
                           <Select
+                            labelId="cotation-proposee-select-label" id="cotation-proposee-select"
                             value={result.proposedDifficulty}
                             onChange={(e) => handleValidateBoulder(
                               boulder.id,
