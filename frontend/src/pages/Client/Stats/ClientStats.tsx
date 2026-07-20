@@ -691,7 +691,7 @@ const ClientStats: React.FC = () => {
         {/* ✅ flexWrap pour que les champs date passent à la ligne sur mobile */}
         <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
           <FormControl sx={{ minWidth: 120 }}>
-            <InputLabel id="period-select-label" htmlFor="period-select">Période</InputLabel>
+            <InputLabel id="period-select-label">Période</InputLabel>
             <Select
               labelId="period-select-label"
               id="period-select"

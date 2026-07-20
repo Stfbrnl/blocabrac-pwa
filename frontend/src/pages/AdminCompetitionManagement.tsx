@@ -324,7 +324,7 @@ const AdminCompetitionManagement: React.FC = () => {
                 fullWidth
               />
               <FormControl fullWidth>
-                <InputLabel id="statut-select-label" htmlFor="statut-select">Statut</InputLabel>
+                <InputLabel id="statut-select-label">Statut</InputLabel>
                 <Select
                   labelId="statut-select-label" id="statut-select"
                   value={createForm.status}
@@ -341,7 +341,7 @@ const AdminCompetitionManagement: React.FC = () => {
               {/* ✅ Sélecteurs de niveau minimum/maximum */}
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
                 <FormControl sx={{ flex: '1 1 200px' }}>
-                  <InputLabel id="niveau-minimum-optionnel-select-label" htmlFor="niveau-minimum-optionnel-select">Niveau minimum (optionnel)</InputLabel>
+                  <InputLabel id="niveau-minimum-optionnel-select-label">Niveau minimum (optionnel)</InputLabel>
                   <Select
                     labelId="niveau-minimum-optionnel-select-label" id="niveau-minimum-optionnel-select"
                     value={createForm.minLevel || ''}
@@ -357,7 +357,7 @@ const AdminCompetitionManagement: React.FC = () => {
                   </Select>
                 </FormControl>
                 <FormControl sx={{ flex: '1 1 200px' }}>
-                  <InputLabel id="niveau-maximum-optionnel-select-label" htmlFor="niveau-maximum-optionnel-select">Niveau maximum (optionnel)</InputLabel>
+                  <InputLabel id="niveau-maximum-optionnel-select-label">Niveau maximum (optionnel)</InputLabel>
                   <Select
                     labelId="niveau-maximum-optionnel-select-label" id="niveau-maximum-optionnel-select"
                     value={createForm.maxLevel || ''}
@@ -416,7 +416,7 @@ const AdminCompetitionManagement: React.FC = () => {
                 fullWidth
               />
               <FormControl fullWidth>
-                <InputLabel id="statut-select-label-2" htmlFor="statut-select-2">Statut</InputLabel>
+                <InputLabel id="statut-select-label-2">Statut</InputLabel>
                 <Select
                   labelId="statut-select-label-2" id="statut-select-2"
                   value={editForm.status}
@@ -433,7 +433,7 @@ const AdminCompetitionManagement: React.FC = () => {
               {/* ✅ Sélecteurs de niveau minimum/maximum */}
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
                 <FormControl sx={{ flex: '1 1 200px' }}>
-                  <InputLabel id="niveau-minimum-optionnel-select-label-2" htmlFor="niveau-minimum-optionnel-select-2">Niveau minimum (optionnel)</InputLabel>
+                  <InputLabel id="niveau-minimum-optionnel-select-label-2">Niveau minimum (optionnel)</InputLabel>
                   <Select
                     labelId="niveau-minimum-optionnel-select-label-2" id="niveau-minimum-optionnel-select-2"
                     value={editForm.minLevel || ''}
@@ -449,7 +449,7 @@ const AdminCompetitionManagement: React.FC = () => {
                   </Select>
                 </FormControl>
                 <FormControl sx={{ flex: '1 1 200px' }}>
-                  <InputLabel id="niveau-maximum-optionnel-select-label-2" htmlFor="niveau-maximum-optionnel-select-2">Niveau maximum (optionnel)</InputLabel>
+                  <InputLabel id="niveau-maximum-optionnel-select-label-2">Niveau maximum (optionnel)</InputLabel>
                   <Select
                     labelId="niveau-maximum-optionnel-select-label-2" id="niveau-maximum-optionnel-select-2"
                     value={editForm.maxLevel || ''}

@@ -599,7 +599,7 @@ const AdminUsers: React.FC = () => {
               <TextField label="Prénom" value={editForm.first_name} onChange={(e) => setEditForm({...editForm, first_name: e.target.value})} fullWidth />
               <TextField label="Nom" value={editForm.last_name} onChange={(e) => setEditForm({...editForm, last_name: e.target.value})} fullWidth />
               <FormControl fullWidth>
-                <InputLabel id="roles-multiple-possible-select-label" htmlFor="roles-multiple-possible-select">Rôles (multiple possible)</InputLabel>
+                <InputLabel id="roles-multiple-possible-select-label">Rôles (multiple possible)</InputLabel>
                 <Select
                   labelId="roles-multiple-possible-select-label" id="roles-multiple-possible-select"
                   multiple
@@ -622,7 +622,7 @@ const AdminUsers: React.FC = () => {
                 </Select>
               </FormControl>
               <FormControl fullWidth required>
-                <InputLabel id="niveau-en-salle-select-label" htmlFor="niveau-en-salle-select">Niveau en salle</InputLabel>
+                <InputLabel id="niveau-en-salle-select-label">Niveau en salle</InputLabel>
                 <Select
                   labelId="niveau-en-salle-select-label" id="niveau-en-salle-select" value={editForm.level || ''} onChange={(e) => setEditForm({...editForm, level: e.target.value})} label="Niveau en salle">
                   {levelOptions.map(option => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
@@ -639,7 +639,7 @@ const AdminUsers: React.FC = () => {
               />
               <TextField label="Âge" type="number" value={editForm.age || ''} onChange={(e) => setEditForm({...editForm, age: e.target.value ? parseInt(e.target.value) : undefined})} fullWidth slotProps={{ inputLabel: { shrink: true } }} />
               <FormControl fullWidth>
-                <InputLabel id="genre-select-label" htmlFor="genre-select">Genre</InputLabel>
+                <InputLabel id="genre-select-label">Genre</InputLabel>
                 <Select
                   labelId="genre-select-label" id="genre-select" value={editForm.gender || ''} onChange={(e) => setEditForm({...editForm, gender: e.target.value})} label="Genre">
                   <MenuItem value="Homme">Homme</MenuItem>
@@ -648,7 +648,7 @@ const AdminUsers: React.FC = () => {
                 </Select>
               </FormControl>
               <FormControl fullWidth>
-                <InputLabel id="inscrit-aux-cours-select-label" htmlFor="inscrit-aux-cours-select">Inscrit aux cours</InputLabel>
+                <InputLabel id="inscrit-aux-cours-select-label">Inscrit aux cours</InputLabel>
                 <Select
                   labelId="inscrit-aux-cours-select-label" id="inscrit-aux-cours-select" value={editForm.inscritAuxCours ? 'true' : 'false'} onChange={(e) => setEditForm({...editForm, inscritAuxCours: e.target.value === 'true'})} label="Inscrit aux cours">
                   <MenuItem value="true">Oui</MenuItem>
@@ -656,7 +656,7 @@ const AdminUsers: React.FC = () => {
                 </Select>
               </FormControl>
               <FormControl fullWidth>
-                <InputLabel id="inscrit-aux-competitions-select-label" htmlFor="inscrit-aux-competitions-select">Inscrit aux compétitions</InputLabel>
+                <InputLabel id="inscrit-aux-competitions-select-label">Inscrit aux compétitions</InputLabel>
                 <Select
                   labelId="inscrit-aux-competitions-select-label" id="inscrit-aux-competitions-select" value={editForm.inscritAuxCompetitions ? 'true' : 'false'} onChange={(e) => setEditForm({...editForm, inscritAuxCompetitions: e.target.value === 'true'})} label="Inscrit aux compétitions">
                   <MenuItem value="true">Oui</MenuItem>
@@ -681,7 +681,7 @@ const AdminUsers: React.FC = () => {
               <TextField label="Prénom" value={createForm.first_name} onChange={(e) => setCreateForm({...createForm, first_name: e.target.value})} fullWidth required />
               <TextField label="Nom" value={createForm.last_name} onChange={(e) => setCreateForm({...createForm, last_name: e.target.value})} fullWidth required />
               <FormControl fullWidth>
-                <InputLabel id="roles-multiple-possible-select-label-2" htmlFor="roles-multiple-possible-select-2">Rôles (multiple possible)</InputLabel>
+                <InputLabel id="roles-multiple-possible-select-label-2">Rôles (multiple possible)</InputLabel>
                 <Select
                   labelId="roles-multiple-possible-select-label-2" id="roles-multiple-possible-select-2"
                   multiple
@@ -704,7 +704,7 @@ const AdminUsers: React.FC = () => {
                 </Select>
               </FormControl>
               <FormControl fullWidth required>
-                <InputLabel id="niveau-en-salle-select-label-2" htmlFor="niveau-en-salle-select-2">Niveau en salle</InputLabel>
+                <InputLabel id="niveau-en-salle-select-label-2">Niveau en salle</InputLabel>
                 <Select
                   labelId="niveau-en-salle-select-label-2" id="niveau-en-salle-select-2" value={createForm.level || ''} onChange={(e) => setCreateForm({...createForm, level: e.target.value})} label="Niveau en salle">
                   {levelOptions.map(option => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
@@ -721,7 +721,7 @@ const AdminUsers: React.FC = () => {
               />
               <TextField label="Âge" type="number" value={createForm.age || ''} onChange={(e) => setCreateForm({...createForm, age: e.target.value ? parseInt(e.target.value) : undefined})} fullWidth slotProps={{ inputLabel: { shrink: true } }} />
               <FormControl fullWidth>
-                <InputLabel id="genre-select-label-2" htmlFor="genre-select-2">Genre</InputLabel>
+                <InputLabel id="genre-select-label-2">Genre</InputLabel>
                 <Select
                   labelId="genre-select-label-2" id="genre-select-2" value={createForm.gender || ''} onChange={(e) => setCreateForm({...createForm, gender: e.target.value})} label="Genre">
                   <MenuItem value="Homme">Homme</MenuItem>
@@ -730,7 +730,7 @@ const AdminUsers: React.FC = () => {
                 </Select>
               </FormControl>
               <FormControl fullWidth>
-                <InputLabel id="inscrit-aux-cours-select-label-2" htmlFor="inscrit-aux-cours-select-2">Inscrit aux cours</InputLabel>
+                <InputLabel id="inscrit-aux-cours-select-label-2">Inscrit aux cours</InputLabel>
                 <Select
                   labelId="inscrit-aux-cours-select-label-2" id="inscrit-aux-cours-select-2" value={createForm.inscritAuxCours ? 'true' : 'false'} onChange={(e) => setCreateForm({...createForm, inscritAuxCours: e.target.value === 'true'})} label="Inscrit aux cours">
                   <MenuItem value="true">Oui</MenuItem>
@@ -738,7 +738,7 @@ const AdminUsers: React.FC = () => {
                 </Select>
               </FormControl>
               <FormControl fullWidth>
-                <InputLabel id="inscrit-aux-competitions-select-label-2" htmlFor="inscrit-aux-competitions-select-2">Inscrit aux compétitions</InputLabel>
+                <InputLabel id="inscrit-aux-competitions-select-label-2">Inscrit aux compétitions</InputLabel>
                 <Select
                   labelId="inscrit-aux-competitions-select-label-2" id="inscrit-aux-competitions-select-2" value={createForm.inscritAuxCompetitions ? 'true' : 'false'} onChange={(e) => setCreateForm({...createForm, inscritAuxCompetitions: e.target.value === 'true'})} label="Inscrit aux compétitions">
                   <MenuItem value="true">Oui</MenuItem>

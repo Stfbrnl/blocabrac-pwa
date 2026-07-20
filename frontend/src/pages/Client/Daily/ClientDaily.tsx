@@ -380,7 +380,7 @@ const ClientDaily: React.FC = () => {
               </Box>
 
               <FormControl fullWidth sx={{ mb: 2 }}>
-                <InputLabel id="nombre-d-essais-select-label" htmlFor="nombre-d-essais-select">Nombre d'essais</InputLabel>
+                <InputLabel id="nombre-d-essais-select-label">Nombre d'essais</InputLabel>
                 <Select
                   labelId="nombre-d-essais-select-label"
                   id="nombre-d-essais-select"
@@ -401,7 +401,7 @@ const ClientDaily: React.FC = () => {
 
               {isMysteryBoulder(selectedBoulder) && (
                 <FormControl fullWidth sx={{ mb: 2 }}>
-                  <InputLabel id="proposer-une-cotation-select-label" htmlFor="proposer-une-cotation-select">Proposer une cotation</InputLabel>
+                  <InputLabel id="proposer-une-cotation-select-label">Proposer une cotation</InputLabel>
                   <Select
                     labelId="proposer-une-cotation-select-label"
                     id="proposer-une-cotation-select"
@@ -440,7 +440,7 @@ const ClientDaily: React.FC = () => {
               />
 
               <FormControl fullWidth sx={{ mt: 2, mb: 2 }}>
-                <InputLabel id="type-de-signalement-select-label" htmlFor="type-de-signalement-select">Type de signalement</InputLabel>
+                <InputLabel id="type-de-signalement-select-label">Type de signalement</InputLabel>
                 <Select
                   labelId="type-de-signalement-select-label"
                   id="type-de-signalement-select"

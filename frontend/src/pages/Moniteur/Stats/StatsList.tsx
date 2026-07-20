@@ -781,7 +781,7 @@ const StatsList: React.FC = () => {
           }}
         >
           <FormControl sx={{ minWidth: 140, flex: '1 1 140px' }}>
-            <InputLabel id="periode-select-label" htmlFor="periode-select">Période</InputLabel>
+            <InputLabel id="periode-select-label">Période</InputLabel>
             <Select
               labelId="periode-select-label" id="periode-select"
               value={filters.period}
@@ -798,7 +798,7 @@ const StatsList: React.FC = () => {
           </FormControl>
 
           <FormControl sx={{ minWidth: 200, flex: '1 1 200px' }}>
-            <InputLabel id="exercice-select-label" htmlFor="exercice-select">Exercice</InputLabel>
+            <InputLabel id="exercice-select-label">Exercice</InputLabel>
             <Select
               labelId="exercice-select-label" id="exercice-select"
               value={filters.exercise || ''}
@@ -815,7 +815,7 @@ const StatsList: React.FC = () => {
           </FormControl>
 
           <FormControl sx={{ minWidth: 200, flex: '1 1 200px' }}>
-            <InputLabel id="type-d-exercice-select-label" htmlFor="type-d-exercice-select">Type d'exercice</InputLabel>
+            <InputLabel id="type-d-exercice-select-label">Type d'exercice</InputLabel>
             <Select
               labelId="type-d-exercice-select-label" id="type-d-exercice-select"
               value={filters.exerciseType || ''}
@@ -832,7 +832,7 @@ const StatsList: React.FC = () => {
           </FormControl>
 
           <FormControl sx={{ minWidth: 200, flex: '1 1 200px' }}>
-            <InputLabel id="utilisateur-select-label" htmlFor="utilisateur-select">Utilisateur</InputLabel>
+            <InputLabel id="utilisateur-select-label">Utilisateur</InputLabel>
             <Select
               labelId="utilisateur-select-label" id="utilisateur-select"
               value={filters.user || ''}
@@ -849,7 +849,7 @@ const StatsList: React.FC = () => {
           </FormControl>
 
           <FormControl sx={{ minWidth: 200, flex: '1 1 200px' }}>
-            <InputLabel id="groupe-select-label" htmlFor="groupe-select">Groupe</InputLabel>
+            <InputLabel id="groupe-select-label">Groupe</InputLabel>
             <Select
               labelId="groupe-select-label" id="groupe-select"
               value={filters.group || ''}
@@ -866,7 +866,7 @@ const StatsList: React.FC = () => {
           </FormControl>
 
           <FormControl sx={{ minWidth: 200, flex: '1 1 200px' }}>
-            <InputLabel id="couleur-de-bloc-select-label" htmlFor="couleur-de-bloc-select">Couleur de bloc</InputLabel>
+            <InputLabel id="couleur-de-bloc-select-label">Couleur de bloc</InputLabel>
             <Select
               labelId="couleur-de-bloc-select-label" id="couleur-de-bloc-select"
               value={filters.boulderColor || ''}
@@ -978,7 +978,7 @@ const StatsList: React.FC = () => {
               Attribuer un badge à {selectedResult?.exerciseName.split(' pour ')[1]} ?
             </Typography>
             <FormControl fullWidth sx={{ mt: 2 }}>
-              <InputLabel id="badge-select-label" htmlFor="badge-select">Badge</InputLabel>
+              <InputLabel id="badge-select-label">Badge</InputLabel>
               <Select
                 labelId="badge-select-label" id="badge-select"
                 value={selectedBadgeId || ''}
@@ -1006,7 +1006,7 @@ const StatsList: React.FC = () => {
           <DialogTitle>Attribuer un diplôme</DialogTitle>
           <DialogContent>
             <FormControl fullWidth sx={{ mt: 2 }}>
-              <InputLabel id="type-de-diplome-select-label" htmlFor="type-de-diplome-select">Type de diplôme</InputLabel>
+              <InputLabel id="type-de-diplome-select-label">Type de diplôme</InputLabel>
               <Select
                 labelId="type-de-diplome-select-label" id="type-de-diplome-select"
                 value={selectedDiplomaType}

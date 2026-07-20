@@ -488,7 +488,7 @@ const ClientCompetitions: React.FC = () => {
                           </Button>
                         </Box>
                         <FormControl fullWidth sx={{ mt: 1 }}>
-                          <InputLabel id="nombre-d-essais-select-label" htmlFor="nombre-d-essais-select">Nombre d'essais</InputLabel>
+                          <InputLabel id="nombre-d-essais-select-label">Nombre d'essais</InputLabel>
                           <Select
                             labelId="nombre-d-essais-select-label" id="nombre-d-essais-select"
                             value={result.attempts}
@@ -521,7 +521,7 @@ const ClientCompetitions: React.FC = () => {
                           />
                         </Box>
                         <FormControl fullWidth sx={{ mt: 1 }}>
-                          <InputLabel id="cotation-proposee-select-label" htmlFor="cotation-proposee-select">Cotation proposée</InputLabel>
+                          <InputLabel id="cotation-proposee-select-label">Cotation proposée</InputLabel>
                           <Select
                             labelId="cotation-proposee-select-label" id="cotation-proposee-select"
                             value={result.proposedDifficulty}

@@ -268,7 +268,7 @@ export default function BoulderStats(): JSX.Element {
       <Typography variant="h6" sx={{ mb: 2 }}>Filtrer par période:</Typography>
       <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2, flexWrap: 'wrap' }}>
         <FormControl sx={{ minWidth: 120 }}>
-          <InputLabel id="periode-select-label" htmlFor="periode-select">Période</InputLabel>
+          <InputLabel id="periode-select-label">Période</InputLabel>
           <Select
             labelId="periode-select-label" id="periode-select"
             value={period}
@@ -322,7 +322,7 @@ export default function BoulderStats(): JSX.Element {
   return (
     <Box sx={{ mt: 2 }}>
       <FormControl fullWidth sx={{ mb: 3 }}>
-        <InputLabel id="selectionnez-un-mur-select-label" htmlFor="selectionnez-un-mur-select">Sélectionnez un mur</InputLabel>
+        <InputLabel id="selectionnez-un-mur-select-label">Sélectionnez un mur</InputLabel>
         <Select
           labelId="selectionnez-un-mur-select-label" id="selectionnez-un-mur-select"
           value={selectedWall}

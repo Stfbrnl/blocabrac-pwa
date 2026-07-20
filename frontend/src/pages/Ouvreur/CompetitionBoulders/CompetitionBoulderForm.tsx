@@ -429,7 +429,7 @@ export default function CompetitionBoulderForm(): JSX.Element {
               sx={{ minWidth: 150 }}
             />
             <FormControl fullWidth disabled={isUploading} sx={{ minWidth: 200 }}>
-              <InputLabel id="mur-select-label" htmlFor="mur-select">Mur</InputLabel>
+              <InputLabel id="mur-select-label">Mur</InputLabel>
               <Select
                 labelId="mur-select-label" id="mur-select"
                 value={formData.wall}
@@ -446,7 +446,7 @@ export default function CompetitionBoulderForm(): JSX.Element {
           {/* ✅ flexWrap ici aussi */}
           <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
             <FormControl fullWidth disabled={isUploading} sx={{ minWidth: 200 }}>
-              <InputLabel id="cotation-select-label" htmlFor="cotation-select">Cotation</InputLabel>
+              <InputLabel id="cotation-select-label">Cotation</InputLabel>
               <Select
                 labelId="cotation-select-label" id="cotation-select"
                 value={formData.difficulty}
@@ -461,7 +461,7 @@ export default function CompetitionBoulderForm(): JSX.Element {
             </FormControl>
 
             <FormControl fullWidth disabled={isUploading} sx={{ minWidth: 200 }}>
-              <InputLabel id="difficulte-dans-le-niveau-select-label" htmlFor="difficulte-dans-le-niveau-select">Difficulté dans le niveau</InputLabel>
+              <InputLabel id="difficulte-dans-le-niveau-select-label">Difficulté dans le niveau</InputLabel>
               <Select
                 labelId="difficulte-dans-le-niveau-select-label" id="difficulte-dans-le-niveau-select"
                 value={formData.difficulty_level}
@@ -481,7 +481,7 @@ export default function CompetitionBoulderForm(): JSX.Element {
           </Box>
 
           <FormControl fullWidth margin="normal" disabled={isUploading}>
-            <InputLabel id="types-de-difficulte-multiple-select-label" htmlFor="types-de-difficulte-multiple-select">Types de difficulté (multiple)</InputLabel>
+            <InputLabel id="types-de-difficulte-multiple-select-label">Types de difficulté (multiple)</InputLabel>
             <Select
               labelId="types-de-difficulte-multiple-select-label" id="types-de-difficulte-multiple-select"
               multiple

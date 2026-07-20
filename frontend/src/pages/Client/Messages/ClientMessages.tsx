@@ -269,7 +269,7 @@ const ClientMessages: React.FC = () => {
           // ✅ Empilé verticalement sur mobile, en ligne à partir de "sm"
           <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 2 }}>
             <FormControl fullWidth sx={{ minWidth: { sm: 160 } }}>
-              <InputLabel id="destinataire-select-label" htmlFor="destinataire-select">Destinataire</InputLabel>
+              <InputLabel id="destinataire-select-label">Destinataire</InputLabel>
               <Select
                 labelId="destinataire-select-label" id="destinataire-select"
                 value={selectedMoniteur}

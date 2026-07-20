@@ -177,7 +177,7 @@ export default function Register() {
 
           {/* Genre (obligatoire) */}
           <FormControl fullWidth margin="normal" required>
-            <InputLabel id="genre-select-label" htmlFor="genre-select">Genre</InputLabel>
+            <InputLabel id="genre-select-label">Genre</InputLabel>
             <Select
               labelId="genre-select-label" id="genre-select"
               value={gender}
@@ -192,7 +192,7 @@ export default function Register() {
 
           {/* Niveau en salle (obligatoire) */}
           <FormControl fullWidth margin="normal" required>
-            <InputLabel id="niveau-en-salle-select-label" htmlFor="niveau-en-salle-select">Niveau en salle</InputLabel>
+            <InputLabel id="niveau-en-salle-select-label">Niveau en salle</InputLabel>
             <Select
               labelId="niveau-en-salle-select-label" id="niveau-en-salle-select"
               value={level}

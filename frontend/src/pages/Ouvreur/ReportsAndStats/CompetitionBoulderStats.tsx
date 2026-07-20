@@ -171,7 +171,7 @@ const CompetitionBoulderStats: React.FC = () => {
   return (
     <Box sx={{ mt: 2 }}>
       <FormControl fullWidth sx={{ mb: 3 }}>
-        <InputLabel id="selectionnez-une-competition-select-label" htmlFor="selectionnez-une-competition-select">Sélectionnez une compétition</InputLabel>
+        <InputLabel id="selectionnez-une-competition-select-label">Sélectionnez une compétition</InputLabel>
         <Select
           labelId="selectionnez-une-competition-select-label" id="selectionnez-une-competition-select"
           value={selectedCompetition}

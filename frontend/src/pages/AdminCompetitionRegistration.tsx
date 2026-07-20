@@ -301,7 +301,7 @@ const AdminCompetitionRegistration: React.FC = () => {
         </Typography>
 
         <FormControl fullWidth sx={{ mb: 3 }}>
-          <InputLabel id="selectionnez-une-competition-select-label" htmlFor="selectionnez-une-competition-select">Sélectionnez une compétition</InputLabel>
+          <InputLabel id="selectionnez-une-competition-select-label">Sélectionnez une compétition</InputLabel>
           <Select
             labelId="selectionnez-une-competition-select-label" id="selectionnez-une-competition-select"
             value={selectedCompetition?.id || ''}
@@ -426,7 +426,7 @@ const AdminCompetitionRegistration: React.FC = () => {
               Ajouter un participant
             </Typography>
             <FormControl fullWidth sx={{ mb: 2 }}>
-              <InputLabel id="utilisateur-select-label" htmlFor="utilisateur-select">Utilisateur</InputLabel>
+              <InputLabel id="utilisateur-select-label">Utilisateur</InputLabel>
               <Select
                 labelId="utilisateur-select-label" id="utilisateur-select"
                 label="Utilisateur"
