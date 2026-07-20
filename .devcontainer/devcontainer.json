@@ -1,0 +1,19 @@
+{
+  "name": "blocabrac-pwa",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:20",
+
+  // Installe Claude Code automatiquement à chaque création/reconstruction du Codespace
+  "postCreateCommand": "curl -fsSL https://claude.ai/install.sh | bash",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode"
+      ]
+    }
+  },
+
+  // Décommente si tu veux que le Codespace installe aussi les dépendances du front au démarrage
+  "postStartCommand": "cd frontend && npm install"
+}
