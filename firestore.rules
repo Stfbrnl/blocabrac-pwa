@@ -211,9 +211,16 @@ service cloud.firestore {
     // ========== 12. Collections Compétitions ==========
     match /competitions/{docId} {
       allow read: if request.auth != null;
-      allow create, update, delete: if request.auth != null &&
-                                    (isUserRole("admin") ||
-                                     isUserRole("ouvreur"));
+      allow create, delete: if request.auth != null &&
+                              (isUserRole("admin") ||
+                               isUserRole("ouvreur"));
+      allow update: if request.auth != null &&
+                      (isUserRole("admin") ||
+                       isUserRole("ouvreur") ||
+                       // ✅ Un client qui s'inscrit incrémente registered_count
+                       // (ClientCompetitions.tsx) : restreint à ce seul champ.
+                       (isUserRole("client") &&
+                        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['registered_count'])));
     }
 
     match /competition_participants/{docId} {

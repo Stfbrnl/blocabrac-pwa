@@ -5,7 +5,8 @@ import {
   LinearProgress, Chip
 } from '@mui/material';
 import { collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '../../../services/firebaseConfig';
+import { useAuthState } from 'react-firebase-hooks/auth';
+import { auth, db } from '../../../services/firebaseConfig';
 import { calculatePoints } from '../../../utils/climbingPoints';
 import { getSeasonAge, getFfmeCategory, OPEN_CATEGORY } from '../../../utils/ageCategory';
 
@@ -57,6 +58,7 @@ interface User {
 }
 
 const CompetitionStats: React.FC = () => {
+  const [user] = useAuthState(auth);
   const [competitions, setCompetitions] = useState<Competition[]>([]);
   const [selectedCompetition, setSelectedCompetition] = useState<string>('');
   const [results, setResults] = useState<CompetitionResult[]>([]);
@@ -87,15 +89,30 @@ const CompetitionStats: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    if (!user) return;
     const fetchCompetitions = async () => {
       try {
         setLoading(true);
+        // ✅ Un ouvreur ne voit ici que les compétitions où il a lui-même créé
+        // au moins un bloc — pas toutes les compétitions de la salle.
+        const boulderQuery = query(
+          collection(db, 'boulders'),
+          where('type', '==', 'competition'),
+          where('created_by', '==', user.uid)
+        );
+        const boulderSnapshot = await getDocs(boulderQuery);
+        const ownCompetitionIds = new Set(
+          boulderSnapshot.docs.map(d => d.data().competition_id).filter(Boolean)
+        );
+
         const snapshot = await getDocs(collection(db, 'competitions'));
-        const competitionsData: Competition[] = snapshot.docs.map(doc => ({
-          id: doc.id,
-          name: doc.data().name || '',
-          date: doc.data().date || ''
-        }));
+        const competitionsData: Competition[] = snapshot.docs
+          .filter(doc => ownCompetitionIds.has(doc.id))
+          .map(doc => ({
+            id: doc.id,
+            name: doc.data().name || '',
+            date: doc.data().date || ''
+          }));
         setCompetitions(competitionsData);
       } catch (err: any) {
         console.error("Erreur:", err);
@@ -104,7 +121,7 @@ const CompetitionStats: React.FC = () => {
       }
     };
     fetchCompetitions();
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     if (!selectedCompetition) return;
@@ -241,24 +258,31 @@ const CompetitionStats: React.FC = () => {
   return (
     <Box sx={{ p: { xs: 1.5, sm: 3 } }}>
       <Typography variant="h4" gutterBottom>
-        Statistiques des Compétitions
+        Classement des Compétitions
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Seules les compétitions pour lesquelles vous avez créé des blocs apparaissent ici.
       </Typography>
 
-      <FormControl fullWidth sx={{ mb: 3 }}>
-        <InputLabel id="selectionnez-une-competition-select-label">Sélectionnez une compétition</InputLabel>
-        <Select
-          labelId="selectionnez-une-competition-select-label" id="selectionnez-une-competition-select"
-          value={selectedCompetition}
-          onChange={(e) => setSelectedCompetition(e.target.value)}
-          label="Compétition"
-        >
-          {competitions.map(comp => (
-            <MenuItem key={comp.id} value={comp.id}>
-              {comp.name} - {new Date(comp.date).toLocaleDateString()}
-            </MenuItem>
-          ))}
-        </Select>
-      </FormControl>
+      {!loading && competitions.length === 0 ? (
+        <Typography>Vous n'avez créé de blocs pour aucune compétition pour l'instant.</Typography>
+      ) : (
+        <FormControl fullWidth sx={{ mb: 3 }}>
+          <InputLabel id="selectionnez-une-competition-select-label">Sélectionnez une compétition</InputLabel>
+          <Select
+            labelId="selectionnez-une-competition-select-label" id="selectionnez-une-competition-select"
+            value={selectedCompetition}
+            onChange={(e) => setSelectedCompetition(e.target.value)}
+            label="Compétition"
+          >
+            {competitions.map(comp => (
+              <MenuItem key={comp.id} value={comp.id}>
+                {comp.name} - {new Date(comp.date).toLocaleDateString()}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+      )}
 
       {loading ? (
         <LinearProgress />

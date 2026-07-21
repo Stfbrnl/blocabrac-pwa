@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '../../../services/firebaseConfig';
 import {
-  collection, query, where, getDocs, addDoc, doc, updateDoc, getDoc, setDoc
+  collection, query, where, getDocs, addDoc, doc, updateDoc, getDoc, setDoc, increment
 } from 'firebase/firestore';
 import {
   Container, Typography, Box, Button, CircularProgress, Alert,
@@ -72,24 +72,30 @@ const ClientCompetitions: React.FC = () => {
     proposedDifficulty: string;
   }>>({});
 
-  const [allUsers, setAllUsers] = useState<any[]>([]);
+  const [currentUserDoc, setCurrentUserDoc] = useState<any>(null);
 
   // ✅ Détection mobile pour passer les Dialogs en plein écran
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   useEffect(() => {
-    const fetchUsers = async () => {
+    // ✅ Un client ne peut lire (selon firestore.rules) que son PROPRE document dans
+    // "users" — un getDocs(collection(db,'users')) non filtré (comme avant) échoue
+    // toujours en permission-denied pour ce rôle, laissant canRegister bloqué à
+    // false en permanence. On ne récupère donc que son propre document.
+    if (!user) return;
+    const fetchOwnUser = async () => {
       try {
-        const snapshot = await getDocs(collection(db, 'users'));
-        const users = snapshot.docs.map(d => ({ uid: d.id, ...(d.data() as any) }));
-        setAllUsers(users);
+        const snap = await getDoc(doc(db, 'users', user.uid));
+        if (snap.exists()) {
+          setCurrentUserDoc({ uid: snap.id, ...(snap.data() as any) });
+        }
       } catch (err) {
-        console.error('Erreur fetch users', err);
+        console.error('Erreur fetch user', err);
       }
     };
-    fetchUsers();
-  }, []);
+    fetchOwnUser();
+  }, [user]);
 
   useEffect(() => {
     if (!user || loadingAuth) return;
@@ -230,9 +236,17 @@ const ClientCompetitions: React.FC = () => {
       });
 
       await updateDoc(doc(db, 'competitions', competition.id), {
-        registered_count: (competition.registered_count || 0) + 1
+        // ✅ increment() plutôt qu'une lecture-puis-écriture côté client : évite une
+        // course si deux clients s'inscrivent au même instant.
+        registered_count: increment(1)
       });
 
+      // ✅ Sans ça, le libellé du bouton ("S'inscrire" vs "Valider mes blocs", basé sur
+      // registered_count) restait figé sur l'ancienne valeur jusqu'au rechargement de
+      // la page, alors que l'inscription venait de réussir.
+      setCompetitions(prev => prev.map(c =>
+        c.id === competition.id ? { ...c, registered_count: (c.registered_count || 0) + 1 } : c
+      ));
       setSuccess("Inscription réussie !");
       setOpenRegisterDialog(false);
       setTimeout(() => setSuccess(null), 3000);
@@ -308,8 +322,7 @@ const ClientCompetitions: React.FC = () => {
       ) : (
         <Grid container spacing={2}>
           {competitions.map((competition) => {
-            const userDoc = allUsers.find(u => u.uid === user?.uid);
-            const canRegister = userDoc ? canUserRegister(userDoc, competition) : false;
+            const canRegister = currentUserDoc ? canUserRegister(currentUserDoc, competition) : false;
 
             return (
               <Grid size={{ xs: 12, sm: 6, md: 4 }} key={competition.id}>

@@ -72,6 +72,7 @@ const AdminCompetitionStats: React.FC = () => {
   const [messageTitle, setMessageTitle] = useState('');
   const [messageContent, setMessageContent] = useState('');
   const [success, setSuccess] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   // ✅ Charger tous les utilisateurs une fois
   useEffect(() => {
@@ -254,46 +255,50 @@ const AdminCompetitionStats: React.FC = () => {
     if (!selectedCompetition || !messageTitle || !messageContent) return;
 
     try {
-      await addDoc(collection(db, 'messages'), {
-        title: messageTitle,
-        content: messageContent,
+      // ✅ "messages" est un canal 1-à-1 (senderId/receiverId) : un classement, lui,
+      // concerne tout le monde. On publie donc sur "announcements" (le même canal que
+      // AdminAnnouncements.tsx / AnnouncementBanner.tsx), pas sur "messages".
+      await addDoc(collection(db, 'announcements'), {
+        text: `${messageTitle}\n\n${messageContent}`,
+        order: 0,
+        active: true,
         createdAt: new Date().toISOString(),
-        createdBy: 'admin',
-        recipientIds: participants.map(p => p.user_id),
-        type: 'competition_results',
-        competitionId: selectedCompetition
       });
       setSuccess("Classement publié avec succès !");
+      setError(null);
       setOpenPublishDialog(false);
       setMessageTitle('');
       setMessageContent('');
       setTimeout(() => setSuccess(null), 3000);
     } catch (err: any) {
       console.error("Erreur:", err);
+      setError("Erreur lors de la publication du classement : " + err.message);
     }
   };
 
   const generateClassementMessage = () => {
+    // ✅ Pas de markdown (**gras**) : ce texte est publié tel quel dans le bandeau
+    // d'annonces (AnnouncementBanner.tsx), qui affiche du texte brut, pas du markdown.
     const globalClassement = getClassementByCategory('global');
     const competition = competitions.find(c => c.id === selectedCompetition);
-    let message = `🏆 **Classement ${OPEN_CATEGORY} - ${competition?.name}** 🏆\n\n`;
+    let message = `🏆 Classement ${OPEN_CATEGORY} - ${competition?.name} 🏆\n\n`;
 
     globalClassement.forEach((item, index) => {
-      message += `${index + 1}. **${item.participant.first_name} ${item.participant.last_name}** - ${item.score} pts (${item.boulders} blocs validés)\n`;
+      message += `${index + 1}. ${item.participant.first_name} ${item.participant.last_name} - ${item.score} pts (${item.boulders} blocs validés)\n`;
     });
 
     // ✅ Ajouter les classements par âge et genre
-    message += `\n📊 **Classement par âge :**\n`;
+    message += `\n📊 Classement par âge :\n`;
     getClassementByCategory('age').forEach(category => {
-      message += `\n**${category.category}** :\n`;
+      message += `\n${category.category} :\n`;
       category.participants.forEach((item: any, index: number) => {
         message += `${index + 1}. ${item.participant.first_name} ${item.participant.last_name} - ${item.score} pts\n`;
       });
     });
 
-    message += `\n📊 **Classement par genre :**\n`;
+    message += `\n📊 Classement par genre :\n`;
     getClassementByCategory('gender').forEach(gender => {
-      message += `\n**${gender.category}** :\n`;
+      message += `\n${gender.category} :\n`;
       gender.participants.forEach((item: any, index: number) => {
         message += `${index + 1}. ${item.participant.first_name} ${item.participant.last_name} - ${item.score} pts\n`;
       });
@@ -311,6 +316,7 @@ const AdminCompetitionStats: React.FC = () => {
           Classement et Statistiques des Compétitions
         </Typography>
         {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
+        {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
 
         <FormControl fullWidth sx={{ mb: 3 }}>
           <InputLabel id="selectionnez-une-competition-select-label">Sélectionnez une compétition</InputLabel>

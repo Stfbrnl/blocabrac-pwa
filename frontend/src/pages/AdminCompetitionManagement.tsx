@@ -8,7 +8,7 @@ import {
 } from '@mui/material';
 import { Delete as DeleteIcon, Edit as EditIcon, Add as AddIcon } from '@mui/icons-material';
 import { db } from '../services/firebaseConfig';
-import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, deleteField } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 
 type CompetitionStatus = 'à venir' | 'en cours' | 'terminée' | 'annulée';
@@ -104,8 +104,10 @@ const AdminCompetitionManagement: React.FC = () => {
         access_code: createForm.access_code,
         max_participants: createForm.max_participants,
         registered_count: 0,
-        minLevel: createForm.minLevel, // ✅ Nouveau
-        maxLevel: createForm.maxLevel  // ✅ Nouveau
+        // ✅ Firestore refuse "undefined" (addDoc plante sinon quand aucune restriction
+        // de niveau n'est choisie) : on omet le champ plutôt que de le passer à undefined.
+        ...(createForm.minLevel ? { minLevel: createForm.minLevel } : {}),
+        ...(createForm.maxLevel ? { maxLevel: createForm.maxLevel } : {}),
       });
       const querySnapshot = await getDocs(collection(db, 'competitions'));
       setCompetitions(querySnapshot.docs.map(doc => ({
@@ -152,8 +154,10 @@ const AdminCompetitionManagement: React.FC = () => {
         status: editForm.status,
         access_code: editForm.access_code,
         max_participants: editForm.max_participants,
-        minLevel: editForm.minLevel, // ✅ Nouveau
-        maxLevel: editForm.maxLevel  // ✅ Nouveau
+        // ✅ Idem qu'à la création : "undefined" ferait planter updateDoc. deleteField()
+        // permet en plus d'effacer une restriction existante (contrairement à l'omettre).
+        minLevel: editForm.minLevel || deleteField(),
+        maxLevel: editForm.maxLevel || deleteField(),
       });
       const querySnapshot = await getDocs(collection(db, 'competitions'));
       setCompetitions(querySnapshot.docs.map(doc => ({

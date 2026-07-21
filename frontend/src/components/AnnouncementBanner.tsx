@@ -55,7 +55,11 @@ const AnnouncementBanner: React.FC = () => {
             key={announcement.id}
             severity="info"
             icon={<CampaignIcon fontSize="inherit" />}
-            sx={{ alignItems: 'center' }}
+            // ✅ pre-line : respecte les sauts de ligne saisis dans le texte (ex: un
+            // classement multi-lignes), au lieu de tout aplatir sur une seule ligne.
+            // alignItems par défaut (flex-start) plutôt que "center" : plus lisible
+            // dès que le texte dépasse une ligne.
+            sx={{ whiteSpace: 'pre-line' }}
           >
             {announcement.text}
           </Alert>

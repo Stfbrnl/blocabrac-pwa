@@ -3,6 +3,7 @@ import { Box, Paper, Tabs, Tab, Container, Typography } from '@mui/material';
 import ReportsList from './ReportsList';
 import BoulderStats from './BoulderStats';
 import CompetitionBoulderStats from './CompetitionBoulderStats';
+import CompetitionStats from '../CompetitionBoulders/CompetitionStats';
 
 export default function ReportsAndStats(): JSX.Element {
   const [activeTab, setActiveTab] = useState<number>(0);
@@ -29,11 +30,13 @@ export default function ReportsAndStats(): JSX.Element {
             <Tab label="Signalements" />
             <Tab label="Stats Blocs Quotidiens" />
             <Tab label="Stats Blocs Compétitions" />
+            <Tab label="Classement Compétitions" />
           </Tabs>
         </Box>
         {activeTab === 0 && <ReportsList />}
         {activeTab === 1 && <BoulderStats />}
         {activeTab === 2 && <CompetitionBoulderStats />}
+        {activeTab === 3 && <CompetitionStats />}
       </Paper>
     </Container>
   );
