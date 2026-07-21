@@ -6,11 +6,10 @@ import {
   InputLabel, Select, MenuItem, IconButton, Tooltip
 } from '@mui/material';
 import { ArrowUpward as ArrowUpwardIcon, ArrowDownward as ArrowDownwardIcon } from '@mui/icons-material';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../../../services/firebaseConfig';
-import { calculatePoints } from '../../../utils/climbingPoints';
 import { getSeasonAge, getFfmeCategory, FFME_AGE_BANDS } from '../../../utils/ageCategory';
-import { levelOrder, type Level } from '../../../utils/competitionEligibility';
+import { levelOrder } from '../../../utils/competitionEligibility';
 
 const levelColors: Record<string, string> = {
   jaune: '#FFFF00', vert: '#00FF00', bleu: '#0000FF', violet: '#800080',
@@ -42,9 +41,14 @@ interface RankedUser {
   first_name?: string;
   last_name?: string;
   gender?: string;
-  age?: number;
   dateOfBirth?: string;
   classementOptIn?: boolean;
+  // ✅ Résumé déjà calculé par chaque client sur sa propre fiche (voir
+  // src/utils/classementScore.ts et ClientDaily.tsx) : jamais recalculé ici à partir
+  // des données d'un autre utilisateur, qu'un client n'a pas le droit de lire.
+  score?: number;
+  bouldersValidated?: number;
+  bestColorRank?: number;
 }
 
 type SortKey = 'name' | 'gender' | 'ageCategory' | 'bestColor' | 'score' | 'bouldersValidated';
@@ -71,43 +75,25 @@ const ClientClassement: React.FC = () => {
       try {
         setLoading(true);
 
-        const [usersSnapshot, resultsSnapshot, bouldersSnapshot] = await Promise.all([
-          getDocs(collection(db, 'users')),
-          getDocs(collection(db, 'client_boulder_results')),
-          getDocs(collection(db, 'boulders')),
-        ]);
+        // ✅ Un client ne peut pas lister toute la collection "users" — ni les résultats
+        // de blocs (client_boulder_results) des AUTRES clients (règles Firestore : ces
+        // deux collections ne sont lisibles en liste que pour soi-même ou le staff).
+        // On lit donc "classement_profiles", une fiche publique allégée (prénom/nom/
+        // genre/date de naissance/opt-in + score déjà résumé), tenue à jour par chaque
+        // client sur SA PROPRE fiche à chaque validation (ClientDaily.tsx) — jamais
+        // recalculée ici à partir des données d'un autre utilisateur.
+        const profilesSnapshot = await getDocs(
+          query(collection(db, 'classement_profiles'), where('classementOptIn', '==', true))
+        );
 
-        const boulderColorById = new Map<string, string>();
-        bouldersSnapshot.forEach((boulderDoc) => {
-          const data = boulderDoc.data();
-          boulderColorById.set(boulderDoc.id, data.color || data.difficulty || 'Inconnu');
-        });
-
-        const optInUsers: RankedUser[] = usersSnapshot.docs
-          .map((userDoc) => ({ uid: userDoc.id, ...userDoc.data() } as RankedUser))
-          .filter((u) => u.classementOptIn === true);
+        const optInUsers: RankedUser[] = profilesSnapshot.docs
+          .map((profileDoc) => ({ uid: profileDoc.id, ...profileDoc.data() } as RankedUser));
 
         const rowsData: ClassementRow[] = optInUsers.map((user) => {
-          const validatedColors: string[] = [];
-          let score = 0;
-
-          resultsSnapshot.forEach((resultDoc) => {
-            const result = resultDoc.data();
-            if (result.userId !== user.uid || result.success !== true) return;
-            const color = boulderColorById.get(result.boulderId);
-            if (!color) return; // bloc supprimé depuis, on ne peut plus le compter
-
-            validatedColors.push(color);
-            score += calculatePoints(color, result.attempts || 1, true);
-          });
-
-          const bestColorRank = validatedColors.reduce((best, color) => {
-            const rank = levelOrder.indexOf(color as Level);
-            return rank > best ? rank : best;
-          }, -1);
+          const bestColorRank = user.bestColorRank ?? -1;
           const bestColor = bestColorRank >= 0 ? levelOrder[bestColorRank] : null;
 
-          const seasonAge = getSeasonAge(user.dateOfBirth, user.age);
+          const seasonAge = getSeasonAge(user.dateOfBirth);
           const ageCategory = getFfmeCategory(seasonAge);
           const ageCategoryRank = FFME_AGE_BANDS.findIndex((band) => band.label === ageCategory);
 
@@ -119,8 +105,8 @@ const ClientClassement: React.FC = () => {
             ageCategoryRank: ageCategoryRank === -1 ? FFME_AGE_BANDS.length : ageCategoryRank,
             bestColor,
             bestColorRank,
-            score,
-            bouldersValidated: validatedColors.length,
+            score: user.score ?? 0,
+            bouldersValidated: user.bouldersValidated ?? 0,
           };
         });
 

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '../../../services/firebaseConfig';
-import { collection, query, where, getDocs, addDoc, setDoc, doc } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, setDoc, doc, getDoc } from 'firebase/firestore';
+import { summarizeValidatedResults } from '../../../utils/classementScore';
 import {
   Container, Typography, Box, Button, CircularProgress, Alert,
   Dialog, DialogTitle, DialogContent, DialogActions,
@@ -87,9 +88,9 @@ const ClientDaily: React.FC = () => {
     if (!user || loadingAuth) return;
 
     const fetchUsers = async () => {
+      const map: Record<string, UserInfo> = {};
       try {
         const snapshot = await getDocs(collection(db, 'users'));
-        const map: Record<string, UserInfo> = {};
         snapshot.docs.forEach((userDoc) => {
           const data = userDoc.data();
           map[userDoc.id] = {
@@ -98,10 +99,29 @@ const ClientDaily: React.FC = () => {
             lastName: data.last_name || '',
           };
         });
-        setUsersById(map);
       } catch (err) {
         console.error('Erreur lors du chargement des utilisateurs:', err);
+        // ✅ Un client ne peut pas lister toute la collection "users" (règles Firestore
+        // : lecture limitée à son propre document pour ce rôle) — la requête ci-dessus
+        // échoue donc systématiquement pour un vrai client. On récupère au moins son
+        // propre profil, pour que son nom soit correct dans les signalements envoyés
+        // (le nom des AUTRES utilisateurs, ex: "Créé par" sur un bloc, reste non
+        // résolu tant que ce point n'est pas traité plus largement).
+        try {
+          const ownDoc = await getDoc(doc(db, 'users', user.uid));
+          if (ownDoc.exists()) {
+            const data = ownDoc.data();
+            map[user.uid] = {
+              id: user.uid,
+              firstName: data.first_name || '',
+              lastName: data.last_name || '',
+            };
+          }
+        } catch (ownErr) {
+          console.error('Erreur lors du chargement de son propre profil:', ownErr);
+        }
       }
+      setUsersById(map);
     };
 
     fetchUsers();
@@ -157,6 +177,34 @@ const ClientDaily: React.FC = () => {
     setOpenBoulderDialog(true);
   };
 
+  // ✅ Classement en continu (ClientClassement.tsx) : un client ne peut pas lire les
+  // résultats des AUTRES clients (règles Firestore), donc chaque client recalcule et
+  // stocke SON PROPRE résumé sur sa fiche "classement_profiles" à chaque validation —
+  // le classement se contente ensuite de lire ces résumés déjà calculés. Appelé même
+  // en cas d'échec, pour que le score baisse correctement si "Réussi" est changé en
+  // "Échoué" (recalcul complet, jamais un simple incrément).
+  const updateClassementProfile = async (uid: string) => {
+    try {
+      const resultsSnapshot = await getDocs(
+        query(collection(db, 'client_boulder_results'), where('userId', '==', uid), where('success', '==', true))
+      );
+      const colorById = new Map(boulders.map((b) => [b.id, b.color || b.difficulty || 'Inconnu']));
+      const validatedResults = resultsSnapshot.docs
+        .map((d) => d.data())
+        .filter((r) => colorById.has(r.boulderId))
+        .map((r) => ({ color: colorById.get(r.boulderId) as string, attempts: r.attempts || 1 }));
+
+      const summary = summarizeValidatedResults(validatedResults);
+      await setDoc(doc(db, 'classement_profiles', uid), {
+        score: summary.score,
+        bouldersValidated: summary.bouldersValidated,
+        bestColorRank: summary.bestColorRank,
+      }, { merge: true });
+    } catch (err) {
+      console.error('Erreur lors de la mise à jour du classement:', err);
+    }
+  };
+
   const handleValidateSuccess = async (boulderId: string, success: boolean) => {
     if (!user) return;
     try {
@@ -175,6 +223,7 @@ const ClientDaily: React.FC = () => {
       setSuccessResults(prev => ({ ...prev, [boulderId]: success }));
       setSuccess('Réussite enregistrée!');
       setTimeout(() => setSuccess(null), 3000);
+      await updateClassementProfile(user.uid);
     } catch (err: any) {
       setError(`Erreur: ${err.message}`);
     }
@@ -199,6 +248,11 @@ const ClientDaily: React.FC = () => {
       setComments(prev => ({ ...prev, [boulderId]: comment }));
       setSuccess('Note enregistrée!');
       setTimeout(() => setSuccess(null), 3000);
+      // ✅ "Enregistrer" est le seul endroit où un changement du nombre d'essais fait
+      // après le clic Réussi/Échoué initial est réellement sauvegardé (même doc,
+      // ré-écrit ici) : il faut donc aussi rafraîchir le classement à ce moment,
+      // sinon le score reste basé sur la valeur d'essais du tout premier clic.
+      await updateClassementProfile(user.uid);
     } catch (err: any) {
       setError(`Erreur: ${err.message}`);
     }
@@ -207,6 +261,10 @@ const ClientDaily: React.FC = () => {
   const handleReportIssue = async (boulderId: string, boulderNumber: number, wall: string) => {
     if (!user || !comments[boulderId] || !reportTypesSelected[boulderId]) return;
     try {
+      // ✅ user.displayName n'est jamais renseigné (Register.tsx ne l'appelle pas) :
+      // utiliser le prénom/nom résolu depuis Firestore plutôt que de tomber sur l'email.
+      const resolvedName = getUserFullName(user.uid);
+      const reporterName = resolvedName !== user.uid ? resolvedName : (user.displayName || user.email || 'Anonyme');
       await addDoc(collection(db, 'boulder_reports'), {
         boulder_id: boulderId,
         boulder_number: boulderNumber,
@@ -214,7 +272,7 @@ const ClientDaily: React.FC = () => {
         report_type: reportTypesSelected[boulderId],
         message: comments[boulderId],
         user_id: user.uid,
-        user_name: user.displayName || user.email || 'Anonyme',
+        user_name: reporterName,
         created_at: new Date().toISOString(),
         status: 'pending'
       });

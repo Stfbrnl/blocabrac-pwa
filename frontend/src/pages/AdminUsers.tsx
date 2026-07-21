@@ -193,7 +193,12 @@ const AdminUsers: React.FC = () => {
     if (!selectedUser) return;
     try {
       const roles = Array.isArray(editForm.roles) ? editForm.roles : [];
-      await updateDoc(doc(db, 'users', selectedUser.uid), {
+      // ✅ Garde "classement_profiles" (fiche publique lue par ClientClassement.tsx,
+      // un client ne pouvant pas lister toute la collection "users") synchronisée
+      // au même moment, sans écran de saisie séparé. Seulement pour les clients :
+      // pas besoin de fiche publique pour un compte admin/ouvreur/moniteur.
+      const batch = writeBatch(db);
+      batch.update(doc(db, 'users', selectedUser.uid), {
         email: editForm.email,
         first_name: editForm.first_name,
         last_name: editForm.last_name,
@@ -205,6 +210,15 @@ const AdminUsers: React.FC = () => {
         inscritAuxCours: editForm.inscritAuxCours,
         inscritAuxCompetitions: editForm.inscritAuxCompetitions,
       });
+      if (roles.includes('client')) {
+        batch.set(doc(db, 'classement_profiles', selectedUser.uid), {
+          first_name: editForm.first_name,
+          last_name: editForm.last_name,
+          gender: editForm.gender,
+          dateOfBirth: editForm.dateOfBirth,
+        }, { merge: true });
+      }
+      await batch.commit();
       const querySnapshot = await getDocs(collection(db, 'users'));
       const usersData: User[] = querySnapshot.docs.map(doc => {
         const data = doc.data();
@@ -262,7 +276,8 @@ const AdminUsers: React.FC = () => {
         throw new Error("La création de l'utilisateur a échoué.");
       }
 
-      await setDoc(doc(db, 'users', newUser.uid), {
+      const createBatch = writeBatch(db);
+      createBatch.set(doc(db, 'users', newUser.uid), {
         uid: newUser.uid,
         email: newUser.email,
         first_name: createForm.first_name,
@@ -276,6 +291,16 @@ const AdminUsers: React.FC = () => {
         inscritAuxCompetitions: createForm.inscritAuxCompetitions,
         createdAt: new Date().toISOString()
       });
+      if (createForm.roles.includes('client')) {
+        createBatch.set(doc(db, 'classement_profiles', newUser.uid), {
+          first_name: createForm.first_name,
+          last_name: createForm.last_name,
+          gender: createForm.gender,
+          dateOfBirth: createForm.dateOfBirth,
+          classementOptIn: false,
+        });
+      }
+      await createBatch.commit();
 
       await sendPasswordResetEmail(secondaryAuth, createForm.email);
 

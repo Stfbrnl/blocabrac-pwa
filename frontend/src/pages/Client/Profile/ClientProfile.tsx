@@ -19,7 +19,7 @@ import {
   Switch,
   FormControlLabel
 } from '@mui/material';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, writeBatch } from 'firebase/firestore';
 
 // Tableau de correspondance code-couleur/cotations internationales
 const levelOptions = [
@@ -100,7 +100,20 @@ const ClientProfile: React.FC = () => {
         classementOptIn: userData.classementOptIn ?? false,
       };
 
-      await updateDoc(doc(db, 'users', user.uid), updates);
+      // ✅ Garde "classement_profiles" (fiche publique lue par ClientClassement.tsx)
+      // synchronisée en même temps que "users", sans étape de saisie en plus pour le
+      // client — un client ne peut pas lire toute la collection "users" (règles
+      // Firestore), d'où cette fiche allégée séparée.
+      const batch = writeBatch(db);
+      batch.update(doc(db, 'users', user.uid), updates);
+      batch.set(doc(db, 'classement_profiles', user.uid), {
+        first_name: userData.first_name,
+        last_name: userData.last_name,
+        gender: userData.gender,
+        dateOfBirth: userData.dateOfBirth,
+        classementOptIn: userData.classementOptIn ?? false,
+      }, { merge: true });
+      await batch.commit();
       setSuccess('Vos informations ont été mises à jour avec succès !');
       setTimeout(() => {
         navigate('/client/screen');

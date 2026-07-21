@@ -44,6 +44,19 @@ service cloud.firestore {
       allow delete: if request.auth != null && isUserRole("admin");
     }
 
+    // ✅ Fiche publique allégée (prénom/nom/genre/date de naissance/opt-in) lue par le
+    // classement des grimpeurs (ClientClassement.tsx). Un client ne peut pas lire le
+    // document "users" d'un autre client (données sensibles : email, etc.), donc cette
+    // fiche séparée, à laquelle n'importe quel utilisateur connecté peut avoir accès,
+    // sert de source pour le classement sans jamais exposer le document complet.
+    // Tenue à jour automatiquement par Register.tsx/ClientProfile.tsx/AdminUsers.tsx
+    // au même moment que "users", pas de saisie séparée pour le client.
+    match /classement_profiles/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null &&
+                     (request.auth.uid == userId || isUserRole("admin"));
+    }
+
     // ========== 2. Signalements ==========
     match /boulder_reports/{reportId} {
       allow read: if request.auth != null &&

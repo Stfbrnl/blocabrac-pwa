@@ -158,3 +158,39 @@ describe('client_course_results : validation des exercices', () => {
     await assertFails(writeResult(CLIENT_UID));
   });
 });
+
+describe('classement_profiles : fiche publique du classement', () => {
+  it('un client peut écrire sur sa propre fiche', async () => {
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertSucceeds(setDoc(doc(clientDb, 'classement_profiles', CLIENT_UID), {
+      first_name: 'Cliff', last_name: 'Ent', gender: 'Homme', dateOfBirth: '2000-01-01', classementOptIn: true,
+    }));
+  });
+
+  it('un client ne peut pas écrire sur la fiche d\'un autre client', async () => {
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertFails(setDoc(doc(clientDb, 'classement_profiles', OTHER_CLIENT_UID), {
+      first_name: 'Usurpé', classementOptIn: true,
+    }));
+  });
+
+  it('un client authentifié quelconque peut lire la fiche de n\'importe qui (nécessaire au classement)', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'classement_profiles', OTHER_CLIENT_UID), {
+        first_name: 'Cliff', last_name: 'Ent', classementOptIn: true,
+      });
+    });
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertSucceeds(getDoc(doc(clientDb, 'classement_profiles', OTHER_CLIENT_UID)));
+  });
+
+  it('un admin peut écrire sur la fiche de n\'importe quel client', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'users', 'admin-1'), { roles: ['admin'] });
+    });
+    const adminDb = testEnv.authenticatedContext('admin-1').firestore();
+    await assertSucceeds(setDoc(doc(adminDb, 'classement_profiles', CLIENT_UID), {
+      first_name: 'Modifié par admin',
+    }, { merge: true }));
+  });
+});

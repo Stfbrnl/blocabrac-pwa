@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { auth, db } from '../services/firebaseConfig';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, writeBatch } from 'firebase/firestore';
 import {
   TextField,
   Button,
@@ -63,8 +63,14 @@ export default function Register() {
         throw new Error("La création de l'utilisateur a échoué.");
       }
 
-      // 2. Créer le document dans Firestore avec TOUS les champs + les nouveaux
-      await setDoc(doc(db, 'users', user.uid), {
+      // 2. Créer le document dans Firestore avec TOUS les champs + les nouveaux, et en
+      // même temps sa fiche publique "classement_profiles" (voir ClientClassement.tsx :
+      // un client ne peut pas lister toute la collection "users" d'après les règles
+      // Firestore, donc le classement lit cette fiche allégée à la place — tenue à
+      // jour automatiquement ici et dans ClientProfile.tsx/AdminUsers.tsx, sans étape
+      // de saisie supplémentaire pour le client).
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'users', user.uid), {
         uid: user.uid,
         email: user.email,
         first_name: firstName,
@@ -81,6 +87,14 @@ export default function Register() {
         classementOptIn: false,
         createdAt: new Date().toISOString()
       });
+      batch.set(doc(db, 'classement_profiles', user.uid), {
+        first_name: firstName,
+        last_name: lastName,
+        gender: gender,
+        dateOfBirth: dateOfBirth,
+        classementOptIn: false,
+      });
+      await batch.commit();
 
       setSuccess('Compte créé avec succès ! Vous pouvez maintenant vous connecter.');
       setError(null);
