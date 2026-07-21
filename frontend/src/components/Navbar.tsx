@@ -16,9 +16,14 @@ import {
   ListItemText,
   Divider,
   useMediaQuery,
+  Menu,
+  MenuItem,
+  Collapse,
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import MenuIcon from '@mui/icons-material/Menu';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { Link } from 'react-router-dom';
 
 type UserRole = 'admin' | 'ouvreur' | 'moniteur' | 'client';
@@ -33,6 +38,8 @@ const Navbar: React.FC = () => {
   const [userRoles, setUserRoles] = useState<UserRole[]>([]);
   const [loadingRole, setLoadingRole] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [adminMenuAnchor, setAdminMenuAnchor] = useState<null | HTMLElement>(null);
+  const [mobileAdminOpen, setMobileAdminOpen] = useState(false);
 
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -68,7 +75,18 @@ const Navbar: React.FC = () => {
     return null;
   }
 
-  // ✅ Construit la liste de liens à partir des rôles, une seule fois,
+  // ✅ Sous-menu Admin, affiché sous un seul bouton (Menu desktop / accordéon mobile)
+  // plutôt qu'en boutons séparés, pour ne pas monopoliser la navbar.
+  const adminLinks: NavLink[] = [
+    { label: 'TABLEAU DE BORD', to: '/admin' },
+    { label: 'GÉRER LES UTILISATEURS', to: '/admin/users' },
+    { label: 'CRÉER/GÉRER LES COMPÉTITIONS', to: '/admin/competitions/create' },
+    { label: 'GÉRER LES INSCRIPTIONS', to: '/admin/competitions/list' },
+    { label: 'STATISTIQUES', to: '/admin/competitions/stats' },
+    { label: 'INFORMATIONS CLIENTS', to: '/admin/announcements' },
+  ];
+
+  // ✅ Construit la liste de liens (hors admin) à partir des rôles, une seule fois,
   // réutilisée à la fois pour l'affichage desktop (boutons) et mobile (Drawer).
   const getNavLinks = (): NavLink[] => {
     if (!user) {
@@ -80,16 +98,6 @@ const Navbar: React.FC = () => {
 
     const links: NavLink[] = [];
 
-    if (userRoles.includes('admin')) {
-      links.push(
-        { label: 'ADMIN', to: '/admin' },
-        { label: 'GÉRER LES UTILISATEURS', to: '/admin/users' },
-        { label: 'CRÉER/GÉRER LES COMPÉTITIONS', to: '/admin/competitions/create' },
-        { label: 'GÉRER LES INSCRIPTIONS', to: '/admin/competitions/list' },
-        { label: 'STATISTIQUES', to: '/admin/competitions/stats' },
-        { label: 'INFORMATIONS CLIENTS', to: '/admin/announcements' },
-      );
-    }
     if (userRoles.includes('ouvreur')) {
       links.push({ label: 'OUVREUR', to: '/ouvreur' });
     }
@@ -104,9 +112,16 @@ const Navbar: React.FC = () => {
   };
 
   const navLinks = getNavLinks();
+  const isAdmin = user && userRoles.includes('admin');
 
   const handleDrawerToggle = () => setDrawerOpen((prev) => !prev);
-  const handleDrawerClose = () => setDrawerOpen(false);
+  const handleDrawerClose = () => {
+    setDrawerOpen(false);
+    setMobileAdminOpen(false);
+  };
+  const handleAdminMenuOpen = (event: React.MouseEvent<HTMLElement>) =>
+    setAdminMenuAnchor(event.currentTarget);
+  const handleAdminMenuClose = () => setAdminMenuAnchor(null);
 
   return (
     <AppBar position="static">
@@ -118,6 +133,33 @@ const Navbar: React.FC = () => {
         {/* ✅ Desktop / tablette large : boutons horizontaux comme avant */}
         {!isMobile && (
           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {isAdmin && (
+              <>
+                <Button
+                  color="inherit"
+                  size="small"
+                  onClick={handleAdminMenuOpen}
+                >
+                  ADMIN
+                </Button>
+                <Menu
+                  anchorEl={adminMenuAnchor}
+                  open={Boolean(adminMenuAnchor)}
+                  onClose={handleAdminMenuClose}
+                >
+                  {adminLinks.map((link) => (
+                    <MenuItem
+                      key={link.to}
+                      component={Link}
+                      to={link.to}
+                      onClick={handleAdminMenuClose}
+                    >
+                      {link.label}
+                    </MenuItem>
+                  ))}
+                </Menu>
+              </>
+            )}
             {navLinks.map((link) => (
               <Button
                 key={link.to}
@@ -158,6 +200,32 @@ const Navbar: React.FC = () => {
           </Typography>
           <Divider />
           <List>
+            {isAdmin && (
+              <>
+                <ListItem disablePadding>
+                  <ListItemButton onClick={() => setMobileAdminOpen((prev) => !prev)}>
+                    <ListItemText primary="ADMIN" />
+                    {mobileAdminOpen ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                  </ListItemButton>
+                </ListItem>
+                <Collapse in={mobileAdminOpen} timeout="auto" unmountOnExit>
+                  <List component="div" disablePadding>
+                    {adminLinks.map((link) => (
+                      <ListItem key={link.to} disablePadding>
+                        <ListItemButton
+                          component={Link}
+                          to={link.to}
+                          onClick={handleDrawerClose}
+                          sx={{ pl: 4 }}
+                        >
+                          <ListItemText primary={link.label} />
+                        </ListItemButton>
+                      </ListItem>
+                    ))}
+                  </List>
+                </Collapse>
+              </>
+            )}
             {navLinks.map((link) => (
               <ListItem key={link.to} disablePadding>
                 <ListItemButton

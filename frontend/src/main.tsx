@@ -1,58 +1,58 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { AuthProvider } from './context/AuthContext';
 
 // Pages publiques
-import Home from './pages/Home';
-import Login from './pages/Login';
-import Register from './pages/Register';
-import ForgotPassword from './pages/ForgotPassword';
+const Home = lazy(() => import('./pages/Home'));
+const Login = lazy(() => import('./pages/Login'));
+const Register = lazy(() => import('./pages/Register'));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
 
 // Pages Client
-import Client from './pages/Client';
-import ClientScreen from './pages/Client/ClientScreen';
-import ClientDaily from './pages/Client/Daily/ClientDaily';
-import ClientCompetitions from './pages/Client/Competitions/ClientCompetitions';
-import ClientCompetitionStats from './pages/Client/Competitions/ClientCompetitionStats';
-import ClientCourses from './pages/Client/Courses/ClientCourses';
-import ClientCourseSession from './pages/Client/Courses/ClientCourseSession';
-import ClientProfile from './pages/Client/Profile/ClientProfile';
-import ClientStats from './pages/Client/Stats/ClientStats';
-import ClientMessages from './pages/Client/Messages/ClientMessages';
+const Client = lazy(() => import('./pages/Client'));
+const ClientScreen = lazy(() => import('./pages/Client/ClientScreen'));
+const ClientDaily = lazy(() => import('./pages/Client/Daily/ClientDaily'));
+const ClientCompetitions = lazy(() => import('./pages/Client/Competitions/ClientCompetitions'));
+const ClientCompetitionStats = lazy(() => import('./pages/Client/Competitions/ClientCompetitionStats'));
+const ClientCourses = lazy(() => import('./pages/Client/Courses/ClientCourses'));
+const ClientCourseSession = lazy(() => import('./pages/Client/Courses/ClientCourseSession'));
+const ClientProfile = lazy(() => import('./pages/Client/Profile/ClientProfile'));
+const ClientStats = lazy(() => import('./pages/Client/Stats/ClientStats'));
+const ClientMessages = lazy(() => import('./pages/Client/Messages/ClientMessages'));
 
 // Pages Ouvreur
-import OuvreurScreen from './pages/Ouvreur/OuvreurScreen';
-import DailyBouldersList from './pages/Ouvreur/DailyBoulders/DailyBouldersList';
-import DailyBoulderForm from './pages/Ouvreur/DailyBoulders/DailyBoulderForm';
-import CompetitionBouldersList from './pages/Ouvreur/CompetitionBoulders/CompetitionBouldersList';
-import CompetitionBoulderForm from './pages/Ouvreur/CompetitionBoulders/CompetitionBoulderForm';
-import ReportsAndStats from './pages/Ouvreur/ReportsAndStats/ReportsAndStats';
-import BoulderStats from './pages/Ouvreur/ReportsAndStats/BoulderStats';
-import CompetitionBoulderStats from './pages/Ouvreur/ReportsAndStats/CompetitionBoulderStats';
+const OuvreurScreen = lazy(() => import('./pages/Ouvreur/OuvreurScreen'));
+const DailyBouldersList = lazy(() => import('./pages/Ouvreur/DailyBoulders/DailyBouldersList'));
+const DailyBoulderForm = lazy(() => import('./pages/Ouvreur/DailyBoulders/DailyBoulderForm'));
+const CompetitionBouldersList = lazy(() => import('./pages/Ouvreur/CompetitionBoulders/CompetitionBouldersList'));
+const CompetitionBoulderForm = lazy(() => import('./pages/Ouvreur/CompetitionBoulders/CompetitionBoulderForm'));
+const ReportsAndStats = lazy(() => import('./pages/Ouvreur/ReportsAndStats/ReportsAndStats'));
+const BoulderStats = lazy(() => import('./pages/Ouvreur/ReportsAndStats/BoulderStats'));
+const CompetitionBoulderStats = lazy(() => import('./pages/Ouvreur/ReportsAndStats/CompetitionBoulderStats'));
 
 // Pages Moniteur
-import MoniteurScreen from './pages/Moniteur/MoniteurScreen';
-import GroupsList from './pages/Moniteur/Groups/GroupsList';
-import GroupForm from './pages/Moniteur/Groups/GroupForm';
-import CoursesList from './pages/Moniteur/Courses/CoursesList';
-import CourseForm from './pages/Moniteur/Courses/CourseForm';
-import CourseDetail from './pages/Moniteur/Courses/CourseDetail';
-import ExercisesList from './pages/Moniteur/Exercises/ExercisesList';
-import ExerciseForm from './pages/Moniteur/Exercises/ExerciseForm';
-import StatsList from './pages/Moniteur/Stats/StatsList';
-import MessagesList from './pages/Moniteur/Messages/MessagesList';
+const MoniteurScreen = lazy(() => import('./pages/Moniteur/MoniteurScreen'));
+const GroupsList = lazy(() => import('./pages/Moniteur/Groups/GroupsList'));
+const GroupForm = lazy(() => import('./pages/Moniteur/Groups/GroupForm'));
+const CoursesList = lazy(() => import('./pages/Moniteur/Courses/CoursesList'));
+const CourseForm = lazy(() => import('./pages/Moniteur/Courses/CourseForm'));
+const CourseDetail = lazy(() => import('./pages/Moniteur/Courses/CourseDetail'));
+const ExercisesList = lazy(() => import('./pages/Moniteur/Exercises/ExercisesList'));
+const ExerciseForm = lazy(() => import('./pages/Moniteur/Exercises/ExerciseForm'));
+const StatsList = lazy(() => import('./pages/Moniteur/Stats/StatsList'));
+const MessagesList = lazy(() => import('./pages/Moniteur/Messages/MessagesList'));
 
 // Pages Admin
-import Admin from './pages/Admin';
-import AdminUsers from './pages/AdminUsers';
-import AdminHomeContent from './pages/AdminHomeContent';
-import AdminCompetitionManagement from './pages/AdminCompetitionManagement';
-import AdminCompetitionList from './pages/AdminCompetitionList';
-import AdminCompetitionRegistration from './pages/AdminCompetitionRegistration';
-import AdminCompetitionStats from './pages/AdminCompetitionStats';
-import AdminAnnouncements from './pages/AdminAnnouncements';
+const Admin = lazy(() => import('./pages/Admin'));
+const AdminUsers = lazy(() => import('./pages/AdminUsers'));
+const AdminHomeContent = lazy(() => import('./pages/AdminHomeContent'));
+const AdminCompetitionManagement = lazy(() => import('./pages/AdminCompetitionManagement'));
+const AdminCompetitionList = lazy(() => import('./pages/AdminCompetitionList'));
+const AdminCompetitionRegistration = lazy(() => import('./pages/AdminCompetitionRegistration'));
+const AdminCompetitionStats = lazy(() => import('./pages/AdminCompetitionStats'));
+const AdminAnnouncements = lazy(() => import('./pages/AdminAnnouncements'));
 
 // Composants partagés
 import ProtectedRoute from './components/ProtectedRoute';
@@ -66,6 +66,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       <BrowserRouter>
         <AuthProvider>
           <Navbar />
+          <Suspense fallback={<div>Chargement...</div>}>
           <Routes>
             {/* ========== ROUTES PUBLIQUES ========== */}
             <Route path="/" element={<Home />} />
@@ -121,6 +122,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             <Route path="/admin/competitions/stats" element={<ProtectedRoute role="admin"><AdminCompetitionStats /></ProtectedRoute>} />
             <Route path="/admin/announcements" element={<ProtectedRoute role="admin"><AdminAnnouncements /></ProtectedRoute>} />
           </Routes>
+          </Suspense>
         </AuthProvider>
       </BrowserRouter>
     </ThemeProvider>

@@ -24,7 +24,7 @@ const levelColors: Record<string, string> = {
   rose: '#FFC0CB'
 };
 
-const levelOrder: string[] = ['jaune', 'vert', 'bleu', 'violet', 'rouge', 'noire', 'blanc', 'rose'];
+const levelOrder: string[] = ['jaune', 'vert', 'bleu', 'violet', 'rouge', 'noir', 'blanc', 'rose'];
 
 const basePoints: Record<string, number> = {
   vert: 50, bleu: 100, violet: 200, rouge: 400, noir: 600, blanc: 800, rose: 1000

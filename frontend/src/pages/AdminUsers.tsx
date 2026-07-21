@@ -4,7 +4,8 @@ import {
   TableContainer, TableHead, TableRow, Button, Dialog, DialogTitle,
   DialogContent, DialogActions, TextField, MenuItem, Select,
   FormControl, InputLabel, Box, IconButton, Snackbar, Alert, Chip,
-  TableSortLabel, Tooltip, useTheme, useMediaQuery, Checkbox, FormControlLabel
+  TableSortLabel, Tooltip, useTheme, useMediaQuery, Checkbox, FormControlLabel,
+  Card, CardContent, CardActions
 } from '@mui/material';
 import { Delete as DeleteIcon, Edit as EditIcon, Add as AddIcon, ArrowUpward as ArrowUpwardIcon, ArrowDownward as ArrowDownwardIcon, Lock as LockIcon, LockOpen as LockOpenIcon } from '@mui/icons-material';
 import { db, auth } from '../services/firebaseConfig';
@@ -59,6 +60,9 @@ type SortConfig = {
 const AdminUsers: React.FC = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  // ✅ En dessous de "md", le tableau à 9 colonnes devient impraticable
+  // (défilement horizontal pour atteindre les actions) : on bascule sur des cartes.
+  const isCompact = useMediaQuery(theme.breakpoints.down('md'));
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [openEditDialog, setOpenEditDialog] = useState(false);
@@ -451,6 +455,101 @@ const AdminUsers: React.FC = () => {
           </Box>
         </Box>
 
+        {isCompact ? (
+          <Box>
+            <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+              <FormControl size="small" fullWidth>
+                <InputLabel id="mobile-sort-label">Trier par</InputLabel>
+                <Select
+                  labelId="mobile-sort-label"
+                  label="Trier par"
+                  value={sortConfig?.key ?? 'email'}
+                  onChange={(e) => requestSort(e.target.value as keyof User)}
+                >
+                  <MenuItem value="email">Email</MenuItem>
+                  <MenuItem value="first_name">Prénom</MenuItem>
+                  <MenuItem value="last_name">Nom</MenuItem>
+                  <MenuItem value="roles">Rôles</MenuItem>
+                  <MenuItem value="level">Niveau</MenuItem>
+                  <MenuItem value="age">Âge</MenuItem>
+                  <MenuItem value="gender">Genre</MenuItem>
+                </Select>
+              </FormControl>
+              <Tooltip title={sortConfig?.direction === 'desc' ? 'Ordre décroissant' : 'Ordre croissant'}>
+                <IconButton
+                  onClick={() => sortConfig && setSortConfig({ ...sortConfig, direction: sortConfig.direction === 'asc' ? 'desc' : 'asc' })}
+                  aria-label="Inverser l'ordre de tri"
+                >
+                  {sortConfig?.direction === 'desc' ? <ArrowDownwardIcon /> : <ArrowUpwardIcon />}
+                </IconButton>
+              </Tooltip>
+            </Box>
+
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {sortUsers(users).map(user => (
+                <Card key={user.uid} variant="outlined">
+                  <CardContent>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
+                      {user.first_name} {user.last_name}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1, wordBreak: 'break-word' }}>
+                      {user.email}
+                    </Typography>
+
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 1 }}>
+                      {user.roles.map(role => (
+                        <Chip key={role} label={role} size="small" />
+                      ))}
+                    </Box>
+
+                    {user.level && (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
+                        <Chip
+                          size="small"
+                          label={levelOptions.find(opt => opt.value === user.level)?.label || user.level}
+                          sx={{
+                            backgroundColor: levelColors[user.level],
+                            color: user.level === 'blanc' ? 'black' : 'white'
+                          }}
+                        />
+                        {user.levelOverride && (
+                          <Tooltip title="Niveau verrouillé manuellement : pas de mise à jour automatique par les badges">
+                            <LockIcon fontSize="small" color="action" />
+                          </Tooltip>
+                        )}
+                      </Box>
+                    )}
+
+                    <Typography variant="body2" sx={{ mb: 1 }}>
+                      Âge : {user.age || 'N/A'} · Genre : {user.gender || 'N/A'}
+                    </Typography>
+
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                      <Chip
+                        size="small"
+                        label={`Cours : ${user.inscritAuxCours ? 'Oui' : 'Non'}`}
+                        color={user.inscritAuxCours ? 'success' : 'error'}
+                      />
+                      <Chip
+                        size="small"
+                        label={`Compétitions : ${user.inscritAuxCompetitions ? 'Oui' : 'Non'}`}
+                        color={user.inscritAuxCompetitions ? 'success' : 'error'}
+                      />
+                    </Box>
+                  </CardContent>
+                  <CardActions sx={{ justifyContent: 'flex-end' }}>
+                    <IconButton color="primary" onClick={() => handleOpenEditDialog(user)} aria-label="Modifier">
+                      <EditIcon />
+                    </IconButton>
+                    <IconButton color="error" onClick={() => handleOpenDeleteDialog(user.uid)} aria-label="Supprimer">
+                      <DeleteIcon />
+                    </IconButton>
+                  </CardActions>
+                </Card>
+              ))}
+            </Box>
+          </Box>
+        ) : (
         <TableContainer sx={{ overflowX: 'auto' }}> {/* ✅ Défilement horizontal si nécessaire */}
           <Table sx={{ minWidth: 900 }}>
             <TableHead>
@@ -589,6 +688,7 @@ const AdminUsers: React.FC = () => {
             </TableBody>
           </Table>
         </TableContainer>
+        )}
 
         {/* Dialogue de modification */}
         <Dialog open={openEditDialog} onClose={() => setOpenEditDialog(false)} fullWidth maxWidth="sm" fullScreen={isMobile}>

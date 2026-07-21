@@ -3,7 +3,7 @@ import {
   Typography, Paper, Container, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Button, Box,
   FormControl, InputLabel, Select, MenuItem, Snackbar, Alert,
-  Switch, Chip
+  Switch, Chip, Card, CardContent, CardActions, useTheme, useMediaQuery
 } from '@mui/material';
 import { db } from '../services/firebaseConfig';
 import { collection, getDocs, doc, addDoc, deleteDoc, query, where, updateDoc } from 'firebase/firestore';
@@ -56,6 +56,10 @@ interface CompetitionParticipant {
 }
 
 const AdminCompetitionRegistration: React.FC = () => {
+  const theme = useTheme();
+  // ✅ En dessous de "md", le tableau à 9 colonnes devient impraticable
+  // (défilement horizontal pour atteindre le bouton "Retirer") : on bascule sur des cartes.
+  const isCompact = useMediaQuery(theme.breakpoints.down('md'));
   const [competitions, setCompetitions] = useState<Competition[]>([]);
   const [selectedCompetition, setSelectedCompetition] = useState<Competition | null>(null);
   const [participants, setParticipants] = useState<CompetitionParticipant[]>([]);
@@ -361,66 +365,124 @@ const AdminCompetitionRegistration: React.FC = () => {
               </Button>
             </Box>
 
-            <TableContainer sx={{ mb: 3, overflowX: 'auto' }}>
-              <Table sx={{ minWidth: 950 }}>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Email</TableCell>
-                    <TableCell>Prénom</TableCell>
-                    <TableCell>Nom</TableCell>
-                    <TableCell>Niveau</TableCell>
-                    <TableCell>Âge</TableCell>
-                    <TableCell>Genre</TableCell>
-                    <TableCell>Accès compétitions</TableCell>
-                    <TableCell>Date d'inscription</TableCell>
-                    <TableCell>Actions</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {participants.map(participant => {
-                    const user = allUsers.find(u => u.uid === participant.user_id);
-                    return (
-                      <TableRow key={participant.id}>
-                        <TableCell>{participant.email}</TableCell>
-                        <TableCell>{participant.first_name || 'N/A'}</TableCell>
-                        <TableCell>{participant.last_name || 'N/A'}</TableCell>
-                        <TableCell>
-                          {participant.level ? (
-                            <Chip
-                              label={participant.level}
-                              sx={{
-                                backgroundColor: levelColors[participant.level] || '#CCCCCC',
-                                color: participant.level === 'blanc' ? 'black' : 'white'
-                              }}
-                            />
-                          ) : 'N/A'}
-                        </TableCell>
-                        <TableCell>{participant.age || 'N/A'}</TableCell>
-                        <TableCell>{participant.gender || 'N/A'}</TableCell>
-                        <TableCell>
+            {isCompact ? (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mb: 3 }}>
+                {participants.map(participant => {
+                  const user = allUsers.find(u => u.uid === participant.user_id);
+                  return (
+                    <Card key={participant.id} variant="outlined">
+                      <CardContent>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
+                          {participant.first_name || 'N/A'} {participant.last_name || ''}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1, wordBreak: 'break-word' }}>
+                          {participant.email}
+                        </Typography>
+
+                        {participant.level && (
+                          <Chip
+                            size="small"
+                            label={participant.level}
+                            sx={{
+                              mb: 1,
+                              backgroundColor: levelColors[participant.level] || '#CCCCCC',
+                              color: participant.level === 'blanc' ? 'black' : 'white'
+                            }}
+                          />
+                        )}
+
+                        <Typography variant="body2" sx={{ mb: 1 }}>
+                          Âge : {participant.age || 'N/A'} · Genre : {participant.gender || 'N/A'}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                          Inscrit le {new Date(participant.registered_at).toLocaleString()}
+                        </Typography>
+
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Typography variant="body2">Accès compétitions :</Typography>
                           <Switch
                             checked={user?.inscritAuxCompetitions || false}
                             onChange={() => user && handleToggleCompetitionAccess(user)}
                             color="primary"
                           />
-                        </TableCell>
-                        <TableCell>{new Date(participant.registered_at).toLocaleString()}</TableCell>
-                        <TableCell>
-                          <Button
-                            variant="outlined"
-                            color="error"
-                            size="small"
-                            onClick={() => handleRemoveParticipant(participant.id)}
-                          >
-                            Retirer
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </TableContainer>
+                        </Box>
+                      </CardContent>
+                      <CardActions sx={{ justifyContent: 'flex-end' }}>
+                        <Button
+                          variant="outlined"
+                          color="error"
+                          size="small"
+                          onClick={() => handleRemoveParticipant(participant.id)}
+                        >
+                          Retirer
+                        </Button>
+                      </CardActions>
+                    </Card>
+                  );
+                })}
+              </Box>
+            ) : (
+              <TableContainer sx={{ mb: 3, overflowX: 'auto' }}>
+                <Table sx={{ minWidth: 950 }}>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Email</TableCell>
+                      <TableCell>Prénom</TableCell>
+                      <TableCell>Nom</TableCell>
+                      <TableCell>Niveau</TableCell>
+                      <TableCell>Âge</TableCell>
+                      <TableCell>Genre</TableCell>
+                      <TableCell>Accès compétitions</TableCell>
+                      <TableCell>Date d'inscription</TableCell>
+                      <TableCell>Actions</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {participants.map(participant => {
+                      const user = allUsers.find(u => u.uid === participant.user_id);
+                      return (
+                        <TableRow key={participant.id}>
+                          <TableCell>{participant.email}</TableCell>
+                          <TableCell>{participant.first_name || 'N/A'}</TableCell>
+                          <TableCell>{participant.last_name || 'N/A'}</TableCell>
+                          <TableCell>
+                            {participant.level ? (
+                              <Chip
+                                label={participant.level}
+                                sx={{
+                                  backgroundColor: levelColors[participant.level] || '#CCCCCC',
+                                  color: participant.level === 'blanc' ? 'black' : 'white'
+                                }}
+                              />
+                            ) : 'N/A'}
+                          </TableCell>
+                          <TableCell>{participant.age || 'N/A'}</TableCell>
+                          <TableCell>{participant.gender || 'N/A'}</TableCell>
+                          <TableCell>
+                            <Switch
+                              checked={user?.inscritAuxCompetitions || false}
+                              onChange={() => user && handleToggleCompetitionAccess(user)}
+                              color="primary"
+                            />
+                          </TableCell>
+                          <TableCell>{new Date(participant.registered_at).toLocaleString()}</TableCell>
+                          <TableCell>
+                            <Button
+                              variant="outlined"
+                              color="error"
+                              size="small"
+                              onClick={() => handleRemoveParticipant(participant.id)}
+                            >
+                              Retirer
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
 
             <Typography variant="h6" gutterBottom>
               Ajouter un participant

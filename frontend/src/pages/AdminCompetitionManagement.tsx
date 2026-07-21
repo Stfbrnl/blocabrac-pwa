@@ -232,7 +232,8 @@ const AdminCompetitionManagement: React.FC = () => {
                 <TableCell>Date</TableCell>
                 <TableCell>Statut</TableCell>
                 <TableCell>Code d'accès</TableCell>
-                <TableCell>Niveau requis</TableCell> {/* ✅ Nouvelle colonne */}
+                {/* ✅ Nouvelle colonne */}
+                <TableCell>Niveau requis</TableCell>
                 <TableCell>Participants</TableCell>
                 <TableCell>Actions</TableCell>
               </TableRow>

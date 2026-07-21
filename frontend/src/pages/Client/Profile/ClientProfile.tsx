@@ -26,7 +26,7 @@ const levelOptions = [
   { value: 'bleu', label: 'Bleu (4C-5A+) - En formation de grimpeur' },
   { value: 'violet', label: 'Violet (5B-5C+) - En formation de grimpeur' },
   { value: 'rouge', label: 'Rouge (6A-6B) - Grimpeur confirmé' },
-  { value: 'noire', label: 'Noire (6B+-6C+) - Grimpeur confirmé' },
+  { value: 'noir', label: 'Noire (6B+-6C+) - Grimpeur confirmé' },
   { value: 'blanc', label: 'Blanc (7A-7B) - Grimpeur expert' },
   { value: 'rose', label: 'Rose (7B+-8A) - Grimpeur mutant' }
 ];
