@@ -48,6 +48,7 @@ import MilitaryTechIcon from '@mui/icons-material/MilitaryTech';
 import { jsPDF } from 'jspdf';
 import * as html2canvas from 'html2canvas';
 import logo from '../../../assets/logo-blocabrac.png';
+import { computeBadgeActive } from '../../../utils/badgeActivation';
 
 // Couleurs des niveaux
 const levelColors: Record<string, string> = {
@@ -114,34 +115,6 @@ interface Diploma {
 // Ordre des niveaux/couleurs, du plus faible au plus élevé.
 // Les badges couleur commencent à violet : aucun badge n'existe pour jaune/vert/bleu.
 const colorOrder = ['jaune', 'vert', 'bleu', 'violet', 'rouge', 'noir', 'blanc', 'rose'];
-
-// Un badge reste actif tant que le client a encore, dans ses stats, au moins
-// "count" bloc(s) validé(s) de la couleur du badge qui existent toujours en salle.
-// Dès qu'un mur change et que ces blocs disparaissent, le badge repasse en grisé,
-// et redevient coloré automatiquement dès qu'un bloc de cette couleur est de nouveau validé.
-// Fonction pure (sans dépendance au state du composant) pour pouvoir être appelée à la fois
-// pendant le chargement des données (synchronisation du niveau) et pendant le rendu (affichage).
-const computeBadgeActive = (
-  badge: Badge,
-  validatedByColor: Record<string, number>,
-  totalByColor: Record<string, number>
-): boolean => {
-  const color = badge.criteria?.color || badge.color;
-  if (!color) return true; // badge non lié à une couleur -> toujours actif
-
-  const validated = validatedByColor[color] || 0;
-  const rawCount = badge.criteria?.count;
-
-  // Cas "master" : count === "all" -> il faut posséder tous les blocs de cette
-  // couleur actuellement en salle
-  if (String(rawCount).toLowerCase() === 'all') {
-    const total = totalByColor[color] || 0;
-    return total > 0 && validated >= total;
-  }
-
-  const required = parseInt(String(rawCount ?? '1'), 10) || 1;
-  return validated >= required;
-};
 
 const ClientStats: React.FC = () => {
   const [user, loadingAuth] = useAuthState(auth);

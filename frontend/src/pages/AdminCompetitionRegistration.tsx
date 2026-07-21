@@ -8,13 +8,10 @@ import {
 import { db } from '../services/firebaseConfig';
 import { collection, getDocs, doc, addDoc, deleteDoc, query, where, updateDoc } from 'firebase/firestore';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { type Level, canUserRegister } from '../utils/competitionEligibility';
 
 type UserRole = 'admin' | 'ouvreur' | 'moniteur' | 'client';
 type CompetitionStatus = 'à venir' | 'en cours' | 'terminée' | 'annulée';
-type Level = 'jaune' | 'vert' | 'bleu' | 'violet' | 'rouge' | 'noir' | 'blanc' | 'rose';
-
-// ✅ Liste des niveaux (pour les comparaisons)
-const levelOrder: Level[] = ['jaune', 'vert', 'bleu', 'violet', 'rouge', 'noir', 'blanc', 'rose'];
 
 interface User {
   uid: string;
@@ -71,22 +68,6 @@ const AdminCompetitionRegistration: React.FC = () => {
   const navigate = useNavigate();
 
   const competitionId = new URLSearchParams(location.search).get('competitionId');
-
-  // ✅ Fonction pour vérifier si un utilisateur peut s'inscrire à une compétition
-  const canUserRegister = (user: User, competition: Competition): boolean => {
-    if (!user.level) return true; // ✅ Si pas de niveau défini, autoriser
-    if (!competition.minLevel && !competition.maxLevel) return true; // ✅ Pas de restriction
-
-    const userLevelIndex = levelOrder.indexOf(user.level);
-    const minLevelIndex = competition.minLevel ? levelOrder.indexOf(competition.minLevel) : -1;
-    const maxLevelIndex = competition.maxLevel ? levelOrder.indexOf(competition.maxLevel) : levelOrder.length;
-
-    // ✅ Vérifier si le niveau de l'utilisateur est dans la plage
-    return (
-      (minLevelIndex === -1 || userLevelIndex >= minLevelIndex) &&
-      (maxLevelIndex === levelOrder.length || userLevelIndex <= maxLevelIndex)
-    );
-  };
 
   // Charger les utilisateurs EN PREMIER
   useEffect(() => {
