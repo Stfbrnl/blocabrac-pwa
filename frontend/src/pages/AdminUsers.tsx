@@ -14,6 +14,7 @@ import {
 } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, sendPasswordResetEmail, getAuth, signOut } from 'firebase/auth';
 import { initializeApp, deleteApp } from 'firebase/app';
+import { getSeasonAge } from '../utils/ageCategory';
 
 // ✅ Tableau de correspondance code-couleur/cotations
 const levelOptions = [
@@ -42,6 +43,7 @@ interface User {
   last_name: string;
   roles: UserRole[];
   age?: number;
+  dateOfBirth?: string;
   gender?: string;
   level?: string;
   // ✅ Si true, le niveau ci-dessus est verrouillé par un admin : la synchronisation
@@ -80,6 +82,7 @@ const AdminUsers: React.FC = () => {
     last_name: '',
     roles: [],
     age: undefined,
+    dateOfBirth: '',
     gender: '',
     level: '',
     levelOverride: false,
@@ -92,6 +95,7 @@ const AdminUsers: React.FC = () => {
     last_name: '',
     roles: [],
     age: undefined,
+    dateOfBirth: '',
     gender: '',
     level: '',
     levelOverride: false,
@@ -164,6 +168,7 @@ const AdminUsers: React.FC = () => {
             last_name: data.last_name || '',
             roles: data.roles || [],
             age: data.age,
+            dateOfBirth: data.dateOfBirth,
             gender: data.gender,
             level: data.level,
           levelOverride: data.levelOverride || false,
@@ -193,7 +198,7 @@ const AdminUsers: React.FC = () => {
         first_name: editForm.first_name,
         last_name: editForm.last_name,
         roles: roles,
-        age: editForm.age,
+        dateOfBirth: editForm.dateOfBirth,
         gender: editForm.gender,
         level: editForm.level,
         levelOverride: editForm.levelOverride ?? false,
@@ -210,6 +215,7 @@ const AdminUsers: React.FC = () => {
           last_name: data.last_name || '',
           roles: data.roles || [],
           age: data.age,
+            dateOfBirth: data.dateOfBirth,
           gender: data.gender,
           level: data.level,
           levelOverride: data.levelOverride || false,
@@ -262,7 +268,7 @@ const AdminUsers: React.FC = () => {
         first_name: createForm.first_name,
         last_name: createForm.last_name,
         roles: createForm.roles as UserRole[],
-        age: createForm.age,
+        dateOfBirth: createForm.dateOfBirth,
         gender: createForm.gender,
         level: createForm.level,
         levelOverride: createForm.levelOverride ?? false,
@@ -283,6 +289,7 @@ const AdminUsers: React.FC = () => {
           last_name: data.last_name || '',
           roles: data.roles || [],
           age: data.age,
+            dateOfBirth: data.dateOfBirth,
           gender: data.gender,
           level: data.level,
           levelOverride: data.levelOverride || false,
@@ -327,6 +334,7 @@ const AdminUsers: React.FC = () => {
       last_name: user.last_name,
       roles: user.roles || [],
       age: user.age,
+      dateOfBirth: user.dateOfBirth || '',
       gender: user.gender || '',
       level: user.level || '',
       levelOverride: user.levelOverride || false,
@@ -355,6 +363,7 @@ const AdminUsers: React.FC = () => {
           last_name: data.last_name || '',
           roles: data.roles || [],
           age: data.age,
+            dateOfBirth: data.dateOfBirth,
           gender: data.gender,
           level: data.level,
           levelOverride: data.levelOverride || false,
@@ -521,7 +530,7 @@ const AdminUsers: React.FC = () => {
                     )}
 
                     <Typography variant="body2" sx={{ mb: 1 }}>
-                      Âge : {user.age || 'N/A'} · Genre : {user.gender || 'N/A'}
+                      Âge : {getSeasonAge(user.dateOfBirth, user.age) ?? 'N/A'} · Genre : {user.gender || 'N/A'}
                     </Typography>
 
                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
@@ -667,7 +676,7 @@ const AdminUsers: React.FC = () => {
                       </Box>
                     ) : 'N/A'}
                   </TableCell>
-                  <TableCell>{user.age || 'N/A'}</TableCell>
+                  <TableCell>{getSeasonAge(user.dateOfBirth, user.age) ?? 'N/A'}</TableCell>
                   <TableCell>{user.gender || 'N/A'}</TableCell>
                   <TableCell>
                     {user.inscritAuxCours ? <Chip label="Oui" color="success" /> : <Chip label="Non" color="error" />}
@@ -737,7 +746,7 @@ const AdminUsers: React.FC = () => {
                 }
                 label="Verrouiller ce niveau (empêche la mise à jour automatique par les badges du client)"
               />
-              <TextField label="Âge" type="number" value={editForm.age || ''} onChange={(e) => setEditForm({...editForm, age: e.target.value ? parseInt(e.target.value) : undefined})} fullWidth slotProps={{ inputLabel: { shrink: true } }} />
+              <TextField label="Date de naissance" type="date" value={editForm.dateOfBirth || ''} onChange={(e) => setEditForm({...editForm, dateOfBirth: e.target.value || undefined})} fullWidth slotProps={{ inputLabel: { shrink: true } }} />
               <FormControl fullWidth>
                 <InputLabel id="genre-select-label">Genre</InputLabel>
                 <Select
@@ -819,7 +828,7 @@ const AdminUsers: React.FC = () => {
                 }
                 label="Verrouiller ce niveau (empêche la mise à jour automatique par les badges du client)"
               />
-              <TextField label="Âge" type="number" value={createForm.age || ''} onChange={(e) => setCreateForm({...createForm, age: e.target.value ? parseInt(e.target.value) : undefined})} fullWidth slotProps={{ inputLabel: { shrink: true } }} />
+              <TextField label="Date de naissance" type="date" value={createForm.dateOfBirth || ''} onChange={(e) => setCreateForm({...createForm, dateOfBirth: e.target.value || undefined})} fullWidth slotProps={{ inputLabel: { shrink: true } }} />
               <FormControl fullWidth>
                 <InputLabel id="genre-select-label-2">Genre</InputLabel>
                 <Select

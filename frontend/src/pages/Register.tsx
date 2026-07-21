@@ -34,7 +34,7 @@ export default function Register() {
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [age, setAge] = useState<number | ''>('');
+  const [dateOfBirth, setDateOfBirth] = useState<string>('');
   const [gender, setGender] = useState<string>('');
   const [level, setLevel] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +45,7 @@ export default function Register() {
     e.preventDefault();
 
     // ✅ Validation de tous les champs obligatoires
-    if (!firstName || !lastName || !email || !password || !age || !gender || !level) {
+    if (!firstName || !lastName || !email || !password || !dateOfBirth || !gender || !level) {
       setError('Tous les champs sont obligatoires, y compris le niveau en salle.');
       return;
     }
@@ -69,7 +69,7 @@ export default function Register() {
         email: user.email,
         first_name: firstName,
         last_name: lastName,
-        age: age,
+        dateOfBirth: dateOfBirth,
         gender: gender,
         level: level,
         // ✅ "roles" est le seul format écrit désormais (comme AdminUsers.tsx) :
@@ -78,6 +78,7 @@ export default function Register() {
         roles: ['client'],
         inscritAuxCours: false, // ✅ NOUVEAU CHAMP : Créé automatiquement à false
         inscritAuxCompetitions: false, // ✅ NOUVEAU CHAMP : Créé automatiquement à false
+        classementOptIn: false,
         createdAt: new Date().toISOString()
       });
 
@@ -161,18 +162,18 @@ export default function Register() {
             onChange={(e) => setLastName(e.target.value)}
           />
 
-          {/* Âge (obligatoire) - ✅ Correction MUI v9 : slotProps au lieu de InputLabelProps */}
+          {/* Date de naissance (obligatoire) - ✅ Correction MUI v9 : slotProps au lieu de InputLabelProps */}
           <TextField
             margin="normal"
             required
             fullWidth
-            id="age"
-            label="Âge"
-            name="age"
-            type="number"
+            id="dateOfBirth"
+            label="Date de naissance"
+            name="dateOfBirth"
+            type="date"
             slotProps={{ inputLabel: { shrink: true } }}  // ✅ Syntaxe MUI v9
-            value={age}
-            onChange={(e) => setAge(e.target.value ? parseInt(e.target.value) : '')}
+            value={dateOfBirth}
+            onChange={(e) => setDateOfBirth(e.target.value)}
           />
 
           {/* Genre (obligatoire) */}

@@ -5,8 +5,6 @@ import {
   doc,
   getDoc,
   updateDoc,
-  arrayUnion,
-  arrayRemove,
 } from 'firebase/firestore';
 import {
   Container,
@@ -20,15 +18,12 @@ import {
   List,
   ListItem,
   ListItemText,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   Snackbar,
   Alert,
 } from '@mui/material';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Edit as EditIcon, Delete as DeleteIcon, GroupAdd as GroupAddIcon } from '@mui/icons-material';
+import { Edit as EditIcon, PlayArrow as PlayArrowIcon, Archive as ArchiveIcon } from '@mui/icons-material';
+import { getSessionStatus, canActivate, type SessionStatus } from '../../../utils/courseSessionStatus';
 
 interface Course {
   id: string;
@@ -39,15 +34,24 @@ interface Course {
   level: string;
   MaxParticipants: number;
   Participants: string[];
+  optedOut: string[];
   groupId: string;
   createdBy: string;
   createdAt: Date;
+  activatedAt?: string;
+  archivedAt?: string;
 }
 
 interface User {
   uid: string;
-  displayName: string;
+  name: string;
 }
+
+const statusLabels: Record<SessionStatus, { label: string; color: 'default' | 'success' | 'info' }> = {
+  scheduled: { label: 'Programmée', color: 'default' },
+  active: { label: 'Active', color: 'success' },
+  archived: { label: 'Archivée', color: 'info' },
+};
 
 const CourseDetail: React.FC = () => {
   const [user, loadingAuth] = useAuthState(auth);
@@ -59,7 +63,6 @@ const CourseDetail: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [openDialog, setOpenDialog] = useState(false);
 
   useEffect(() => {
     if (!user || !courseId) return;
@@ -74,13 +77,18 @@ const CourseDetail: React.FC = () => {
             ...docSnap.data(),
             date: docSnap.data().date?.toDate() || new Date(),
             createdAt: docSnap.data().createdAt?.toDate() || new Date(),
+            Participants: docSnap.data().Participants || [],
+            optedOut: docSnap.data().optedOut || [],
           } as Course);
 
           // Charger les participants
           const participantIds = docSnap.data().Participants || [];
           const participantPromises = participantIds.map(async (uid: string) => {
             const userDoc = await getDoc(doc(db, 'users', uid));
-            return userDoc.exists() ? { uid: userDoc.id, displayName: userDoc.data().displayName || userDoc.data().email || uid } : null;
+            if (!userDoc.exists()) return null;
+            const data = userDoc.data();
+            const name = `${data.first_name || ''} ${data.last_name || ''}`.trim() || data.email || uid;
+            return { uid: userDoc.id, name };
           });
           const resolvedParticipants = (await Promise.all(participantPromises)).filter(Boolean) as User[];
           setParticipants(resolvedParticipants);
@@ -95,29 +103,25 @@ const CourseDetail: React.FC = () => {
     fetchCourse();
   }, [user, courseId]);
 
-  const handleAddParticipant = async () => {
-    if (!user || !course || !courseId) return;
+  const handleActivate = async () => {
+    if (!course) return;
     try {
-      await updateDoc(doc(db, 'courses', courseId), {
-        Participants: arrayUnion(user.uid),
-      });
-      setSuccess('Vous avez été ajouté aux participants !');
-      setOpenDialog(false);
+      await updateDoc(doc(db, 'courses', course.id), { activatedAt: new Date().toISOString() });
+      setCourse({ ...course, activatedAt: new Date().toISOString() });
+      setSuccess('Séance activée : les clients inscrits peuvent maintenant valider les exercices.');
     } catch (err) {
-      setError(`Erreur lors de l'ajout : ${err}`);
+      setError(`Erreur lors de l'activation : ${err}`);
     }
   };
 
-  const handleRemoveParticipant = async () => {
-    if (!user || !course || !courseId) return;
+  const handleArchive = async () => {
+    if (!course) return;
     try {
-      await updateDoc(doc(db, 'courses', courseId), {
-        Participants: arrayRemove(user.uid),
-      });
-      setSuccess('Vous avez été retiré des participants !');
-      setOpenDialog(false);
+      await updateDoc(doc(db, 'courses', course.id), { archivedAt: new Date().toISOString() });
+      setCourse({ ...course, archivedAt: new Date().toISOString() });
+      setSuccess('Séance archivée.');
     } catch (err) {
-      setError(`Erreur lors du retrait : ${err}`);
+      setError(`Erreur lors de l'archivage : ${err}`);
     }
   };
 
@@ -134,8 +138,9 @@ const CourseDetail: React.FC = () => {
     );
   }
 
-  const isParticipant = participants.some((p) => p.uid === user?.uid);
   const canEdit = course.createdBy === user?.uid;
+  const sessionLike = { date: course.date.toISOString().split('T')[0], activatedAt: course.activatedAt, archivedAt: course.archivedAt };
+  const status = getSessionStatus(sessionLike);
 
   return (
     <Container maxWidth="md">
@@ -178,11 +183,32 @@ const CourseDetail: React.FC = () => {
           <Typography variant="subtitle1" color="text.secondary">
             <strong>Participants :</strong> {participants.length}/{course.MaxParticipants}
           </Typography>
+          <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography variant="subtitle1" color="text.secondary">
+              <strong>Statut :</strong>
+            </Typography>
+            <Chip label={statusLabels[status].label} color={statusLabels[status].color} size="small" />
+          </Box>
         </Box>
 
         <Typography variant="body1" sx={{ mb: 2 }}>
           {course.description}
         </Typography>
+
+        {canEdit && (
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 2 }}>
+            {canActivate(sessionLike) && (
+              <Button variant="contained" color="success" startIcon={<PlayArrowIcon />} onClick={handleActivate}>
+                Activer (séance du jour)
+              </Button>
+            )}
+            {status === 'active' && (
+              <Button variant="outlined" color="info" startIcon={<ArchiveIcon />} onClick={handleArchive}>
+                Archiver maintenant
+              </Button>
+            )}
+          </Box>
+        )}
 
         <Divider sx={{ my: 2 }} />
 
@@ -197,41 +223,16 @@ const CourseDetail: React.FC = () => {
           ) : (
             participants.map((participant) => (
               <ListItem key={participant.uid}>
-                <ListItemText primary={participant.displayName} />
+                <ListItemText primary={participant.name} />
+                {course.optedOut.includes(participant.uid) && (
+                  <Chip label="Désisté" size="small" color="warning" />
+                )}
               </ListItem>
             ))
           )}
         </List>
 
-        <Box
-          sx={{
-            mt: 2,
-            display: 'flex',
-            flexDirection: { xs: 'column', sm: 'row' },
-            gap: 2,
-          }}
-        >
-          {!isParticipant ? (
-            <Button
-              variant="contained"
-              color="success"
-              startIcon={<GroupAddIcon />}
-              onClick={() => setOpenDialog(true)}
-              sx={{ width: { xs: '100%', sm: 'auto' } }}
-            >
-              Rejoindre la séance
-            </Button>
-          ) : (
-            <Button
-              variant="outlined"
-              color="error"
-              startIcon={<DeleteIcon />}
-              onClick={() => setOpenDialog(true)}
-              sx={{ width: { xs: '100%', sm: 'auto' } }}
-            >
-              Quitter la séance
-            </Button>
-          )}
+        <Box sx={{ mt: 2 }}>
           <Button
             variant="outlined"
             onClick={() => navigate('/moniteur/courses')}
@@ -240,32 +241,6 @@ const CourseDetail: React.FC = () => {
             Retour à la liste
           </Button>
         </Box>
-
-        <Dialog
-          open={openDialog}
-          onClose={() => setOpenDialog(false)}
-          fullWidth
-          maxWidth="xs"
-        >
-          <DialogTitle>
-            {isParticipant ? 'Quitter la séance' : 'Rejoindre la séance'}
-          </DialogTitle>
-          <DialogContent>
-            {isParticipant
-              ? 'Êtes-vous sûr de vouloir quitter cette séance ?'
-              : 'Souhaitez-vous rejoindre cette séance ?'}
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setOpenDialog(false)}>Annuler</Button>
-            <Button
-              onClick={isParticipant ? handleRemoveParticipant : handleAddParticipant}
-              color={isParticipant ? 'error' : 'success'}
-              variant="contained"
-            >
-              {isParticipant ? 'Quitter' : 'Rejoindre'}
-            </Button>
-          </DialogActions>
-        </Dialog>
       </Paper>
 
       <Snackbar

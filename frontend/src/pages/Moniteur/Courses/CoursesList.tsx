@@ -8,7 +8,9 @@ import {
   onSnapshot,
   doc,
   deleteDoc,
+  updateDoc,
 } from 'firebase/firestore';
+import { getSessionStatus, canActivate, type SessionStatus } from '../../../utils/courseSessionStatus';
 import {
   Container,
   Typography,
@@ -36,6 +38,8 @@ import {
   Delete as DeleteIcon,
   CalendarToday as CalendarIcon,
   Visibility as VisibilityIcon,
+  PlayArrow as PlayArrowIcon,
+  Archive as ArchiveIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 
@@ -58,7 +62,8 @@ interface Course {
   groupId: string;
   createdBy: string;
   createdAt: Date;
-  isActive: boolean; // ✅ Ajout de isActive
+  activatedAt?: string;
+  archivedAt?: string;
 }
 
 const CoursesList: React.FC = () => {
@@ -91,7 +96,8 @@ const CoursesList: React.FC = () => {
             ...doc.data(),
             date: convertFirestoreDate(doc.data().date),
             createdAt: convertFirestoreDate(doc.data().createdAt),
-            isActive: doc.data().isActive || false, // ✅ Chargement de isActive
+            activatedAt: doc.data().activatedAt,
+            archivedAt: doc.data().archivedAt,
           } as Course);
         });
         setCourses(coursesData);
@@ -116,6 +122,30 @@ const CoursesList: React.FC = () => {
       setError(`Erreur lors de la suppression de la séance : ${error}`);
       setOpenDeleteDialog(false);
     }
+  };
+
+  const toDateStr = (date: Date): string => date.toISOString().split('T')[0];
+
+  const handleActivate = async (course: Course) => {
+    try {
+      await updateDoc(doc(db, 'courses', course.id), { activatedAt: new Date().toISOString() });
+    } catch (err) {
+      setError(`Erreur lors de l'activation de la séance : ${err}`);
+    }
+  };
+
+  const handleArchive = async (course: Course) => {
+    try {
+      await updateDoc(doc(db, 'courses', course.id), { archivedAt: new Date().toISOString() });
+    } catch (err) {
+      setError(`Erreur lors de l'archivage de la séance : ${err}`);
+    }
+  };
+
+  const statusLabels: Record<SessionStatus, { label: string; color: 'default' | 'success' | 'info' }> = {
+    scheduled: { label: 'Programmée', color: 'default' },
+    active: { label: 'Active', color: 'success' },
+    archived: { label: 'Archivée', color: 'info' },
   };
 
   if (loadingAuth || isLoading) {
@@ -182,7 +212,10 @@ const CoursesList: React.FC = () => {
                   </TableCell>
                 </TableRow>
               ) : (
-                courses.map((course) => (
+                courses.map((course) => {
+                  const sessionLike = { date: toDateStr(course.date), activatedAt: course.activatedAt, archivedAt: course.archivedAt };
+                  const status = getSessionStatus(sessionLike);
+                  return (
                   <TableRow key={course.id} hover>
                     <TableCell>{course.title}</TableCell>
                     <TableCell>{course.date.toLocaleDateString('fr-FR')}</TableCell>
@@ -193,12 +226,23 @@ const CoursesList: React.FC = () => {
                       {course.level}
                     </TableCell>
                     <TableCell>
-                      <Chip
-                        label={course.isActive ? "Active" : "Inactive"}
-                        color={course.isActive ? "success" : "default"}
-                      />
+                      <Chip label={statusLabels[status].label} color={statusLabels[status].color} />
                     </TableCell>
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                      {canActivate(sessionLike) && (
+                        <Tooltip title="Activer (séance du jour)">
+                          <IconButton color="success" onClick={() => handleActivate(course)}>
+                            <PlayArrowIcon />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                      {status === 'active' && (
+                        <Tooltip title="Archiver maintenant">
+                          <IconButton color="info" onClick={() => handleArchive(course)}>
+                            <ArchiveIcon />
+                          </IconButton>
+                        </Tooltip>
+                      )}
                       <Tooltip title="Voir les détails">
                         <IconButton
                           color="primary"
@@ -228,7 +272,8 @@ const CoursesList: React.FC = () => {
                       </Tooltip>
                     </TableCell>
                   </TableRow>
-                ))
+                  );
+                })
               )}
             </TableBody>
           </Table>

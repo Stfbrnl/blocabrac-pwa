@@ -3,13 +3,14 @@ import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '../../../services/firebaseConfig';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  collection, query, where, getDocs, doc, setDoc, getDoc
+  collection, query, where, getDocs, doc, setDoc, getDoc, updateDoc, arrayUnion, arrayRemove
 } from 'firebase/firestore';
 import {
   Container, Typography, Box, CircularProgress, Alert,
   Paper, Card, CardContent, CardMedia, Button,
-  FormControl, InputLabel, Select, MenuItem, TextField
+  FormControl, InputLabel, Select, MenuItem, TextField, Chip
 } from '@mui/material';
+import { getSessionStatus, type SessionStatus } from '../../../utils/courseSessionStatus';
 
 const levelColors: Record<string, string> = {
   jaune: '#FFFF00', vert: '#00FF00', bleu: '#0000FF', violet: '#800080',
@@ -30,13 +31,24 @@ interface Exercise {
 interface Session {
   id: string;
   name: string;
+  description: string;
   date: string;
   time: string;
   moniteurId: string;
   groupId: string;
-  isActive: boolean;
+  activatedAt?: string;
+  archivedAt?: string;
+  Participants: string[];
+  optedOut: string[];
+  exercisesCount: number;
   exercises: Exercise[];
 }
+
+const statusLabels: Record<SessionStatus, string> = {
+  scheduled: 'À venir',
+  active: 'Active',
+  archived: 'Archivée',
+};
 
 const ClientCourseSession: React.FC = () => {
   const [user, loadingAuth] = useAuthState(auth);
@@ -77,36 +89,52 @@ const ClientCourseSession: React.FC = () => {
           normalizedDate = new Date().toISOString().split('T')[0];
         }
 
-        const exercisesIds = sessionData.exercises || [];
-        const exercisesPromises = exercisesIds.map(async (exerciseId: string) => {
-          const exerciseDoc = await getDoc(doc(db, 'exercises', exerciseId));
-          if (exerciseDoc.exists()) {
-            const exerciseData = exerciseDoc.data();
-            return {
-              id: exerciseDoc.id,
-              name: exerciseData.name || '',
-              description: exerciseData.description || '',
-              difficulty: exerciseData.difficulty || '',
-              instructions: exerciseData.instructions || '',
-              image_base64: exerciseData.image_base64 || '',
-              type: exerciseData.type || 'data',
-              dataFields: exerciseData.dataFields || []
-            };
-          }
-          return null;
+        const exercisesIds: string[] = sessionData.exercises || [];
+        const status = getSessionStatus({
+          date: normalizedDate,
+          activatedAt: sessionData.activatedAt,
+          archivedAt: sessionData.archivedAt,
         });
 
-        const exercises = (await Promise.all(exercisesPromises)).filter(Boolean) as Exercise[];
+        // ✅ Tant que la séance n'est pas active/archivée, on ne va même pas chercher
+        // le détail des exercices (nom/instructions/image) : seul le nombre est utile
+        // pour respecter "objectifs visibles, contenu caché".
+        let exercises: Exercise[] = [];
+        if (status !== 'scheduled') {
+          const exercisesPromises = exercisesIds.map(async (exerciseId: string) => {
+            const exerciseDoc = await getDoc(doc(db, 'exercises', exerciseId));
+            if (exerciseDoc.exists()) {
+              const exerciseData = exerciseDoc.data();
+              return {
+                id: exerciseDoc.id,
+                name: exerciseData.name || '',
+                description: exerciseData.description || '',
+                difficulty: exerciseData.difficulty || '',
+                instructions: exerciseData.instructions || '',
+                image_base64: exerciseData.image_base64 || '',
+                type: exerciseData.type || 'data',
+                dataFields: exerciseData.dataFields || []
+              };
+            }
+            return null;
+          });
+          exercises = (await Promise.all(exercisesPromises)).filter(Boolean) as Exercise[];
+        }
 
         const session: Session = {
           id: docSnap.id,
           name: sessionData.name || sessionData.title || '',
+          description: sessionData.description || '',
           date: normalizedDate,
           time: sessionData.time || '00:00',
           moniteurId: sessionData.moniteurId || sessionData.createdBy || '',
           groupId: sessionData.groupId || '',
-          isActive: sessionData.isActive || false,
-          exercises: exercises
+          activatedAt: sessionData.activatedAt,
+          archivedAt: sessionData.archivedAt,
+          Participants: sessionData.Participants || [],
+          optedOut: sessionData.optedOut || [],
+          exercisesCount: exercisesIds.length,
+          exercises,
         };
         setSession(session);
 
@@ -178,9 +206,21 @@ const ClientCourseSession: React.FC = () => {
     }
   };
 
-  const now = new Date();
-  const sessionDateTime = session ? new Date(session.date + 'T' + session.time) : null;
-  const isSessionAccessible = session && sessionDateTime && sessionDateTime <= now;
+  const handleToggleOptOut = async () => {
+    if (!user || !session) return;
+    const hasOptedOut = session.optedOut.includes(user.uid);
+    try {
+      await updateDoc(doc(db, 'courses', session.id), {
+        optedOut: hasOptedOut ? arrayRemove(user.uid) : arrayUnion(user.uid)
+      });
+      setSession({
+        ...session,
+        optedOut: hasOptedOut ? session.optedOut.filter(uid => uid !== user.uid) : [...session.optedOut, user.uid]
+      });
+    } catch (err: any) {
+      setError(`Erreur lors de la mise à jour de votre inscription : ${err.message}`);
+    }
+  };
 
   if (loadingAuth || loading) {
     return (
@@ -200,6 +240,12 @@ const ClientCourseSession: React.FC = () => {
     );
   }
 
+  const status = getSessionStatus(session);
+  const isParticipant = session.Participants.includes(user.uid);
+  const hasOptedOut = session.optedOut.includes(user.uid);
+  // ✅ Une fois active, seuls les clients encore inscrits (pas désistés) peuvent valider.
+  const canValidate = status === 'active' && isParticipant && !hasOptedOut;
+
   return (
     <Container maxWidth="lg">
       <Typography variant="h4" sx={{ mt: 4, mb: 2 }}>
@@ -214,150 +260,191 @@ const ClientCourseSession: React.FC = () => {
         </Typography>
         <Typography>Date: {new Date(session.date).toLocaleDateString('fr-FR')}</Typography>
         <Typography>Heure: {session.time}</Typography>
-        <Typography>Moniteur: {session.moniteurId}</Typography>
-        <Typography>Nombre d'exercices: {session.exercises.length}</Typography>
-        <Typography>
-          Statut: {isSessionAccessible ? 'Accessible' : 'Non encore accessible'}
-        </Typography>
+        <Typography>Nombre d'exercices: {session.exercisesCount}</Typography>
+        {session.description && (
+          <Typography sx={{ mt: 1 }}><strong>Objectifs :</strong> {session.description}</Typography>
+        )}
+        <Box sx={{ mt: 1 }}>
+          <Chip label={statusLabels[status]} color={status === 'active' ? 'success' : status === 'archived' ? 'info' : 'default'} size="small" />
+        </Box>
+
+        {status === 'scheduled' && isParticipant && (
+          <Box sx={{ mt: 2 }}>
+            {hasOptedOut && <Alert severity="warning" sx={{ mb: 1 }}>Vous vous êtes désisté(e) de cette séance.</Alert>}
+            <Button
+              variant={hasOptedOut ? 'contained' : 'outlined'}
+              color={hasOptedOut ? 'success' : 'error'}
+              onClick={handleToggleOptOut}
+            >
+              {hasOptedOut ? 'Je viens finalement' : 'Je ne pourrai pas venir'}
+            </Button>
+          </Box>
+        )}
       </Paper>
 
-      <Typography variant="h6" sx={{ mb: 2 }}>Exercices</Typography>
-      {/* ✅ Largeur relative au lieu de width fixe : 1 carte par ligne sur mobile,
-          plusieurs sur écran large, sans jamais déborder ni être trop étroite */}
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-        {session.exercises.map((exercise) => {
-          const result = validationResults[exercise.id] || {
-            data: exercise.dataFields?.reduce((acc, field) => {
-              acc[field.label] = '';
-              return acc;
-            }, {} as Record<string, string | number>) || {}
-          };
+      {status === 'scheduled' ? (
+        <Alert severity="info">
+          Le contenu de cette séance (exercices) sera visible une fois qu'elle sera activée par votre moniteur, le jour même.
+        </Alert>
+      ) : !isParticipant ? (
+        <Alert severity="error">Vous ne faites pas partie des participants inscrits à cette séance.</Alert>
+      ) : (
+        <>
+          <Typography variant="h6" sx={{ mb: 2 }}>Exercices</Typography>
+          {status === 'active' && !canValidate && (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              Vous vous êtes désisté(e) de cette séance : accès à la validation non disponible.
+            </Alert>
+          )}
+          {/* ✅ Largeur relative au lieu de width fixe : 1 carte par ligne sur mobile,
+              plusieurs sur écran large, sans jamais déborder ni être trop étroite */}
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+            {session.exercises.map((exercise) => {
+              const result = validationResults[exercise.id] || {
+                data: exercise.dataFields?.reduce((acc, field) => {
+                  acc[field.label] = '';
+                  return acc;
+                }, {} as Record<string, string | number>) || {}
+              };
 
-          return (
-            <Card
-              key={exercise.id}
-              sx={{
-                width: { xs: '100%', sm: 'calc(50% - 8px)', md: 300 },
-                mb: 2
-              }}
-            >
-              <CardContent>
-                <Typography variant="h6">{exercise.name}</Typography>
-                <Typography sx={{ mb: 1 }}>{exercise.description}</Typography>
-                <Box sx={{
-                  backgroundColor: levelColors[exercise.difficulty] || '#CCCCCC',
-                  color: ['noir', 'blanc'].includes(exercise.difficulty) ? 'black' : 'white',
-                  padding: '4px 8px',
-                  borderRadius: '4px',
-                  display: 'inline-block',
-                  mb: 1
-                }}>
-                  Niveau: {exercise.difficulty}
-                </Box>
-                {exercise.instructions && (
-                  <Typography variant="body2" sx={{ mb: 1 }}>
-                    <strong>Consignes:</strong> {exercise.instructions}
-                  </Typography>
-                )}
-                {exercise.image_base64 && (
-                  <CardMedia
-                    component="img"
-                    height="150"
-                    image={exercise.image_base64}
-                    alt={exercise.name}
-                    sx={{ objectFit: 'contain', mb: 1 }}
-                  />
-                )}
+              return (
+                <Card
+                  key={exercise.id}
+                  sx={{
+                    width: { xs: '100%', sm: 'calc(50% - 8px)', md: 300 },
+                    mb: 2
+                  }}
+                >
+                  <CardContent>
+                    <Typography variant="h6">{exercise.name}</Typography>
+                    <Typography sx={{ mb: 1 }}>{exercise.description}</Typography>
+                    <Box sx={{
+                      backgroundColor: levelColors[exercise.difficulty] || '#CCCCCC',
+                      color: ['noir', 'blanc'].includes(exercise.difficulty) ? 'black' : 'white',
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      display: 'inline-block',
+                      mb: 1
+                    }}>
+                      Niveau: {exercise.difficulty}
+                    </Box>
+                    {exercise.instructions && (
+                      <Typography variant="body2" sx={{ mb: 1 }}>
+                        <strong>Consignes:</strong> {exercise.instructions}
+                      </Typography>
+                    )}
+                    {exercise.image_base64 && (
+                      <CardMedia
+                        component="img"
+                        height="150"
+                        image={exercise.image_base64}
+                        alt={exercise.name}
+                        sx={{ objectFit: 'contain', mb: 1 }}
+                      />
+                    )}
 
-                {isSessionAccessible ? (
-                  <>
-                    {exercise.type === 'validation' ? (
+                    {canValidate ? (
                       <>
-                        <Box sx={{ display: 'flex', gap: 1, mb: 1, flexWrap: 'wrap' }}>
-                          <Button
-                            variant={result.success ? "contained" : "outlined"}
-                            color="success"
-                            size="small"
-                            onClick={() => handleValidateExercise(exercise.id, 'success', true)}
-                          >
-                            ✅ Réussi
-                          </Button>
-                          <Button
-                            variant={!result.success ? "contained" : "outlined"}
-                            color="error"
-                            size="small"
-                            onClick={() => handleValidateExercise(exercise.id, 'success', false)}
-                          >
-                            ❌ Échoué
-                          </Button>
-                        </Box>
-                        <FormControl fullWidth sx={{ mb: 1 }}>
-                          <InputLabel>Nombre d'essais</InputLabel>
-                          <Select
-                            value={result.attempts || 1}
-                            onChange={(e) => handleValidateExercise(exercise.id, 'attempts', e.target.value as number)}
-                            label="Nombre d'essais"
-                          >
-                            {Array.from({ length: 15 }, (_, i) => i + 1).map(num => (
-                              <MenuItem key={num} value={num}>
-                                {num} essai{num > 1 ? 's' : ''}
-                              </MenuItem>
-                            ))}
-                          </Select>
-                        </FormControl>
+                        {exercise.type === 'validation' ? (
+                          <>
+                            <Box sx={{ display: 'flex', gap: 1, mb: 1, flexWrap: 'wrap' }}>
+                              <Button
+                                variant={result.success ? "contained" : "outlined"}
+                                color="success"
+                                size="small"
+                                onClick={() => handleValidateExercise(exercise.id, 'success', true)}
+                              >
+                                ✅ Réussi
+                              </Button>
+                              <Button
+                                variant={!result.success ? "contained" : "outlined"}
+                                color="error"
+                                size="small"
+                                onClick={() => handleValidateExercise(exercise.id, 'success', false)}
+                              >
+                                ❌ Échoué
+                              </Button>
+                            </Box>
+                            <FormControl fullWidth sx={{ mb: 1 }}>
+                              <InputLabel>Nombre d'essais</InputLabel>
+                              <Select
+                                value={result.attempts || 1}
+                                onChange={(e) => handleValidateExercise(exercise.id, 'attempts', e.target.value as number)}
+                                label="Nombre d'essais"
+                              >
+                                {Array.from({ length: 15 }, (_, i) => i + 1).map(num => (
+                                  <MenuItem key={num} value={num}>
+                                    {num} essai{num > 1 ? 's' : ''}
+                                  </MenuItem>
+                                ))}
+                              </Select>
+                            </FormControl>
+                          </>
+                        ) : (
+                          <Box sx={{ mt: 1 }}>
+                            {exercise.dataFields && exercise.dataFields.length > 0 ? (
+                              exercise.dataFields.map((field, index) => (
+                                <TextField
+                                  key={index}
+                                  label={field.label}
+                                  type={field.type === 'number' ? 'number' : field.type === 'time' ? 'text' : 'text'}
+                                  value={result.data?.[field.label] || ''}
+                                  onChange={(e) => handleValidateExercise(
+                                    exercise.id,
+                                    'data',
+                                    { ...result.data, [field.label]: field.type === 'number' ? Number(e.target.value) : e.target.value }
+                                  )}
+                                  fullWidth
+                                  sx={{ mb: 1 }}
+                                  slotProps={{ inputLabel: { shrink: true } }}
+                                />
+                              ))
+                            ) : (
+                              <Typography variant="body2" color="textSecondary">
+                                Aucun champ de données défini pour cet exercice.
+                              </Typography>
+                            )}
+                          </Box>
+                        )}
                       </>
                     ) : (
+                      // ✅ Séance archivée (ou accès non autorisé) : résultats en lecture seule.
                       <Box sx={{ mt: 1 }}>
-                        {exercise.dataFields && exercise.dataFields.length > 0 ? (
-                          exercise.dataFields.map((field, index) => (
-                            <TextField
-                              key={index}
-                              label={field.label}
-                              type={field.type === 'number' ? 'number' : field.type === 'time' ? 'text' : 'text'}
-                              value={result.data?.[field.label] || ''}
-                              onChange={(e) => handleValidateExercise(
-                                exercise.id,
-                                'data',
-                                { ...result.data, [field.label]: field.type === 'number' ? Number(e.target.value) : e.target.value }
-                              )}
-                              fullWidth
-                              sx={{ mb: 1 }}
-                              slotProps={{ inputLabel: { shrink: true } }}
-                            />
+                        {result.success !== undefined ? (
+                          <Chip
+                            label={result.success ? `Réussi (${result.attempts || 1} essai(s))` : 'Échoué'}
+                            color={result.success ? 'success' : 'error'}
+                            size="small"
+                          />
+                        ) : result.data && Object.keys(result.data).length > 0 ? (
+                          Object.entries(result.data).map(([label, value]) => (
+                            <Typography key={label} variant="body2">{label} : {String(value)}</Typography>
                           ))
                         ) : (
-                          <Typography variant="body2" color="textSecondary">
-                            Aucun champ de données défini pour cet exercice.
-                          </Typography>
+                          <Typography variant="body2" color="textSecondary">Aucun résultat enregistré.</Typography>
                         )}
                       </Box>
                     )}
-                  </>
-                ) : (
-                  <Box sx={{ mt: 1 }}>
-                    <Typography variant="body2" color="textSecondary">
-                      Cette séance sera accessible à partir du {new Date(session.date).toLocaleDateString('fr-FR')} à {session.time}.
-                    </Typography>
-                  </Box>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
-      </Box>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </Box>
 
-      {isSessionAccessible && (
-        <Box sx={{ display: 'flex', justifyContent: { xs: 'stretch', sm: 'flex-end' }, mt: 2 }}>
-          <Button
-            variant="contained"
-            color="primary"
-            onClick={handleSubmitResults}
-            fullWidth={false}
-            sx={{ width: { xs: '100%', sm: 'auto' } }}
-          >
-            Enregistrer les résultats
-          </Button>
-        </Box>
+          {canValidate && (
+            <Box sx={{ display: 'flex', justifyContent: { xs: 'stretch', sm: 'flex-end' }, mt: 2 }}>
+              <Button
+                variant="contained"
+                color="primary"
+                onClick={handleSubmitResults}
+                fullWidth={false}
+                sx={{ width: { xs: '100%', sm: 'auto' } }}
+              >
+                Enregistrer les résultats
+              </Button>
+            </Box>
+          )}
+        </>
       )}
     </Container>
   );

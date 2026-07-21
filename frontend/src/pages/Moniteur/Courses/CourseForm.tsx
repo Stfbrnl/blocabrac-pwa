@@ -66,7 +66,7 @@ const CourseForm: React.FC = () => {
     createdAt: new Date(),
     MaxParticipants: 10,
   });
-  const [groups, setGroups] = useState<{ id: string; name: string }[]>([]);
+  const [groups, setGroups] = useState<{ id: string; name: string; students: string[] }[]>([]);
   const [exercises, setExercises] = useState<{ id: string; name: string; type: 'validation' | 'data' }[]>([]);
   const [selectedExercises, setSelectedExercises] = useState<{ id: string; name: string; type: 'validation' | 'data' }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -84,11 +84,12 @@ const CourseForm: React.FC = () => {
           where('moniteurId', '==', user.uid)
         );
         const querySnapshot = await getDocs(q);
-        const groupsData: { id: string; name: string }[] = [];
+        const groupsData: { id: string; name: string; students: string[] }[] = [];
         querySnapshot.forEach((doc) => {
           groupsData.push({
             id: doc.id,
             name: doc.data().name,
+            students: doc.data().students || [],
           });
         });
         setGroups(groupsData);
@@ -167,13 +168,6 @@ const CourseForm: React.FC = () => {
     setError(null);
 
     try {
-      // Calcul automatique de isActive en fonction de la date/heure
-      const courseDateTime = new Date(course.date);
-      const [hours, minutes] = course.time.split(':').map(Number);
-      courseDateTime.setHours(hours, minutes, 0, 0);
-      const now = new Date();
-      const shouldBeActive = courseDateTime <= now;
-
       const courseData = {
         title: course.title,
         description: course.description,
@@ -184,17 +178,23 @@ const CourseForm: React.FC = () => {
         exercises: selectedExercises.map(ex => ex.id),
         createdBy: user.uid,
         createdAt: isEditMode ? course.createdAt : new Date(),
-        isActive: shouldBeActive,
         MaxParticipants: course.MaxParticipants,
       };
 
       if (isEditMode && courseId) {
-        // ✅ On ne touche pas au tableau Participants existant lors d'une mise à jour :
+        // ✅ On ne touche pas au tableau Participants/optedOut existant lors d'une mise à jour :
         // l'écraser ici retirait auparavant tous les participants inscrits à chaque édition.
         await updateDoc(doc(db, 'courses', courseId), courseData);
         setSuccess('Séance mise à jour avec succès !');
       } else {
-        await addDoc(collection(db, 'courses'), { ...courseData, Participants: [] });
+        // ✅ Inscription par défaut de tous les membres du groupe (opt-out ensuite côté client),
+        // au lieu de démarrer avec une liste vide (opt-in).
+        const selectedGroup = groups.find((g) => g.id === course.groupId);
+        await addDoc(collection(db, 'courses'), {
+          ...courseData,
+          Participants: selectedGroup?.students || [],
+          optedOut: [],
+        });
         setSuccess('Séance créée avec succès !');
       }
 

@@ -7,28 +7,8 @@ import {
 } from '@mui/material';
 import { collection, query, where, getDocs, doc, addDoc } from 'firebase/firestore';
 import { db } from '../services/firebaseConfig';
-
-// ✅ Points par couleur (comme demandé)
-const basePoints: Record<string, number> = {
-  vert: 50,
-  bleu: 100,
-  violet: 200,
-  rouge: 400,
-  noir: 600,
-  blanc: 800,
-  rose: 1000
-};
-
-// ✅ Déductions par essai (comme demandé)
-const deductions: Record<string, number> = {
-  vert: 10,
-  bleu: 10,
-  violet: 10,
-  rouge: 20,
-  noir: 20,
-  blanc: 50,
-  rose: 50
-};
+import { calculatePoints } from '../utils/climbingPoints';
+import { getSeasonAge, getFfmeCategory, OPEN_CATEGORY } from '../utils/ageCategory';
 
 interface Competition {
   id: string;
@@ -62,6 +42,7 @@ interface Participant {
   last_name: string;
   email: string;
   age?: number;
+  dateOfBirth?: string;
   gender?: string;
   level?: string;
 }
@@ -69,6 +50,7 @@ interface Participant {
 interface User {
   uid: string;
   age?: number;
+  dateOfBirth?: string;
   gender?: string;
   first_name?: string;
   last_name?: string;
@@ -99,6 +81,7 @@ const AdminCompetitionStats: React.FC = () => {
         const usersData: User[] = snapshot.docs.map(doc => ({
           uid: doc.id,
           age: doc.data().age,
+          dateOfBirth: doc.data().dateOfBirth,
           gender: doc.data().gender,
           first_name: doc.data().first_name,
           last_name: doc.data().last_name,
@@ -187,6 +170,7 @@ const AdminCompetitionStats: React.FC = () => {
             last_name: user?.last_name || doc.data().last_name || '',
             email: user?.email || doc.data().email || '',
             age: user?.age || doc.data().age, // ✅ Prendre age depuis users
+            dateOfBirth: user?.dateOfBirth || doc.data().dateOfBirth,
             gender: user?.gender || doc.data().gender, // ✅ Prendre gender depuis users
             level: user?.level || doc.data().level
           };
@@ -202,16 +186,6 @@ const AdminCompetitionStats: React.FC = () => {
     fetchData();
   }, [selectedCompetition, users]);
 
-  // ✅ Fonction de calcul des points (utilise difficulty OU color)
-  const calculatePoints = (boulder: Boulder, attempts: number, success: boolean): number => {
-    if (!success) return 0;
-    // ✅ Utiliser color si difficulty n'est pas définie
-    const difficulty = boulder.color || boulder.difficulty;
-    const base = basePoints[difficulty] || 0;
-    const deduction = (attempts > 1 ? (attempts - 1) * (deductions[difficulty] || 0) : 0);
-    return Math.max(0, base - deduction);
-  };
-
   const getParticipantScores = (): { participant: Participant; score: number; boulders: number }[] => {
     const scores: Record<string, { score: number; boulders: number }> = {};
 
@@ -222,7 +196,7 @@ const AdminCompetitionStats: React.FC = () => {
       const boulder = boulders.find(b => b.id === result.boulder_id);
       if (!boulder) return;
 
-      const points = calculatePoints(boulder, result.attempts, result.success);
+      const points = calculatePoints(boulder.color || boulder.difficulty, result.attempts, result.success);
       const key = participant.user_id;
 
       if (!scores[key]) {
@@ -242,17 +216,6 @@ const AdminCompetitionStats: React.FC = () => {
     }).sort((a, b) => b.score - a.score);
   };
 
-  const getAgeCategory = (age?: number): string => {
-    if (age === undefined || age === null) return 'Inconnu';
-    if (age >= 55) return 'Vétérans (55+)';
-    if (age >= 45) return '45-54 ans';
-    if (age >= 35) return '35-44 ans';
-    if (age >= 18) return '18-34 ans';
-    if (age >= 14) return '14-17 ans';
-    if (age >= 10) return '10-14 ans';
-    return 'Moins de 10 ans';
-  };
-
   const getClassementByCategory = (category: 'global' | 'age' | 'gender'): any[] => {
     const scores = getParticipantScores();
 
@@ -261,7 +224,7 @@ const AdminCompetitionStats: React.FC = () => {
     } else if (category === 'age') {
       const byAge: Record<string, any[]> = {};
       scores.forEach(score => {
-        const ageCategory = getAgeCategory(score.participant.age);
+        const ageCategory = getFfmeCategory(getSeasonAge(score.participant.dateOfBirth, score.participant.age));
         if (!byAge[ageCategory]) {
           byAge[ageCategory] = [];
         }
@@ -313,7 +276,7 @@ const AdminCompetitionStats: React.FC = () => {
   const generateClassementMessage = () => {
     const globalClassement = getClassementByCategory('global');
     const competition = competitions.find(c => c.id === selectedCompetition);
-    let message = `🏆 **Classement Global - ${competition?.name}** 🏆\n\n`;
+    let message = `🏆 **Classement ${OPEN_CATEGORY} - ${competition?.name}** 🏆\n\n`;
 
     globalClassement.forEach((item, index) => {
       message += `${index + 1}. **${item.participant.first_name} ${item.participant.last_name}** - ${item.score} pts (${item.boulders} blocs validés)\n`;
@@ -381,7 +344,7 @@ const AdminCompetitionStats: React.FC = () => {
             </Box>
 
             <Paper variant="outlined" sx={{ p: 2, mb: 3 }}>
-              <Typography variant="h6">Classement Global</Typography>
+              <Typography variant="h6">Classement {OPEN_CATEGORY}</Typography>
               <TableContainer sx={{ overflowX: 'auto' }}>
                 <Table sx={{ minWidth: 600 }}>
                   <TableHead>
@@ -405,7 +368,7 @@ const AdminCompetitionStats: React.FC = () => {
                           <Chip label={item.score} color="primary" />
                         </TableCell>
                         <TableCell>{item.boulders}</TableCell>
-                        <TableCell>{getAgeCategory(item.participant.age)}</TableCell>
+                        <TableCell>{getFfmeCategory(getSeasonAge(item.participant.dateOfBirth, item.participant.age))}</TableCell>
                         <TableCell>{item.participant.gender || 'Inconnu'}</TableCell>
                       </TableRow>
                     ))}

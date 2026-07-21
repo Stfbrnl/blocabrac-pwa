@@ -21,6 +21,7 @@ const ClientCourseSession = lazy(() => import('./pages/Client/Courses/ClientCour
 const ClientProfile = lazy(() => import('./pages/Client/Profile/ClientProfile'));
 const ClientStats = lazy(() => import('./pages/Client/Stats/ClientStats'));
 const ClientMessages = lazy(() => import('./pages/Client/Messages/ClientMessages'));
+const ClientClassement = lazy(() => import('./pages/Client/Classement/ClientClassement'));
 
 // Pages Ouvreur
 const OuvreurScreen = lazy(() => import('./pages/Ouvreur/OuvreurScreen'));
@@ -85,6 +86,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             <Route path="/client/profile" element={<ProtectedRoute role="client"><ClientProfile /></ProtectedRoute>} />
             <Route path="/client/stats" element={<ProtectedRoute role="client"><ClientStats /></ProtectedRoute>} />
             <Route path="/client/messages" element={<ProtectedRoute role="client"><ClientMessages /></ProtectedRoute>} />
+            <Route path="/client/classement" element={<ProtectedRoute role="client"><ClientClassement /></ProtectedRoute>} />
 
             {/* ========== ROUTES OUVREUR ========== */}
             <Route path="/ouvreur" element={<ProtectedRoute role="ouvreur"><OuvreurScreen /></ProtectedRoute>} />

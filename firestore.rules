@@ -12,6 +12,18 @@ service cloud.firestore {
       return (profile.roles is list && role in profile.roles) || profile.role == role;
     }
 
+    // ✅ Un client ne peut valider les exercices d'une séance (client_course_results) que si :
+    // elle a été activée par le moniteur ("séance du jour"), pas encore archivée, et le client
+    // fait partie des participants sans s'être désisté (voir src/utils/courseSessionStatus.ts,
+    // dont cette fonction reflète la logique côté client).
+    function canValidateCourse(courseId) {
+      let course = get(/databases/$(database)/documents/courses/$(courseId)).data;
+      return 'activatedAt' in course &&
+             !('archivedAt' in course) &&
+             course.Participants.hasAny([request.auth.uid]) &&
+             !(course.optedOut is list && course.optedOut.hasAny([request.auth.uid]));
+    }
+
     // ========== 1. Utilisateurs ==========
     match /users/{userId} {
       allow read: if request.auth != null &&
@@ -90,10 +102,19 @@ service cloud.firestore {
       allow create: if request.auth != null &&
                       (isUserRole("moniteur") ||
                        isUserRole("admin"));
-      allow update, delete: if request.auth != null &&
-                              (request.auth.uid == resource.data.createdBy ||
-                               get(/databases/$(database)/documents/Groups/$(resource.data.groupId)).data.moniteurId == request.auth.uid ||
-                               isUserRole("admin"));
+      allow update: if request.auth != null &&
+                      (request.auth.uid == resource.data.createdBy ||
+                       get(/databases/$(database)/documents/Groups/$(resource.data.groupId)).data.moniteurId == request.auth.uid ||
+                       isUserRole("admin") ||
+                       // ✅ Un participant peut se désister/se réinscrire (uniquement le champ
+                       // "optedOut"), tant que la séance n'a pas encore été activée.
+                       (resource.data.Participants.hasAny([request.auth.uid]) &&
+                        !('activatedAt' in resource.data) &&
+                        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['optedOut'])));
+      allow delete: if request.auth != null &&
+                      (request.auth.uid == resource.data.createdBy ||
+                       get(/databases/$(database)/documents/Groups/$(resource.data.groupId)).data.moniteurId == request.auth.uid ||
+                       isUserRole("admin"));
     }
 
     // ========== 6. Exercices ==========
@@ -170,14 +191,21 @@ service cloud.firestore {
     }
 
     match /client_course_results/{docId} {
+      // ✅ "read" et "write" ouverts aussi au client lui-même : c'est justement
+      // ClientCourseSession.tsx/ClientStats.tsx (pages clientes) qui lisent/écrivent
+      // ici pour l'utilisateur connecté — resterait sinon en échec de permission.
       allow read: if request.auth != null &&
-                    (isUserRole("ouvreur") ||
+                    (resource.data.userId == request.auth.uid ||
+                     isUserRole("ouvreur") ||
                      isUserRole("admin") ||
                      isUserRole("moniteur"));
       allow write: if request.auth != null &&
                      (isUserRole("ouvreur") ||
                       isUserRole("admin") ||
-                      isUserRole("moniteur"));
+                      isUserRole("moniteur") ||
+                      (isUserRole("client") &&
+                       request.resource.data.userId == request.auth.uid &&
+                       canValidateCourse(request.resource.data.courseId)));
     }
 
     // ========== 12. Collections Compétitions ==========

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculatePoints } from './competitionPoints';
+import { calculatePoints } from './climbingPoints';
 
 describe('calculatePoints', () => {
   it('rapporte 0 point en cas d\'échec, quelle que soit la difficulté', () => {

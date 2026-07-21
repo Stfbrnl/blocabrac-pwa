@@ -12,7 +12,7 @@ import {
   useMediaQuery
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
-import { calculatePoints } from '../../../utils/competitionPoints';
+import { calculatePoints } from '../../../utils/climbingPoints';
 
 const levelColors: Record<string, string> = {
   jaune: '#FFFF00',

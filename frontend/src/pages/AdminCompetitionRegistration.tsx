@@ -9,6 +9,7 @@ import { db } from '../services/firebaseConfig';
 import { collection, getDocs, doc, addDoc, deleteDoc, query, where, updateDoc } from 'firebase/firestore';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { type Level, canUserRegister } from '../utils/competitionEligibility';
+import { getSeasonAge } from '../utils/ageCategory';
 
 type UserRole = 'admin' | 'ouvreur' | 'moniteur' | 'client';
 type CompetitionStatus = 'à venir' | 'en cours' | 'terminée' | 'annulée';
@@ -20,6 +21,7 @@ interface User {
   last_name: string;
   roles: UserRole[];
   age?: number;
+  dateOfBirth?: string;
   gender?: string;
   level?: Level;
   inscritAuxCours?: boolean;
@@ -46,6 +48,7 @@ interface CompetitionParticipant {
   first_name: string;
   last_name: string;
   age?: number;
+  dateOfBirth?: string;
   gender?: string;
   level?: Level;
   registered_at: string;
@@ -81,6 +84,7 @@ const AdminCompetitionRegistration: React.FC = () => {
           last_name: doc.data().last_name || '',
           roles: doc.data().roles || [],
           age: doc.data().age,
+        dateOfBirth: doc.data().dateOfBirth,
           gender: doc.data().gender,
           level: doc.data().level,
           inscritAuxCours: doc.data().inscritAuxCours || false,
@@ -159,6 +163,7 @@ const AdminCompetitionRegistration: React.FC = () => {
             first_name: user?.first_name || doc.data().first_name || '',
             last_name: user?.last_name || doc.data().last_name || '',
             age: user?.age,
+            dateOfBirth: user?.dateOfBirth,
             gender: user?.gender,
             level: user?.level,
             registered_at: doc.data().registered_at || '',
@@ -189,6 +194,7 @@ const AdminCompetitionRegistration: React.FC = () => {
         last_name: doc.data().last_name || '',
         roles: doc.data().roles || [],
         age: doc.data().age,
+        dateOfBirth: doc.data().dateOfBirth,
         gender: doc.data().gender,
         level: doc.data().level,
         inscritAuxCours: doc.data().inscritAuxCours || false,
@@ -235,6 +241,7 @@ const AdminCompetitionRegistration: React.FC = () => {
         first_name: user.first_name,
         last_name: user.last_name,
         age: user.age,
+        dateOfBirth: user.dateOfBirth,
         gender: user.gender,
         level: user.level,
         registered_at: new Date().toISOString(),
@@ -373,7 +380,7 @@ const AdminCompetitionRegistration: React.FC = () => {
                         )}
 
                         <Typography variant="body2" sx={{ mb: 1 }}>
-                          Âge : {participant.age || 'N/A'} · Genre : {participant.gender || 'N/A'}
+                          Âge : {getSeasonAge(participant.dateOfBirth, participant.age) ?? 'N/A'} · Genre : {participant.gender || 'N/A'}
                         </Typography>
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                           Inscrit le {new Date(participant.registered_at).toLocaleString()}
@@ -437,7 +444,7 @@ const AdminCompetitionRegistration: React.FC = () => {
                               />
                             ) : 'N/A'}
                           </TableCell>
-                          <TableCell>{participant.age || 'N/A'}</TableCell>
+                          <TableCell>{getSeasonAge(participant.dateOfBirth, participant.age) ?? 'N/A'}</TableCell>
                           <TableCell>{participant.gender || 'N/A'}</TableCell>
                           <TableCell>
                             <Switch

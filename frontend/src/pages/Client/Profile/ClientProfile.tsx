@@ -15,7 +15,9 @@ import {
   Select,
   MenuItem,
   Snackbar,
-  Alert
+  Alert,
+  Switch,
+  FormControlLabel
 } from '@mui/material';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 
@@ -38,8 +40,10 @@ const ClientProfile: React.FC = () => {
     last_name: string;
     email: string;
     age?: number;
+    dateOfBirth?: string;
     gender?: string;
     level?: string;
+    classementOptIn?: boolean;
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -62,8 +66,10 @@ const ClientProfile: React.FC = () => {
             last_name: string;
             email: string;
             age?: number;
+            dateOfBirth?: string;
             gender?: string;
             level?: string;
+            classementOptIn?: boolean;
           });
         }
       } catch (err) {
@@ -88,9 +94,10 @@ const ClientProfile: React.FC = () => {
         first_name: userData.first_name,
         last_name: userData.last_name,
         email: userData.email,
-        age: userData.age,
+        dateOfBirth: userData.dateOfBirth,
         gender: userData.gender,
         level: userData.level,
+        classementOptIn: userData.classementOptIn ?? false,
       };
 
       await updateDoc(doc(db, 'users', user.uid), updates);
@@ -168,13 +175,14 @@ const ClientProfile: React.FC = () => {
           <TextField
             margin="normal"
             fullWidth
-            label="Âge"
-            type="number"
-            value={userData.age || ''}
+            label="Date de naissance"
+            type="date"
+            value={userData.dateOfBirth || ''}
             onChange={(e) => setUserData({
               ...userData,
-              age: e.target.value ? parseInt(e.target.value) : undefined
+              dateOfBirth: e.target.value || undefined
             })}
+            slotProps={{ inputLabel: { shrink: true } }}
           />
 
           <FormControl fullWidth margin="normal">
@@ -184,9 +192,9 @@ const ClientProfile: React.FC = () => {
               onChange={(e) => setUserData({ ...userData, gender: e.target.value })}
               label="Genre"
             >
-              <MenuItem value="homme">Homme</MenuItem>
-              <MenuItem value="femme">Femme</MenuItem>
-              <MenuItem value="autre">Autre</MenuItem>
+              <MenuItem value="Homme">Homme</MenuItem>
+              <MenuItem value="Femme">Femme</MenuItem>
+              <MenuItem value="Autre">Autre</MenuItem>
             </Select>
           </FormControl>
 
@@ -204,6 +212,17 @@ const ClientProfile: React.FC = () => {
               ))}
             </Select>
           </FormControl>
+
+          <FormControlLabel
+            sx={{ mt: 1 }}
+            control={
+              <Switch
+                checked={userData.classementOptIn ?? false}
+                onChange={(e) => setUserData({ ...userData, classementOptIn: e.target.checked })}
+              />
+            }
+            label="Apparaître dans le classement des grimpeurs"
+          />
 
           <Box sx={{ mt: 4, display: 'flex', gap: 2 }}>
             <Button
