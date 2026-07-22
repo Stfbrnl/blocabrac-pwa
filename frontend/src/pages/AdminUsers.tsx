@@ -10,11 +10,15 @@ import {
 import { Delete as DeleteIcon, Edit as EditIcon, Add as AddIcon, ArrowUpward as ArrowUpwardIcon, ArrowDownward as ArrowDownwardIcon, Lock as LockIcon, LockOpen as LockOpenIcon } from '@mui/icons-material';
 import { db, auth } from '../services/firebaseConfig';
 import {
-  collection, getDocs, doc, updateDoc, deleteDoc, setDoc, query, orderBy, writeBatch
+  collection, getDocs, doc, deleteDoc, writeBatch
 } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, sendPasswordResetEmail, getAuth, signOut } from 'firebase/auth';
-import { initializeApp, deleteApp } from 'firebase/app';
+import { initializeApp, deleteApp, FirebaseError } from 'firebase/app';
 import { getSeasonAge } from '../utils/ageCategory';
+
+// ✅ Rôles "staff" mirorés dans "staff_directory" (annuaire public lu par
+// ClientMessages.tsx et ClientDaily.tsx, voir handleCreateUser/handleUpdateUser).
+const STAFF_ROLES = ['admin', 'moniteur', 'ouvreur'];
 
 // ✅ Tableau de correspondance code-couleur/cotations
 const levelOptions = [
@@ -218,11 +222,14 @@ const AdminUsers: React.FC = () => {
           dateOfBirth: editForm.dateOfBirth,
         }, { merge: true });
       }
-      // ✅ Même logique que "classement_profiles" ci-dessus, pour l'annuaire des
-      // moniteurs lu par ClientMessages.tsx (un client ne peut pas lister "users").
-      if (roles.includes('moniteur')) {
+      // ✅ Même logique que "classement_profiles" ci-dessus, pour l'annuaire public
+      // admin/moniteur/ouvreur lu par ClientMessages.tsx (destinataire) et
+      // ClientDaily.tsx ("Créé par" un bloc) : un client ne peut pas lister "users".
+      const staffRoles = roles.filter((r) => STAFF_ROLES.includes(r));
+      if (staffRoles.length > 0) {
         batch.set(doc(db, 'staff_directory', selectedUser.uid), {
           displayName: `${editForm.first_name} ${editForm.last_name}`.trim(),
+          roles: staffRoles,
         });
       } else {
         batch.delete(doc(db, 'staff_directory', selectedUser.uid));
@@ -309,11 +316,14 @@ const AdminUsers: React.FC = () => {
           classementOptIn: false,
         });
       }
-      // ✅ Même logique que "classement_profiles" ci-dessus, pour l'annuaire des
-      // moniteurs lu par ClientMessages.tsx (un client ne peut pas lister "users").
-      if (createForm.roles.includes('moniteur')) {
+      // ✅ Même logique que "classement_profiles" ci-dessus, pour l'annuaire public
+      // admin/moniteur/ouvreur lu par ClientMessages.tsx (destinataire) et
+      // ClientDaily.tsx ("Créé par" un bloc) : un client ne peut pas lister "users".
+      const staffRoles = (createForm.roles as string[]).filter((r) => STAFF_ROLES.includes(r));
+      if (staffRoles.length > 0) {
         createBatch.set(doc(db, 'staff_directory', newUser.uid), {
           displayName: `${createForm.first_name} ${createForm.last_name}`.trim(),
+          roles: staffRoles,
         });
       }
       await createBatch.commit();
@@ -344,17 +354,17 @@ const AdminUsers: React.FC = () => {
       setOpenCreateDialog(false);
       setSnackbarMessage("Utilisateur créé avec succès ! Un email de réinitialisation a été envoyé.");
       setOpenSnackbar(true);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Erreur :", error);
       let message = "Erreur lors de la création de l'utilisateur.";
 
-      if (error.code === 'auth/email-already-in-use') {
+      if (error instanceof FirebaseError && error.code === 'auth/email-already-in-use') {
         message = "Cet email est déjà utilisé.";
-      } else if (error.code === 'auth/weak-password') {
+      } else if (error instanceof FirebaseError && error.code === 'auth/weak-password') {
         message = "Le mot de passe doit contenir au moins 6 caractères.";
-      } else if (error.code === 'auth/invalid-email') {
+      } else if (error instanceof FirebaseError && error.code === 'auth/invalid-email') {
         message = "L'email saisi est invalide.";
-      } else if (error.message) {
+      } else if (error instanceof Error) {
         message = error.message;
       }
 

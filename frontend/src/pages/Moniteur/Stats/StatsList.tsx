@@ -9,9 +9,6 @@ import {
   doc,
   setDoc,
   serverTimestamp,
-  getDoc,
-  DocumentData,
-  QueryDocumentSnapshot,
   Timestamp,
 } from 'firebase/firestore';
 import {
@@ -61,12 +58,6 @@ interface Group {
   moniteurId: string;
 }
 
-interface Course {
-  id: string;
-  title: string;
-  groupId?: string;
-}
-
 interface Exercise {
   id: string;
   name: string;
@@ -92,17 +83,6 @@ interface Badge {
   };
   type: 'automatic' | 'manual';
   color?: string;
-}
-
-interface ClientBadge {
-  id: string;
-  userId: string;
-  badgeId: string;
-  awardedAt: Date;
-  awardedBy: string;
-  awardedByName?: string;
-  exerciseId?: string;
-  exerciseName?: string;
 }
 
 interface Diploma {
@@ -139,11 +119,8 @@ const StatsList: React.FC = () => {
   const [success, setSuccess] = useState<string | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
-  const [courses, setCourses] = useState<Course[]>([]);
   const [boulders, setBoulders] = useState<Boulder[]>([]);
   const [badges, setBadges] = useState<Badge[]>([]);
-  const [clientBadges, setClientBadges] = useState<ClientBadge[]>([]);
-  const [diplomas, setDiplomas] = useState<Diploma[]>([]);
   const [exercises, setExercises] = useState<Exercise[]>([]);
 
   // États pour les filtres
@@ -193,11 +170,11 @@ const StatsList: React.FC = () => {
   };
 
   // Fonction pour convertir un Timestamp ou Date en string
-  const formatDate = (date: any): string => {
+  const formatDate = (date: unknown): string => {
     if (!date) return 'N/A';
     if (date instanceof Date) return date.toLocaleDateString('fr-FR');
     if (date instanceof Timestamp) return date.toDate().toLocaleDateString('fr-FR');
-    if (date?.seconds) return new Date(date.seconds * 1000).toLocaleDateString('fr-FR');
+    if (typeof date === 'object' && 'seconds' in date) return new Date((date as { seconds: number }).seconds * 1000).toLocaleDateString('fr-FR');
     if (typeof date === 'string' && date) return date;
     return 'N/A';
   };
@@ -245,16 +222,6 @@ const StatsList: React.FC = () => {
           moniteurId: groupDoc.data().moniteurId,
         }));
         setGroups(groupsList);
-
-        // Récupérer les séances
-        const coursesQuery = query(collection(db, 'courses'), where('createdBy', '==', user.uid));
-        const coursesSnapshot = await getDocs(coursesQuery);
-        const coursesList: Course[] = coursesSnapshot.docs.map((courseDoc) => ({
-          id: courseDoc.id,
-          title: courseDoc.data().title,
-          groupId: courseDoc.data().groupId,
-        }));
-        setCourses(coursesList);
 
         // Récupérer les blocs
         const bouldersQuery = query(collection(db, 'boulders'));
@@ -337,61 +304,6 @@ const StatsList: React.FC = () => {
           }
         }
         setUserResults(resultsData);
-
-        // Récupérer les badges des clients
-        const clientBadgesQuery = query(collection(db, 'client_badges'));
-        const clientBadgesSnapshot = await getDocs(clientBadgesQuery);
-        const clientBadgesList: ClientBadge[] = clientBadgesSnapshot.docs.map((badgeLinkDoc) => {
-          const data = badgeLinkDoc.data();
-          const awardedAt = data.awardedAt instanceof Timestamp
-            ? data.awardedAt.toDate()
-            : data.awardedAt?.seconds
-              ? new Date(data.awardedAt.seconds * 1000)
-              : data.awardedAt
-                ? new Date(data.awardedAt)
-                : new Date();
-
-          return {
-            id: badgeLinkDoc.id,
-            userId: data.userId || '',
-            badgeId: data.badgeId || '',
-            awardedAt,
-            awardedBy: data.awardedBy || '',
-            awardedByName: data.awardedByName || '',
-            exerciseId: data.exerciseId,
-            exerciseName: data.exerciseName,
-          };
-        });
-        setClientBadges(clientBadgesList);
-
-        // Récupérer les diplômes
-        const diplomasQuery = query(collection(db, 'diplomas'));
-        const diplomasSnapshot = await getDocs(diplomasQuery);
-        const diplomasList: Diploma[] = diplomasSnapshot.docs.map((diplomaDoc) => {
-          const data = diplomaDoc.data();
-          const awardedAt = data.awardedAt instanceof Timestamp
-            ? data.awardedAt.toDate()
-            : data.awardedAt?.seconds
-              ? new Date(data.awardedAt.seconds * 1000)
-              : data.awardedAt
-                ? new Date(data.awardedAt)
-                : new Date();
-
-          // ✅ Récupérer Prénom Nom depuis users plutôt que displayName/email
-          const matchedUser = usersList.find((u) => u.id === data.userId);
-          const matchedMoniteur = usersList.find((u) => u.id === data.awardedBy);
-
-          return {
-            id: diplomaDoc.id,
-            userId: data.userId || '',
-            userName: getFullName(matchedUser, data.userName || 'Utilisateur inconnu'),
-            type: data.type || '',
-            awardedAt,
-            awardedBy: data.awardedBy || '',
-            awardedByName: getFullName(matchedMoniteur, data.awardedByName || 'Moniteur inconnu'),
-          };
-        });
-        setDiplomas(diplomasList);
 
         setIsLoading(false);
       } catch (err: unknown) {
@@ -500,18 +412,6 @@ const StatsList: React.FC = () => {
       awardedBy: user.uid,
       awardedByName: moniteurFullName,
     });
-
-    setClientBadges((prev) => [
-      ...prev,
-      {
-        id: newClientBadgeId,
-        userId,
-        badgeId,
-        awardedAt: new Date(),
-        awardedBy: user.uid,
-        awardedByName: moniteurFullName,
-      },
-    ]);
   };
 
   // Attribuer un badge manuellement

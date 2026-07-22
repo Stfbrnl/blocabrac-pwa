@@ -60,14 +60,17 @@ const ClientMessages: React.FC = () => {
         getDocs(receivedMessagesQuery)
       ]);
 
-      // ✅ Source unique : "staff_directory", l'annuaire public des moniteurs tenu à
-      // jour par AdminUsers.tsx. Un client ne peut pas lister la collection "users"
-      // (règles Firestore), d'où cette fiche séparée dédiée à cet usage.
+      // ✅ Source unique : "staff_directory", l'annuaire public admin/moniteur/ouvreur
+      // tenu à jour par AdminUsers.tsx. Un client ne peut pas lister la collection
+      // "users" (règles Firestore), d'où cette fiche séparée ; on ne garde ici que les
+      // comptes moniteur, seuls destinataires pertinents pour cette messagerie.
       const staffSnapshot = await getDocs(collection(db, 'staff_directory'));
-      const moniteursList = staffSnapshot.docs.map((docSnap) => {
-        const data = docSnap.data() as DocumentData;
-        return { id: docSnap.id, displayName: data.displayName || docSnap.id };
-      });
+      const moniteursList = staffSnapshot.docs
+        .filter((docSnap) => (docSnap.data().roles || []).includes('moniteur'))
+        .map((docSnap) => {
+          const data = docSnap.data() as DocumentData;
+          return { id: docSnap.id, displayName: data.displayName || docSnap.id };
+        });
       setMoniteurs(moniteursList);
 
       if (moniteursList.length > 0) {

@@ -64,11 +64,13 @@ service cloud.firestore {
                      (request.auth.uid == userId || isUserRole("admin"));
     }
 
-    // ✅ Annuaire public des moniteurs (nom uniquement), lu par ClientMessages.tsx pour
-    // proposer un destinataire : un client ne peut pas lister/lire la collection "users"
-    // d'un autre utilisateur, donc cette fiche séparée (même pattern que
-    // "classement_profiles" ci-dessus) sert de source sans jamais exposer d'autres
-    // données. Tenue à jour par AdminUsers.tsx au même moment que "users".
+    // ✅ Annuaire public admin/moniteur/ouvreur (nom + rôles, rien d'autre), lu par
+    // ClientMessages.tsx (choix du destinataire) et ClientDaily.tsx ("Créé par" un
+    // bloc) : un client ne peut pas lister/lire la collection "users" d'un autre
+    // utilisateur, donc cette fiche séparée (même pattern que "classement_profiles"
+    // ci-dessus) sert de source sans jamais exposer d'autres données. Tenue à jour par
+    // AdminUsers.tsx au même moment que "users" ; comptes déjà existants avant V2.1
+    // rétro-remplis une fois via firestore-migration/migrate-staff-directory.js.
     match /staff_directory/{userId} {
       allow read: if request.auth != null;
       allow write: if request.auth != null && isUserRole("admin");

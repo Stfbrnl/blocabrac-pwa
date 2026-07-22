@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '../../../services/firebaseConfig';
 import {
@@ -54,7 +54,6 @@ import {
   ExpandMore as ExpandMoreIcon,
   ExpandLess as ExpandLessIcon
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
 
 interface Message {
   id: string;
@@ -102,10 +101,9 @@ const MessagesList: React.FC = () => {
   const [newMessageContent, setNewMessageContent] = useState('');
   const [recipients, setRecipients] = useState<string[]>([]);
   const [recipientType, setRecipientType] = useState<'client' | 'group'>('client');
-  const navigate = useNavigate();
 
   // Fonction pour charger les messages - ACCESSIBLE PARTOUT DANS LE COMPOSANT
-  const fetchMessages = async () => {
+  const fetchMessages = useCallback(async () => {
     if (!user?.uid) return;
 
     try {
@@ -159,13 +157,13 @@ const MessagesList: React.FC = () => {
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
       setMessages(allMessages);
-    } catch (err: any) {
-      setError(`Erreur: ${err.message}`);
+    } catch (err: unknown) {
+      setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
       console.error("Erreur Firestore:", err);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [user, clients, groups]);
 
   // Charger les clients et les groupes
   useEffect(() => {
@@ -214,8 +212,10 @@ const MessagesList: React.FC = () => {
 
   // Charger les messages quand clients ou groups changent
   useEffect(() => {
-    fetchMessages();
-  }, [clients, groups, user]); // ESLint peut avertir, mais c'est normal ici
+    void (async () => {
+      await fetchMessages();
+    })();
+  }, [fetchMessages]);
 
   const handleToggleExpand = (messageId: string) => {
     setMessages(prevMessages =>
@@ -279,8 +279,8 @@ const MessagesList: React.FC = () => {
       setReplyContent('');
       setSelectedMessage(null);
       await fetchMessages();
-    } catch (err: any) {
-      setError(`Erreur: ${err.message}`);
+    } catch (err: unknown) {
+      setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -334,8 +334,8 @@ const MessagesList: React.FC = () => {
       setNewMessageContent('');
       setRecipients([]);
       await fetchMessages();
-    } catch (err: any) {
-      setError(`Erreur: ${err.message}`);
+    } catch (err: unknown) {
+      setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 

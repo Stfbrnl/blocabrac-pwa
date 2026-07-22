@@ -53,12 +53,29 @@ interface UserInfo {
   lastName: string;
 }
 
+interface Boulder {
+  id: string;
+  number: number | string;
+  wall: string;
+  color?: string;
+  difficulty?: string;
+  difficulty_level?: string;
+  difficulty_types?: string[];
+  image_url?: string;
+  image_base64?: string;
+  instructions?: string;
+  created_at?: string;
+  created_by?: string;
+  type?: string;
+  is_active?: boolean;
+}
+
 const ClientDaily: React.FC = () => {
   const [user, loadingAuth] = useAuthState(auth);
-  const [boulders, setBoulders] = useState<any[]>([]);
+  const [boulders, setBoulders] = useState<Boulder[]>([]);
   const [usersById, setUsersById] = useState<Record<string, UserInfo>>({});
   const [selectedWall, setSelectedWall] = useState<string | null>(null);
-  const [selectedBoulder, setSelectedBoulder] = useState<any | null>(null);
+  const [selectedBoulder, setSelectedBoulder] = useState<Boulder | null>(null);
   const [ratings, setRatings] = useState<Record<string, number>>({});
   const [comments, setComments] = useState<Record<string, string>>({});
   const [attempts, setAttempts] = useState<Record<string, number>>({});
@@ -89,37 +106,33 @@ const ClientDaily: React.FC = () => {
 
     const fetchUsers = async () => {
       const map: Record<string, UserInfo> = {};
+      // ✅ Un client ne peut pas lister toute la collection "users" (règles Firestore :
+      // lecture limitée à son propre document pour ce rôle). "staff_directory" (annuaire
+      // public admin/moniteur/ouvreur, voir AdminUsers.tsx) permet de résoudre le "Créé
+      // par" d'un bloc ; son propre document reste lu à part pour son propre nom dans
+      // les signalements envoyés.
       try {
-        const snapshot = await getDocs(collection(db, 'users'));
-        snapshot.docs.forEach((userDoc) => {
-          const data = userDoc.data();
-          map[userDoc.id] = {
-            id: userDoc.id,
+        const staffSnapshot = await getDocs(collection(db, 'staff_directory'));
+        staffSnapshot.docs.forEach((staffDoc) => {
+          const data = staffDoc.data();
+          const [firstName, ...lastNameParts] = (data.displayName || '').split(' ');
+          map[staffDoc.id] = { id: staffDoc.id, firstName: firstName || '', lastName: lastNameParts.join(' ') };
+        });
+      } catch (err) {
+        console.error("Erreur lors du chargement de l'annuaire staff:", err);
+      }
+      try {
+        const ownDoc = await getDoc(doc(db, 'users', user.uid));
+        if (ownDoc.exists()) {
+          const data = ownDoc.data();
+          map[user.uid] = {
+            id: user.uid,
             firstName: data.first_name || '',
             lastName: data.last_name || '',
           };
-        });
-      } catch (err) {
-        console.error('Erreur lors du chargement des utilisateurs:', err);
-        // ✅ Un client ne peut pas lister toute la collection "users" (règles Firestore
-        // : lecture limitée à son propre document pour ce rôle) — la requête ci-dessus
-        // échoue donc systématiquement pour un vrai client. On récupère au moins son
-        // propre profil, pour que son nom soit correct dans les signalements envoyés
-        // (le nom des AUTRES utilisateurs, ex: "Créé par" sur un bloc, reste non
-        // résolu tant que ce point n'est pas traité plus largement).
-        try {
-          const ownDoc = await getDoc(doc(db, 'users', user.uid));
-          if (ownDoc.exists()) {
-            const data = ownDoc.data();
-            map[user.uid] = {
-              id: user.uid,
-              firstName: data.first_name || '',
-              lastName: data.last_name || '',
-            };
-          }
-        } catch (ownErr) {
-          console.error('Erreur lors du chargement de son propre profil:', ownErr);
         }
+      } catch (ownErr) {
+        console.error('Erreur lors du chargement de son propre profil:', ownErr);
       }
       setUsersById(map);
     };
@@ -139,14 +152,14 @@ const ClientDaily: React.FC = () => {
           where('is_active', '==', true)
         );
         const snapshot = await getDocs(q);
-        const bouldersData = snapshot.docs.map(doc => ({
+        const bouldersData: Boulder[] = snapshot.docs.map(doc => ({
           id: doc.id,
           number: doc.data().number || doc.id,
           ...doc.data()
-        }));
+        } as Boulder));
         setBoulders(bouldersData);
-      } catch (err: any) {
-        setError(`Erreur: ${err.message}`);
+      } catch (err: unknown) {
+        setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
         console.error("Erreur Firestore:", err);
       } finally {
         setLoading(false);
@@ -160,7 +173,7 @@ const ClientDaily: React.FC = () => {
     return boulders.filter(boulder => boulder.wall === wall);
   };
 
-  const isMysteryBoulder = (boulder: any): boolean => {
+  const isMysteryBoulder = (boulder: Boulder): boolean => {
     return boulder.color === 'mystère' ||
            boulder.color === 'mystere' ||
            boulder.difficulty === 'mystère' ||
@@ -172,7 +185,7 @@ const ClientDaily: React.FC = () => {
     setOpenWallDialog(true);
   };
 
-  const handleOpenBoulder = (boulder: any) => {
+  const handleOpenBoulder = (boulder: Boulder) => {
     setSelectedBoulder(boulder);
     setOpenBoulderDialog(true);
   };
@@ -224,8 +237,8 @@ const ClientDaily: React.FC = () => {
       setSuccess('Réussite enregistrée!');
       setTimeout(() => setSuccess(null), 3000);
       await updateClassementProfile(user.uid);
-    } catch (err: any) {
-      setError(`Erreur: ${err.message}`);
+    } catch (err: unknown) {
+      setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -253,12 +266,12 @@ const ClientDaily: React.FC = () => {
       // ré-écrit ici) : il faut donc aussi rafraîchir le classement à ce moment,
       // sinon le score reste basé sur la valeur d'essais du tout premier clic.
       await updateClassementProfile(user.uid);
-    } catch (err: any) {
-      setError(`Erreur: ${err.message}`);
+    } catch (err: unknown) {
+      setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
-  const handleReportIssue = async (boulderId: string, boulderNumber: number, wall: string) => {
+  const handleReportIssue = async (boulderId: string, boulderNumber: number | string, wall: string) => {
     if (!user || !comments[boulderId] || !reportTypesSelected[boulderId]) return;
     try {
       // ✅ user.displayName n'est jamais renseigné (Register.tsx ne l'appelle pas) :
@@ -280,8 +293,8 @@ const ClientDaily: React.FC = () => {
       setComments(prev => ({ ...prev, [boulderId]: '' }));
       setReportTypesSelected(prev => ({ ...prev, [boulderId]: '' }));
       setTimeout(() => setSuccess(null), 3000);
-    } catch (err: any) {
-      setError(`Erreur: ${err.message}`);
+    } catch (err: unknown) {
+      setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -394,8 +407,8 @@ const ClientDaily: React.FC = () => {
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                 <Typography variant="body2">Niveau: </Typography>
                 <Box sx={{
-                  backgroundColor: levelColors[selectedBoulder.color || selectedBoulder.difficulty] || '#CCCCCC',
-                  color: ['blanc', 'mystère', 'mystere'].includes(selectedBoulder.color || selectedBoulder.difficulty) ? 'black' : 'white',
+                  backgroundColor: levelColors[selectedBoulder.color || selectedBoulder.difficulty || ''] || '#CCCCCC',
+                  color: ['blanc', 'mystère', 'mystere'].includes(selectedBoulder.color || selectedBoulder.difficulty || '') ? 'black' : 'white',
                   padding: '2px 8px',
                   borderRadius: '4px',
                   marginLeft: '8px'
