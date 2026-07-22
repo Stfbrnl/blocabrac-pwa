@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Typography, Paper, Container, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Button, Box,
@@ -72,6 +72,50 @@ const AdminCompetitionRegistration: React.FC = () => {
 
   const competitionId = new URLSearchParams(location.search).get('competitionId');
 
+  // ✅ "competitionsOverride" : quand appelée juste après avoir récupéré une liste
+  // fraîche de compétitions (voir fetchData ci-dessous), l'état "competitions" n'a pas
+  // encore été mis à jour dans cette fermeture (setState différé) - sans ce paramètre,
+  // la recherche ci-dessous échouait silencieusement au premier chargement et la liste
+  // des participants restait vide tant que l'admin ne changeait pas la sélection.
+  const loadParticipants = useCallback(async (targetCompetitionId: string, competitionsOverride?: Competition[]) => {
+    try {
+      setLoading(true);
+      const selectedComp = (competitionsOverride ?? competitions).find(c => c.id === targetCompetitionId);
+      if (selectedComp) {
+        setSelectedCompetition(selectedComp);
+        const participantsSnapshot = await getDocs(
+          query(collection(db, 'competition_participants'), where('competition_id', '==', targetCompetitionId))
+        );
+
+        // Fusionner avec les données users
+        const participantsData: CompetitionParticipant[] = participantsSnapshot.docs.map(doc => {
+          const user = allUsers.find(u => u.uid === doc.data().user_id);
+          return {
+            id: doc.id,
+            user_id: doc.data().user_id || '',
+            competition_id: doc.data().competition_id || '',
+            email: user?.email || doc.data().email || '',
+            first_name: user?.first_name || doc.data().first_name || '',
+            last_name: user?.last_name || doc.data().last_name || '',
+            age: user?.age,
+            dateOfBirth: user?.dateOfBirth,
+            gender: user?.gender,
+            level: user?.level,
+            registered_at: doc.data().registered_at || '',
+            is_client: doc.data().is_client || false
+          };
+        });
+        setParticipants(participantsData);
+      }
+      setLoading(false);
+    } catch (error) {
+      console.error("Erreur :", error);
+      setSnackbarMessage("Erreur lors du chargement des participants.");
+      setOpenSnackbar(true);
+      setLoading(false);
+    }
+  }, [competitions, allUsers]);
+
   // Charger les utilisateurs EN PREMIER
   useEffect(() => {
     const fetchUsers = async () => {
@@ -125,11 +169,11 @@ const AdminCompetitionRegistration: React.FC = () => {
           const selectedComp = competitionsData.find(c => c.id === competitionId);
           if (selectedComp) {
             setSelectedCompetition(selectedComp);
-            await loadParticipants(selectedComp.id);
+            await loadParticipants(selectedComp.id, competitionsData);
           }
         } else if (competitionsData.length > 0) {
           setSelectedCompetition(competitionsData[0]);
-          await loadParticipants(competitionsData[0].id);
+          await loadParticipants(competitionsData[0].id, competitionsData);
         }
       } catch (error) {
         console.error("Erreur :", error);
@@ -140,46 +184,11 @@ const AdminCompetitionRegistration: React.FC = () => {
       }
     };
     fetchData();
+    // ✅ "loadParticipants" volontairement absent des dépendances : son identité change
+    // avec "competitions", que cet effet met lui-même à jour juste au-dessus (setCompetitions),
+    // ce qui provoquerait un fetch redondant en boucle si elle était listée ici.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [competitionId, allUsers.length]);
-
-  const loadParticipants = async (competitionId: string) => {
-    try {
-      setLoading(true);
-      const selectedComp = competitions.find(c => c.id === competitionId);
-      if (selectedComp) {
-        setSelectedCompetition(selectedComp);
-        const participantsSnapshot = await getDocs(
-          query(collection(db, 'competition_participants'), where('competition_id', '==', competitionId))
-        );
-
-        // Fusionner avec les données users
-        const participantsData: CompetitionParticipant[] = participantsSnapshot.docs.map(doc => {
-          const user = allUsers.find(u => u.uid === doc.data().user_id);
-          return {
-            id: doc.id,
-            user_id: doc.data().user_id || '',
-            competition_id: doc.data().competition_id || '',
-            email: user?.email || doc.data().email || '',
-            first_name: user?.first_name || doc.data().first_name || '',
-            last_name: user?.last_name || doc.data().last_name || '',
-            age: user?.age,
-            dateOfBirth: user?.dateOfBirth,
-            gender: user?.gender,
-            level: user?.level,
-            registered_at: doc.data().registered_at || '',
-            is_client: doc.data().is_client || false
-          };
-        });
-        setParticipants(participantsData);
-      }
-      setLoading(false);
-    } catch (error) {
-      console.error("Erreur :", error);
-      setSnackbarMessage("Erreur lors du chargement des participants.");
-      setOpenSnackbar(true);
-      setLoading(false);
-    }
-  };
 
   const handleToggleCompetitionAccess = async (user: User) => {
     try {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, ChangeEvent } from 'react';
+import React, { useState, useEffect, useCallback, ChangeEvent } from 'react';
 import {
   Typography,
   Container,
@@ -57,13 +57,7 @@ export default function Moniteur() {
 
   const levels = ['débutant', 'intermédiaire', 'avancé', 'expert'];
 
-  useEffect(() => {
-    if (!loading && user) {
-      fetchCourses();
-    }
-  }, [user, loading]);
-
-  const fetchCourses = async () => {
+  const fetchCourses = useCallback(async () => {
     try {
       const querySnapshot = await getDocs(collection(db, 'courses'));
       const coursesData = querySnapshot.docs.map(doc => {
@@ -82,11 +76,19 @@ export default function Moniteur() {
         } as Course;
       });
       setCourses(coursesData);
-    } catch (err: any) {
-      setError(`Erreur lors du chargement des cours : ${err.message}`);
+    } catch (err: unknown) {
+      setError(`Erreur lors du chargement des cours : ${err instanceof Error ? err.message : String(err)}`);
       console.error(err);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!loading && user) {
+      void (async () => {
+        await fetchCourses();
+      })();
+    }
+  }, [user, loading, fetchCourses]);
 
   const handleInputChange = (e: FormEvent) => {
     const { name, value } = e.target;
@@ -119,9 +121,9 @@ export default function Moniteur() {
         date: '',
         time: ''
       });
-      fetchCourses();
-    } catch (err: any) {
-      setError(`Erreur lors de l'ajout du cours : ${err.message}`);
+      await fetchCourses();
+    } catch (err: unknown) {
+      setError(`Erreur lors de l'ajout du cours : ${err instanceof Error ? err.message : String(err)}`);
       console.error(err);
     }
   };
