@@ -9,7 +9,7 @@ service cloud.firestore {
     // Appelée uniquement après avoir déjà vérifié request.auth != null.
     function isUserRole(role) {
       let profile = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-      return (profile.roles is list && role in profile.roles) || profile.role == role;
+      return (profile.roles is list && role in profile.roles) || ('role' in profile && profile.role == role);
     }
 
     // ✅ Un client ne peut valider les exercices d'une séance (client_course_results) que si :
@@ -31,7 +31,14 @@ service cloud.firestore {
                       isUserRole("admin") ||
                       isUserRole("moniteur") ||
                       isUserRole("ouvreur"));
-      allow create: if request.auth != null && request.auth.uid == userId;
+      // ✅ "isUserRole(admin)" ajouté : AdminUsers.tsx (handleCreateUser) crée le
+      // compte via une instance Firebase secondaire (pour ne pas déconnecter
+      // l'admin), mais écrit le document Firestore "users/{nouvelUid}" avec la
+      // session PRINCIPALE (celle de l'admin) — sans cette exception, request.auth.uid
+      // (l'admin) ne correspond jamais à userId (le nouveau compte), et la création
+      // d'utilisateur par un admin échoue systématiquement.
+      allow create: if request.auth != null &&
+                      (request.auth.uid == userId || isUserRole("admin"));
       allow update: if request.auth != null &&
                       (
                         isUserRole("admin") ||
@@ -55,6 +62,16 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow write: if request.auth != null &&
                      (request.auth.uid == userId || isUserRole("admin"));
+    }
+
+    // ✅ Annuaire public des moniteurs (nom uniquement), lu par ClientMessages.tsx pour
+    // proposer un destinataire : un client ne peut pas lister/lire la collection "users"
+    // d'un autre utilisateur, donc cette fiche séparée (même pattern que
+    // "classement_profiles" ci-dessus) sert de source sans jamais exposer d'autres
+    // données. Tenue à jour par AdminUsers.tsx au même moment que "users".
+    match /staff_directory/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && isUserRole("admin");
     }
 
     // ========== 2. Signalements ==========
@@ -194,10 +211,15 @@ service cloud.firestore {
 
     // ========== 11. Collections Ouvreur (existantes) ==========
     match /boulders/{docId} {
+      // ✅ "moniteur" ajouté : StatsList.tsx (page Moniteur > Stats) lit cette
+      // collection sans filtre au chargement, dans le même bloc try/catch que tout
+      // le reste de la page — un refus de permission ici empêchait donc l'affichage
+      // de TOUTES les stats (exercices, résultats, badges), pas seulement les blocs.
       allow read: if request.auth != null &&
                     (isUserRole("ouvreur") ||
                      isUserRole("admin") ||
-                     isUserRole("client"));
+                     isUserRole("client") ||
+                     isUserRole("moniteur"));
       allow create, update, delete: if request.auth != null &&
                                       (isUserRole("ouvreur") ||
                                        isUserRole("admin"));
@@ -270,9 +292,12 @@ service cloud.firestore {
 
     // ========== 13. Équipement ==========
     match /equipment/{docId} {
+      // ✅ "moniteur" ajouté : ExerciseForm.tsx (page Moniteur > Exercices) lit et
+      // écrit cette collection pour proposer/ajouter des équipements, pas seulement ouvreur/admin.
       allow read, write: if request.auth != null &&
                            (isUserRole("ouvreur") ||
-                            isUserRole("admin"));
+                            isUserRole("admin") ||
+                            isUserRole("moniteur"));
     }
 
     // ========== 14. Contenu de la page d'accueil ==========

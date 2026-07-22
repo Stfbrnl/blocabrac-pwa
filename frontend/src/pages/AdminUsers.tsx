@@ -218,6 +218,15 @@ const AdminUsers: React.FC = () => {
           dateOfBirth: editForm.dateOfBirth,
         }, { merge: true });
       }
+      // ✅ Même logique que "classement_profiles" ci-dessus, pour l'annuaire des
+      // moniteurs lu par ClientMessages.tsx (un client ne peut pas lister "users").
+      if (roles.includes('moniteur')) {
+        batch.set(doc(db, 'staff_directory', selectedUser.uid), {
+          displayName: `${editForm.first_name} ${editForm.last_name}`.trim(),
+        });
+      } else {
+        batch.delete(doc(db, 'staff_directory', selectedUser.uid));
+      }
       await batch.commit();
       const querySnapshot = await getDocs(collection(db, 'users'));
       const usersData: User[] = querySnapshot.docs.map(doc => {
@@ -300,6 +309,13 @@ const AdminUsers: React.FC = () => {
           classementOptIn: false,
         });
       }
+      // ✅ Même logique que "classement_profiles" ci-dessus, pour l'annuaire des
+      // moniteurs lu par ClientMessages.tsx (un client ne peut pas lister "users").
+      if (createForm.roles.includes('moniteur')) {
+        createBatch.set(doc(db, 'staff_directory', newUser.uid), {
+          displayName: `${createForm.first_name} ${createForm.last_name}`.trim(),
+        });
+      }
       await createBatch.commit();
 
       await sendPasswordResetEmail(secondaryAuth, createForm.email);
@@ -378,6 +394,7 @@ const AdminUsers: React.FC = () => {
     if (!userToDelete) return;
     try {
       await deleteDoc(doc(db, 'users', userToDelete));
+      await deleteDoc(doc(db, 'staff_directory', userToDelete));
       const querySnapshot = await getDocs(collection(db, 'users'));
       const usersData: User[] = querySnapshot.docs.map(doc => {
         const data = doc.data();

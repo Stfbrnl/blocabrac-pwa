@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '../../../services/firebaseConfig';
-import { useNavigate } from 'react-router-dom';
 import {
-  collection, query, where, getDocs, addDoc, DocumentData, orderBy
+  collection, query, where, getDocs, addDoc, DocumentData
 } from 'firebase/firestore';
 import {
   Container, Typography, Box, Paper, CircularProgress, Alert,
@@ -36,13 +35,12 @@ const ClientMessages: React.FC = () => {
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [openReplyDialog, setOpenReplyDialog] = useState(false);
   const [replyContent, setReplyContent] = useState('');
-  const navigate = useNavigate();
 
   // ✅ Détection mobile pour adapter la zone d'envoi et le Dialog
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (!user?.uid) return;
 
     try {
@@ -62,27 +60,14 @@ const ClientMessages: React.FC = () => {
         getDocs(receivedMessagesQuery)
       ]);
 
-      const moniteursMap = new Map<string, {id: string, displayName: string}>();
-
-      // ✅ Source unique : le vrai annuaire des moniteurs actuels (users), pas
-      // l'historique des messages. Un compte qui n'est plus moniteur disparaît donc
-      // automatiquement de la liste, même s'il reste visible dans l'historique des
-      // conversations passées (ça, c'est normal : les anciens messages ne changent pas).
-      // Deux requêtes pour couvrir les deux formats de rôle existants (roles[] et role).
-      const [moniteursByRoleSnapshot, moniteursByRolesArraySnapshot] = await Promise.all([
-        getDocs(query(collection(db, 'users'), where('role', '==', 'moniteur'))),
-        getDocs(query(collection(db, 'users'), where('roles', 'array-contains', 'moniteur'))),
-      ]);
-      [...moniteursByRoleSnapshot.docs, ...moniteursByRolesArraySnapshot.docs].forEach((docSnap) => {
+      // ✅ Source unique : "staff_directory", l'annuaire public des moniteurs tenu à
+      // jour par AdminUsers.tsx. Un client ne peut pas lister la collection "users"
+      // (règles Firestore), d'où cette fiche séparée dédiée à cet usage.
+      const staffSnapshot = await getDocs(collection(db, 'staff_directory'));
+      const moniteursList = staffSnapshot.docs.map((docSnap) => {
         const data = docSnap.data() as DocumentData;
-        const displayName =
-          `${data.first_name || ''} ${data.last_name || ''}`.trim() ||
-          data.email?.split('@')[0] ||
-          docSnap.id;
-        moniteursMap.set(docSnap.id, { id: docSnap.id, displayName });
+        return { id: docSnap.id, displayName: data.displayName || docSnap.id };
       });
-
-      const moniteursList = Array.from(moniteursMap.values());
       setMoniteurs(moniteursList);
 
       if (moniteursList.length > 0) {
@@ -119,17 +104,19 @@ const ClientMessages: React.FC = () => {
       ].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
       setMessages(allMessages);
-    } catch (err: any) {
-      setError(`Erreur: ${err.message}`);
+    } catch (err: unknown) {
+      setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
       console.error("Erreur Firestore:", err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
 
   useEffect(() => {
-    fetchData();
-  }, [user]);
+    void (async () => {
+      await fetchData();
+    })();
+  }, [fetchData]);
 
   const handleSendMessage = async () => {
     if (!user || !selectedMoniteur || !newMessage.trim()) return;
@@ -149,8 +136,8 @@ const ClientMessages: React.FC = () => {
       setSuccess('Message envoyé avec succès !');
 
       await fetchData();
-    } catch (err: any) {
-      setError(`Erreur: ${err.message}`);
+    } catch (err: unknown) {
+      setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -177,14 +164,9 @@ const ClientMessages: React.FC = () => {
       setReplyContent('');
       setSelectedMessage(null);
       await fetchData();
-    } catch (err: any) {
-      setError(`Erreur: ${err.message}`);
+    } catch (err: unknown) {
+      setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
     }
-  };
-
-  const handleCloseSnackbar = () => {
-    setError(null);
-    setSuccess(null);
   };
 
   if (loadingAuth || loading) {
@@ -243,6 +225,9 @@ const ClientMessages: React.FC = () => {
                       <Typography variant="caption" color="textSecondary" sx={{ display: { xs: 'block', sm: 'none' }, mb: 0.5 }}>
                         {message.timestamp.toLocaleString('fr-FR')}
                       </Typography>
+                      {message.title && (
+                        <Typography sx={{ fontWeight: 'bold' }}>{message.title}</Typography>
+                      )}
                       <Typography sx={{ pr: !isSent ? 4 : 0 }}>{message.content}</Typography>
                       {!isSent && (
                         <Tooltip title="Répondre">
@@ -292,7 +277,7 @@ const ClientMessages: React.FC = () => {
               multiline
               rows={2}
               placeholder="Saisissez votre message..."
-              onKeyPress={(e) => {
+              onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
                   handleSendMessage();

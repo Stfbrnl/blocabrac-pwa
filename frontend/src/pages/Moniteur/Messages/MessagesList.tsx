@@ -181,10 +181,11 @@ const MessagesList: React.FC = () => {
         ]);
         const clientsById = new Map<string, Client>();
         [...clientsByRoleSnapshot.docs, ...clientsByRolesArraySnapshot.docs].forEach((doc) => {
+          const data = doc.data();
           clientsById.set(doc.id, {
             id: doc.id,
-            displayName: doc.data().displayName || doc.data().email || doc.id,
-            email: doc.data().email || '',
+            displayName: `${data.first_name || ''} ${data.last_name || ''}`.trim() || data.email || doc.id,
+            email: data.email || '',
           });
         });
         const clientsList = Array.from(clientsById.values());
@@ -287,24 +288,47 @@ const MessagesList: React.FC = () => {
     if (!user || recipients.length === 0 || !newMessageTitle.trim() || !newMessageContent.trim()) return;
 
     try {
+      let sentCount = 0;
       for (const recipientId of recipients) {
         const recipient = clients.find(c => c.id === recipientId);
         const group = groups.find(g => g.id === recipientId);
-        const receiverName = recipient ? recipient.displayName : group?.name || 'Destinataire';
 
-        await addDoc(collection(db, 'messages'), {
-          title: newMessageTitle.trim(),
-          content: newMessageContent.trim(),
-          senderId: user.uid,
-          senderName: user.displayName || user.email || user.uid,
-          receiverId: recipientId,
-          receiverName: receiverName,
-          timestamp: new Date(),
-          isRead: false
-        });
+        if (group) {
+          // ✅ Firestore n'a aucune notion de groupe côté lecture (receiverId ==
+          // auth.uid côté règles/ClientMessages.tsx) : un message "groupe" doit donc
+          // être écrit une fois par membre, jamais avec receiverId = ID du groupe,
+          // sinon aucun client ne le reçoit jamais.
+          for (const studentId of group.students) {
+            const student = clients.find(c => c.id === studentId);
+            await addDoc(collection(db, 'messages'), {
+              title: newMessageTitle.trim(),
+              content: newMessageContent.trim(),
+              senderId: user.uid,
+              senderName: user.displayName || user.email || user.uid,
+              receiverId: studentId,
+              receiverName: student?.displayName || 'Destinataire',
+              groupName: group.name,
+              timestamp: new Date(),
+              isRead: false
+            });
+            sentCount += 1;
+          }
+        } else {
+          await addDoc(collection(db, 'messages'), {
+            title: newMessageTitle.trim(),
+            content: newMessageContent.trim(),
+            senderId: user.uid,
+            senderName: user.displayName || user.email || user.uid,
+            receiverId: recipientId,
+            receiverName: recipient?.displayName || 'Destinataire',
+            timestamp: new Date(),
+            isRead: false
+          });
+          sentCount += 1;
+        }
       }
 
-      setSuccess(`${recipients.length > 1 ? 'Messages envoyés' : 'Message envoyé'} avec succès !`);
+      setSuccess(`${sentCount > 1 ? 'Messages envoyés' : 'Message envoyé'} avec succès !`);
       setOpenNewMessageDialog(false);
       setNewMessageTitle('');
       setNewMessageContent('');
@@ -357,9 +381,6 @@ const MessagesList: React.FC = () => {
             Nouveau message
           </Button>
         </Box>
-
-        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-        {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
 
         <TableContainer sx={{ overflowX: 'auto' }}>
           <Table sx={{ minWidth: 750 }}>
