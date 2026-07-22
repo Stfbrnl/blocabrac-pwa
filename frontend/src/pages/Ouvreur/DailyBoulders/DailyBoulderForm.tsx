@@ -1,10 +1,11 @@
-import React, { useState, useRef, useEffect, ChangeEvent, FormEvent, MouseEvent, TouchEvent } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useState, useRef, useEffect, ChangeEvent, FormEvent, MouseEvent } from 'react';
+import { useParams } from 'react-router-dom';
 import {
   TextField, Button, MenuItem, Select, InputLabel, FormControl, Box,
   Typography, Container, Paper, IconButton, Stack, Dialog, DialogTitle,
   DialogContent, DialogActions, Chip, CircularProgress
 } from '@mui/material';
+import type { SelectChangeEvent } from '@mui/material';
 import { Delete as DeleteIcon, Check as CheckIcon } from '@mui/icons-material';
 import {
   addDoc, collection, doc, updateDoc, query, where, getDocs
@@ -37,11 +38,6 @@ interface Boulder {
   is_active?: boolean;
   difficulty_level?: DifficultyLevel;
 }
-
-const walls: string[] = [
-  'Caverne des petits', 'Réta d\'initiation', 'Réta Adultes', 'Grande Face',
-  'Dalle', 'Dévers 15°', 'Dévers 30°', 'Dévers 40°', 'Grotte Adultes', 'Güllich'
-];
 
 const difficultyTypes: string[] = ['technique', 'équilibre', 'force', 'engagement'];
 const difficultyLevels: DifficultyLevel[] = ['Plus', 'Égal', 'Moins'];
@@ -107,7 +103,6 @@ const resizeAndCompressImage = (file: File, maxWidth: number = 800, quality: num
 
 export default function DailyBoulderForm(): JSX.Element {
   const { wall } = useParams<{ wall: string }>();
-  const navigate = useNavigate();
   const [user] = useAuthState(auth);
   const [boulders, setBoulders] = useState<Boulder[]>([]);
   const [editingBoulder, setEditingBoulder] = useState<Boulder | null>(null);
@@ -458,7 +453,7 @@ export default function DailyBoulderForm(): JSX.Element {
               <Select
                 labelId="cotation-select-label" id="cotation-select"
                 value={formData.color}
-                onChange={(e: any): void => setFormData({ ...formData, color: e.target.value as string })}
+                onChange={(e: SelectChangeEvent): void => setFormData({ ...formData, color: e.target.value })}
                 label="Cotation"
                 required
               >
@@ -474,7 +469,7 @@ export default function DailyBoulderForm(): JSX.Element {
             <Select
               labelId="difficulte-dans-le-niveau-select-label" id="difficulte-dans-le-niveau-select"
               value={formData.difficulty_level}
-              onChange={(e: any): void => setFormData({ ...formData, difficulty_level: e.target.value as DifficultyLevel })}
+              onChange={(e: SelectChangeEvent): void => setFormData({ ...formData, difficulty_level: e.target.value as DifficultyLevel })}
               label="Difficulté dans le niveau"
             >
               {difficultyLevels.map((level: DifficultyLevel) => (
@@ -490,11 +485,11 @@ export default function DailyBoulderForm(): JSX.Element {
 
           <FormControl fullWidth margin="normal" disabled={isUploading}>
             <InputLabel id="types-de-difficulte-multiple-select-label">Types de difficulté (multiple)</InputLabel>
-            <Select
+            <Select<string[]>
               labelId="types-de-difficulte-multiple-select-label" id="types-de-difficulte-multiple-select"
               multiple
               value={formData.difficulty_types}
-              onChange={(e: any): void => setFormData({
+              onChange={(e): void => setFormData({
                 ...formData,
                 difficulty_types: e.target.value as string[]
               })}

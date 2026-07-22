@@ -66,8 +66,11 @@ const Navbar: React.FC = () => {
       };
       fetchUserRoles();
     } else {
-      setUserRoles([]);
-      setLoadingRole(false);
+      const clear = () => {
+        setUserRoles([]);
+        setLoadingRole(false);
+      };
+      clear();
     }
   }, [user]);
 

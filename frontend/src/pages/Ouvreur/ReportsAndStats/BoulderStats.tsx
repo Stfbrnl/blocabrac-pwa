@@ -3,9 +3,10 @@ import {
   Typography, Paper, Box, MenuItem, Select, InputLabel, FormControl,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   LinearProgress, Chip, Button, Dialog, DialogTitle, DialogContent,
-  DialogActions, Grid, TextField
+  DialogActions, TextField
 } from '@mui/material';
-import { collection, query, where, getDocs, deleteDoc, doc } from 'firebase/firestore';
+import type { SelectChangeEvent } from '@mui/material';
+import { collection, query, where, getDocs, deleteDoc, doc, DocumentData } from 'firebase/firestore';
 import { db } from '../../../services/firebaseConfig';
 
 const levelColors: Record<string, string> = {
@@ -58,6 +59,15 @@ interface UserInfo {
   id: string;
   firstName: string;
   lastName: string;
+}
+
+interface BoulderResultData extends DocumentData {
+  userId: string;
+  createdAt?: string;
+  rating?: number;
+  success?: boolean;
+  attempts?: number;
+  proposedDifficulty?: string;
 }
 
 export default function BoulderStats(): JSX.Element {
@@ -157,27 +167,27 @@ export default function BoulderStats(): JSX.Element {
             where('boulderId', '==', boulder.id)
           );
           const resultsSnapshot = await getDocs(resultsQuery);
-          const results = resultsSnapshot.docs.map(doc => doc.data());
+          const results = resultsSnapshot.docs.map(doc => doc.data()) as BoulderResultData[];
 
-          const filteredResults = results.filter((result: any) => {
-            const resultDate = new Date(result.createdAt);
+          const filteredResults = results.filter((result) => {
+            const resultDate = new Date(result.createdAt ?? '');
             if (startDateFilter && resultDate < startDateFilter) return false;
             if (endDateFilter && resultDate >= endDateFilter) return false;
             return true;
           });
 
           const ratings: number[] = filteredResults
-            .filter((result: any) => result.rating !== undefined)
-            .map((result: any) => result.rating);
+            .filter((result) => result.rating !== undefined)
+            .map((result) => result.rating as number);
 
-          const successResults: any[] = filteredResults
-            .filter((result: any) => result.success === true);
+          const successResults: BoulderResultData[] = filteredResults
+            .filter((result) => result.success === true);
 
-          const validatedBy: string[] = successResults.map((result: any) => result.userId);
+          const validatedBy: string[] = successResults.map((result) => result.userId);
 
           const allAttempts: number[] = filteredResults
-            .filter((result: any) => result.attempts !== undefined)
-            .map((result: any) => result.attempts);
+            .filter((result) => result.attempts !== undefined)
+            .map((result) => result.attempts as number);
 
           statsData.push({
             boulderId: boulder.id,
@@ -191,13 +201,13 @@ export default function BoulderStats(): JSX.Element {
             validatedBy: validatedBy
           });
 
-          const proposedDifficulties: any[] = filteredResults
-            .filter((result: any) => result.proposedDifficulty !== undefined && result.proposedDifficulty !== null);
+          const proposedDifficulties: BoulderResultData[] = filteredResults
+            .filter((result) => result.proposedDifficulty !== undefined && result.proposedDifficulty !== null);
 
           if (proposedDifficulties.length > 0) {
             const difficultyGroups: Record<string, { count: number; users: string[] }> = {};
-            proposedDifficulties.forEach((result: any) => {
-              const difficulty = result.proposedDifficulty;
+            proposedDifficulties.forEach((result) => {
+              const difficulty = result.proposedDifficulty as string;
               if (!difficultyGroups[difficulty]) {
                 difficultyGroups[difficulty] = { count: 0, users: [] };
               }
@@ -326,7 +336,7 @@ export default function BoulderStats(): JSX.Element {
         <Select
           labelId="selectionnez-un-mur-select-label" id="selectionnez-un-mur-select"
           value={selectedWall}
-          onChange={(e: any): void => setSelectedWall(e.target.value as string)}
+          onChange={(e: SelectChangeEvent): void => setSelectedWall(e.target.value)}
           label="Mur"
         >
           {walls.map((wall: string) => (

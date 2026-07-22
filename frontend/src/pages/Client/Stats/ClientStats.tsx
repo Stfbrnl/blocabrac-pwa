@@ -11,7 +11,6 @@ import {
   deleteDoc,
   updateDoc,
   DocumentData,
-  QueryDocumentSnapshot,
   Timestamp,
 } from 'firebase/firestore';
 import {
@@ -62,11 +61,6 @@ const levelColors: Record<string, string> = {
   rose: '#FFC0CB',
 };
 
-interface Exercise {
-  id: string;
-  name: string;
-}
-
 interface BoulderData extends DocumentData {
   number?: number;
   wall?: string;
@@ -112,24 +106,40 @@ interface Diploma {
   awardedByName: string;
 }
 
+interface BoulderStatEntry extends DocumentData {
+  boulderNumber: number | string;
+  wall: string;
+  difficulty: string;
+  difficulty_level: string;
+  difficulty_type: string;
+  created_at: string | Timestamp;
+  color: string;
+  createdAt: Date;
+}
+
+interface CourseStatEntry extends DocumentData {
+  courseTitle: string;
+  courseDate: string;
+  date: Date;
+  exerciseName: string;
+}
+
 // Ordre des niveaux/couleurs, du plus faible au plus élevé.
 // Les badges couleur commencent à violet : aucun badge n'existe pour jaune/vert/bleu.
 const colorOrder = ['jaune', 'vert', 'bleu', 'violet', 'rouge', 'noir', 'blanc', 'rose'];
 
 const ClientStats: React.FC = () => {
   const [user, loadingAuth] = useAuthState(auth);
-  const [boulderStats, setBoulderStats] = useState<any[]>([]);
-  const [courseStats, setCourseStats] = useState<any[]>([]);
+  const [boulderStats, setBoulderStats] = useState<BoulderStatEntry[]>([]);
+  const [courseStats, setCourseStats] = useState<CourseStatEntry[]>([]);
   const [colorStats, setColorStats] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [openResetDialog, setOpenResetDialog] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'stats' | 'badges' | 'diplomas'>('stats');
-  const [badges, setBadges] = useState<Badge[]>([]);
   const [clientBadges, setClientBadges] = useState<ClientBadge[]>([]);
   const [diplomas, setDiplomas] = useState<Diploma[]>([]);
-  const [exercises, setExercises] = useState<Exercise[]>([]);
   // Genre du client connecté, récupéré depuis Firestore "users"
   const [userGender, setUserGender] = useState<string>('Homme');
 
@@ -145,13 +155,13 @@ const ClientStats: React.FC = () => {
   const [endDate, setEndDate] = useState<string>('');
 
   // Fonction pour convertir un Timestamp ou Date en string
-  const formatDate = (date: Date | { seconds: number; nanoseconds: number } | any): string => {
+  const formatDate = (date: unknown): string => {
     if (date instanceof Date) {
       return date.toLocaleDateString('fr-FR');
     } else if (date instanceof Timestamp) {
       return date.toDate().toLocaleDateString('fr-FR');
-    } else if (date?.seconds) {
-      return new Date(date.seconds * 1000).toLocaleDateString('fr-FR');
+    } else if (typeof date === 'object' && date !== null && 'seconds' in date && typeof (date as { seconds: unknown }).seconds === 'number') {
+      return new Date((date as { seconds: number }).seconds * 1000).toLocaleDateString('fr-FR');
     } else if (typeof date === 'string' && date) {
       return date;
     } else {
@@ -201,7 +211,6 @@ const ClientStats: React.FC = () => {
           id: exerciseDoc.id,
           name: exerciseDoc.data().name || `Exercice ${exerciseDoc.id}`,
         }));
-        setExercises(exercisesList);
 
         // Calculer les dates en fonction de la période sélectionnée
         const now = new Date();
@@ -239,7 +248,7 @@ const ClientStats: React.FC = () => {
           query(collection(db, 'client_boulder_results'), where('userId', '==', user.uid))
         );
 
-        const boulderStatsData: any[] = [];
+        const boulderStatsData: BoulderStatEntry[] = [];
         const colorCounts: Record<string, number> = {};
         // Blocs distincts, encore existants en salle, validés par le client, groupés par couleur
         // (tout l'historique confondu, indépendant du filtre de période choisi à l'écran)
@@ -314,7 +323,7 @@ const ClientStats: React.FC = () => {
           query(collection(db, 'client_course_results'), where('userId', '==', user.uid))
         );
 
-        const courseStatsData: any[] = [];
+        const courseStatsData: CourseStatEntry[] = [];
         for (const resultDoc of courseResultsSnapshot.docs) {
           const result = resultDoc.data();
           // ✅ ClientCourseSession.tsx enregistre la date de validation sous "createdAt",

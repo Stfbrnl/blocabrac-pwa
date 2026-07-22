@@ -2,7 +2,7 @@
 // des séances Moniteur : à exécuter via `npm run test:rules` (émulateur Firestore
 // requis, cf. package.json). Volontairement hors de src/ pour ne pas être
 // ramassé par `npm test` (qui doit rester rapide et sans dépendance à Java).
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest';
 import {
   initializeTestEnvironment,
   assertFails,
