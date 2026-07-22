@@ -338,16 +338,25 @@ const ClientStats: React.FC = () => {
                 ? new Date(rawResultDate)
                 : new Date();
 
-          const courseDoc = await getDoc(doc(db, 'courses', result.courseId));
-          if (courseDoc.exists()) {
-            const courseData = courseDoc.data() as CourseData;
-            courseStatsData.push({
-              ...result,
-              courseTitle: courseData.title || result.courseId,
-              courseDate: courseData.date ? formatDate(courseData.date) : 'Inconnu',
-              date: resultDate,
-              exerciseName: result.exerciseName || exercisesList.find((ex) => ex.id === result.exerciseId)?.name || result.exerciseId,
-            });
+          // ✅ Un getDoc() individuel qui échoue (séance supprimée depuis, ou toute
+          // autre incohérence de données) ne doit pas faire échouer tout fetchStats()
+          // et priver le client de ses badges/diplômes affichés plus bas dans la même
+          // fonction : on isole cette lecture dans son propre try/catch et on ignore
+          // seulement l'entrée concernée.
+          try {
+            const courseDoc = await getDoc(doc(db, 'courses', result.courseId));
+            if (courseDoc.exists()) {
+              const courseData = courseDoc.data() as CourseData;
+              courseStatsData.push({
+                ...result,
+                courseTitle: courseData.title || result.courseId,
+                courseDate: courseData.date ? formatDate(courseData.date) : 'Inconnu',
+                date: resultDate,
+                exerciseName: result.exerciseName || exercisesList.find((ex) => ex.id === result.exerciseId)?.name || result.exerciseId,
+              });
+            }
+          } catch (courseErr: unknown) {
+            console.error(`Séance introuvable ou inaccessible pour le résultat ${resultDoc.id} :`, courseErr);
           }
         }
         setCourseStats(courseStatsData);

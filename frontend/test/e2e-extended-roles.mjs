@@ -52,6 +52,7 @@ async function gotoAndWait(page, path, headingName) {
   await page.getByRole('heading', { name: headingName }).waitFor({ timeout: 10000 });
 }
 
+
 async function main() {
   const browser = await chromium.launch();
   const adminP = await (await browser.newContext()).newPage();
@@ -146,7 +147,13 @@ async function main() {
     await moniteurP.getByRole('button', { name: 'Nouveau groupe' }).click();
     await moniteurP.getByRole('heading', { name: 'Nouveau groupe' }).waitFor({ timeout: 5000 });
     await moniteurP.getByPlaceholder('Ex: Groupe Débutants Lundi 18h').fill(`Groupe Test ${RUN_ID}`);
-    const autocomplete = moniteurP.getByPlaceholder('Sélectionnez les clients');
+    // ✅ Ne PAS localiser ce champ par son placeholder : GroupForm.tsx le vide
+    // (placeholder={selectedClients.length === 0 ? '...' : ''}) dès qu'un premier
+    // client est sélectionné, donc un locator getByPlaceholder capturé une fois
+    // ne matche plus rien pour la réouverture suivante — c'était la vraie cause
+    // des échecs "timeout en attendant que le champ soit visible" ici, pas un
+    // problème de l'app ni de l'environnement de test. role=combobox reste stable.
+    const autocomplete = moniteurP.getByRole('combobox');
     await autocomplete.click();
     await moniteurP.getByRole('option', { name: /Cliff Ombardier/ }).click();
     // MUI Autocomplete ferme la liste après chaque sélection (disableCloseOnSelect
@@ -212,9 +219,9 @@ async function main() {
     await moniteurP.getByLabel('Titre').fill(individualMsgTitle);
     await moniteurP.getByLabel('Contenu').fill('Contenu du message individuel de test.');
     await moniteurP.locator('#recipients-select').click();
-    // MessagesList.tsx (Moniteur) résout le nom affiché via un champ "displayName"
-    // qui n'est jamais écrit nulle part dans cette appli (seuls first_name/last_name
-    // existent) : l'option affiche donc l'email brut du client, pas "Cliff Ombardier".
+    // ✅ MessagesList.tsx construit déjà "displayName" depuis first_name/last_name
+    // (avec repli sur l'email) — vérifié en lisant le code. On garde le repli sur
+    // l'email ici uniquement en filet de sécurité si ça régresse un jour.
     const nameOptionVisible = await moniteurP.getByRole('option', { name: /Cliff Ombardier/ }).isVisible({ timeout: 2000 }).catch(() => false);
     if (nameOptionVisible) {
       await moniteurP.getByRole('option', { name: /Cliff Ombardier/ }).click();
@@ -225,9 +232,7 @@ async function main() {
     await moniteurP.getByRole('button', { name: 'Envoyer', exact: true }).click();
     await moniteurP.getByText('Message envoyé avec succès', { exact: false }).waitFor({ timeout: 10000 });
     assert(nameOptionVisible,
-      "BUG (mineur) : MessagesList.tsx (Moniteur > Messagerie) affiche l'email du client dans la liste des destinataires au lieu de son nom, " +
-      "car il lit un champ 'displayName' qui n'est jamais écrit par cette appli (Register.tsx/AdminUsers.tsx écrivent first_name/last_name). " +
-      "Même root-cause déjà corrigée dans ClientDaily.tsx lors d'une session précédente, jamais reportée ici.");
+      "MessagesList.tsx (Moniteur > Messagerie) affiche l'email du client dans la liste des destinataires au lieu de son nom (first_name/last_name absents ou vides pour ce compte de test ?).");
   });
 
   await step('Client1 : reçoit le message individuel et y répond', async () => {
@@ -252,14 +257,18 @@ async function main() {
   });
 
   await step('Client1/Client2 : vérifie si le message de groupe est bien reçu (bug potentiel de diffusion)', async () => {
+    // ✅ locator.isVisible({timeout}) ne fait PAS de polling en Playwright (contrairement
+    // à locator.waitFor()) : il vérifie l'état immédiatement, avant même que le fetch
+    // Firestore asynchrone de ClientMessages.tsx n'ait eu le temps de se terminer après
+    // la navigation. C'était la vraie cause du "message jamais reçu" ici — pas un bug
+    // de diffusion (vérifié : les documents Firestore ont bien un receiverId par membre,
+    // cf. commentaire de MessagesList.tsx). waitFor() attend réellement l'apparition.
     await client1P.goto(`${BASE_URL}/client/messages`);
-    const client1SeesIt = await client1P.getByText(groupMsgTitle, { exact: false }).isVisible({ timeout: 5000 }).catch(() => false);
+    const client1SeesIt = await client1P.getByText(groupMsgTitle, { exact: false }).waitFor({ timeout: 10000 }).then(() => true).catch(() => false);
     await client2P.goto(`${BASE_URL}/client/messages`);
-    const client2SeesIt = await client2P.getByText(groupMsgTitle, { exact: false }).isVisible({ timeout: 5000 }).catch(() => false);
+    const client2SeesIt = await client2P.getByText(groupMsgTitle, { exact: false }).waitFor({ timeout: 10000 }).then(() => true).catch(() => false);
     assert(client1SeesIt && client2SeesIt,
-      `BUG : un message envoyé à un "Groupe" (MessagesList.tsx handleSendNewMessage) écrit un seul document avec receiverId = ID du groupe, pas l'UID d'un client. ` +
-      `Ni les règles Firestore (receiverId == auth.uid) ni ClientMessages.tsx (requête où receiverId == uid) ne font jamais correspondre cet ID à un client : ` +
-      `le message n'est donc jamais reçu par aucun membre du groupe. (client1 reçu: ${client1SeesIt}, client2 reçu: ${client2SeesIt})`);
+      `Le message de groupe n'a pas été reçu par les deux clients (client1 reçu: ${client1SeesIt}, client2 reçu: ${client2SeesIt}).`);
   });
 
   // ================= MONITEUR : stats/badges/diplômes =================
@@ -283,9 +292,9 @@ async function main() {
   await step('Client1 : voit son badge et son diplôme dans ses stats', async () => {
     await gotoAndWait(client1P, '/client/stats', 'Mes statistiques');
     await client1P.getByRole('tab', { name: 'Mes badges' }).click();
-    await client1P.getByText('Grimpeur assidu', { exact: false }).waitFor({ timeout: 10000 });
+    await client1P.getByText('Grimpeur assidu', { exact: false }).first().waitFor({ timeout: 10000 });
     await client1P.getByRole('tab', { name: 'Mes diplômes' }).click();
-    await client1P.getByText('Bloc de bronze', { exact: false }).waitFor({ timeout: 10000 });
+    await client1P.getByText('Bloc de bronze', { exact: false }).first().waitFor({ timeout: 10000 });
   });
 
   // ================= CLIENT : profil complet =================

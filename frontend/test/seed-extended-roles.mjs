@@ -91,6 +91,29 @@ async function main() {
     createdBy: moniteur.uid,
     createdAt: new Date(),
   });
+  // ✅ Le document "courses/seed-course-ext" référencé ci-dessous doit exister :
+  // firestore.rules évalue un get() sur son "groupId" pour décider du droit de
+  // lecture, et une référence orpheline (courseId sans document correspondant)
+  // fait planter cette évaluation de règle (erreur "Null value") plutôt que de
+  // simplement renvoyer "non trouvé" — ça faisait échouer tout ClientStats.tsx,
+  // badges et diplômes compris, avant que cette même lecture ne soit isolée dans
+  // son propre try/catch côté frontend.
+  await db.collection('courses').doc('seed-course-ext').set({
+    title: 'Séance de test (extended-roles)',
+    description: 'Séance seedée pour client_course_results',
+    date: new Date().toISOString().split('T')[0],
+    time: '18:00',
+    createdBy: moniteur.uid,
+    groupId: 'seed-group-ext',
+  });
+  await db.collection('Groups').doc('seed-group-ext').set({
+    name: 'Groupe seed (extended-roles)',
+    description: '',
+    createdBy: moniteur.uid,
+    moniteurId: moniteur.uid,
+    students: [client1.uid],
+    createdAt: new Date(),
+  });
   await db.collection('client_course_results').add({
     userId: client1.uid,
     exerciseId: exerciseRef.id,
