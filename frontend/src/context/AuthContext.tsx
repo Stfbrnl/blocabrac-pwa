@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useEffect, useState, ReactNode } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth } from '../services/firebaseConfig';
 
@@ -27,13 +27,4 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       {!loading && children}
     </AuthContext.Provider>
   );
-};
-
-// ✅ Hook useAuth qui retourne AuthContextType
-export const useAuth = (): AuthContextType => {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth doit être utilisé dans un AuthProvider');
-  }
-  return context;
 };
