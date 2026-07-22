@@ -84,9 +84,8 @@ async function main() {
     // matcher que le champ "Nom", pas "Prénom".
     await adminP.getByLabel('Prénom').fill('Créé');
     await adminP.getByLabel(/^Nom\b/).fill('ParTest');
-    await adminP.locator('#roles-multiple-possible-select-2').click();
-    await adminP.getByRole('option', { name: 'Client', exact: true }).click();
-    await adminP.keyboard.press('Escape');
+    // "Client" est désormais coché par défaut et non désélectionnable (voir
+    // AdminUsers.tsx) : plus besoin de le sélectionner explicitement ici.
     await adminP.locator('#niveau-en-salle-select-2').click();
     await adminP.getByRole('option', { name: /Jaune/ }).click();
     await adminP.getByRole('button', { name: 'Créer', exact: true }).click();

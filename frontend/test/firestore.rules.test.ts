@@ -9,7 +9,7 @@ import {
   assertSucceeds,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { setDoc, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { setDoc, doc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 
@@ -192,5 +192,177 @@ describe('classement_profiles : fiche publique du classement', () => {
     await assertSucceeds(setDoc(doc(adminDb, 'classement_profiles', CLIENT_UID), {
       first_name: 'Modifié par admin',
     }, { merge: true }));
+  });
+});
+
+// ✅ V2.10 : tout compte doit porter le rôle "client" (les 3 autres s'additionnant
+// par-dessus), pour que "Mon espace personnel" (qui héberge désormais "Potes de
+// grimpe") reste atteignable par le staff aussi. Garde-fou serveur en plus du
+// verrou posé dans AdminUsers.tsx (case "Client" désactivée dans le multi-select).
+describe('users : invariant "roles" contient toujours "client"', () => {
+  it('un admin ne peut PAS créer un compte moniteur sans le rôle client', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'users', 'admin-1'), { roles: ['admin'] });
+    });
+    const adminDb = testEnv.authenticatedContext('admin-1').firestore();
+    await assertFails(setDoc(doc(adminDb, 'users', 'new-staff-1'), {
+      email: 'staff@test.com', first_name: 'S', last_name: 'T', roles: ['moniteur'],
+    }));
+  });
+
+  it('un admin peut créer un compte moniteur qui porte aussi le rôle client', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'users', 'admin-1'), { roles: ['admin'] });
+    });
+    const adminDb = testEnv.authenticatedContext('admin-1').firestore();
+    await assertSucceeds(setDoc(doc(adminDb, 'users', 'new-staff-2'), {
+      email: 'staff2@test.com', first_name: 'S', last_name: 'T', roles: ['moniteur', 'client'],
+    }));
+  });
+
+  it('un admin ne peut PAS retirer le rôle client d\'un compte existant', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'users', 'admin-1'), { roles: ['admin'] });
+    });
+    const adminDb = testEnv.authenticatedContext('admin-1').firestore();
+    await assertFails(updateDoc(doc(adminDb, 'users', MONITEUR_UID), { roles: ['moniteur'] }));
+  });
+
+  it('un client peut s\'auto-inscrire avec le rôle client (Register.tsx)', async () => {
+    const selfDb = testEnv.authenticatedContext('self-register-1').firestore();
+    await assertSucceeds(setDoc(doc(selfDb, 'users', 'self-register-1'), {
+      email: 'moi@test.com', first_name: 'M', last_name: 'O', roles: ['client'],
+    }));
+  });
+});
+
+// ✅ "Potes de grimpe" (V2.10) : amitiés + statuts sociaux optionnels. pairId =
+// les deux uids triés puis concaténés (voir friendPairId dans Friends.tsx et
+// firestore.rules), pour qu'une seule relation existe entre deux personnes.
+describe('friendships : demandes d\'ami', () => {
+  const pairId = `${CLIENT_UID}_${OTHER_CLIENT_UID}`; // 'client-1' < 'client-2'
+
+  it('un utilisateur peut envoyer une demande d\'ami avec le bon pairId', async () => {
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertSucceeds(setDoc(doc(clientDb, 'friendships', pairId), {
+      uids: [CLIENT_UID, OTHER_CLIENT_UID],
+      status: 'pending',
+      requestedBy: CLIENT_UID,
+      createdAt: new Date().toISOString(),
+    }));
+  });
+
+  it('impossible de créer une demande au nom de quelqu\'un d\'autre (requestedBy usurpé)', async () => {
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertFails(setDoc(doc(clientDb, 'friendships', pairId), {
+      uids: [CLIENT_UID, OTHER_CLIENT_UID],
+      status: 'pending',
+      requestedBy: OTHER_CLIENT_UID,
+      createdAt: new Date().toISOString(),
+    }));
+  });
+
+  it('impossible de créer une demande dont le pairId ne correspond pas aux uids triés', async () => {
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertFails(setDoc(doc(clientDb, 'friendships', 'un-id-quelconque'), {
+      uids: [CLIENT_UID, OTHER_CLIENT_UID],
+      status: 'pending',
+      requestedBy: CLIENT_UID,
+      createdAt: new Date().toISOString(),
+    }));
+  });
+
+  it('un tiers ne peut pas lire une demande qui ne le concerne pas', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'friendships', pairId), {
+        uids: [CLIENT_UID, OTHER_CLIENT_UID], status: 'pending', requestedBy: CLIENT_UID, createdAt: new Date().toISOString(),
+      });
+      await setDoc(doc(context.firestore(), 'users', 'client-3'), { roles: ['client'] });
+    });
+    const thirdDb = testEnv.authenticatedContext('client-3').firestore();
+    await assertFails(getDoc(doc(thirdDb, 'friendships', pairId)));
+  });
+
+  it('celui qui a envoyé la demande ne peut pas l\'accepter lui-même', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'friendships', pairId), {
+        uids: [CLIENT_UID, OTHER_CLIENT_UID], status: 'pending', requestedBy: CLIENT_UID, createdAt: new Date().toISOString(),
+      });
+    });
+    const requesterDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertFails(updateDoc(doc(requesterDb, 'friendships', pairId), { status: 'accepted' }));
+  });
+
+  it('le destinataire peut accepter la demande', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'friendships', pairId), {
+        uids: [CLIENT_UID, OTHER_CLIENT_UID], status: 'pending', requestedBy: CLIENT_UID, createdAt: new Date().toISOString(),
+      });
+    });
+    const recipientDb = testEnv.authenticatedContext(OTHER_CLIENT_UID).firestore();
+    await assertSucceeds(updateDoc(doc(recipientDb, 'friendships', pairId), { status: 'accepted' }));
+  });
+
+  it('n\'importe laquelle des deux personnes peut supprimer la relation (refus ou retrait d\'ami)', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'friendships', pairId), {
+        uids: [CLIENT_UID, OTHER_CLIENT_UID], status: 'accepted', requestedBy: CLIENT_UID, createdAt: new Date().toISOString(),
+      });
+    });
+    const recipientDb = testEnv.authenticatedContext(OTHER_CLIENT_UID).firestore();
+    await assertSucceeds(deleteDoc(doc(recipientDb, 'friendships', pairId)));
+  });
+});
+
+describe('climbing_status / next_sessions : visibles seulement par les amis acceptés', () => {
+  const pairId = `${CLIENT_UID}_${OTHER_CLIENT_UID}`;
+
+  it('le propriétaire peut écrire et relire son propre statut', async () => {
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertSucceeds(setDoc(doc(clientDb, 'climbing_status', CLIENT_UID), {
+      active: true, since: new Date().toISOString(),
+    }));
+    await assertSucceeds(getDoc(doc(clientDb, 'climbing_status', CLIENT_UID)));
+  });
+
+  it('impossible d\'écrire le statut de quelqu\'un d\'autre', async () => {
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertFails(setDoc(doc(clientDb, 'climbing_status', OTHER_CLIENT_UID), {
+      active: true, since: new Date().toISOString(),
+    }));
+  });
+
+  it('un non-ami ne peut pas lire le statut ou la prochaine session d\'un client', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'climbing_status', CLIENT_UID), { active: true, since: new Date().toISOString() });
+      await setDoc(doc(context.firestore(), 'next_sessions', CLIENT_UID), { day: 'Lundi', timeSlot: '18h-20h', updatedAt: new Date().toISOString() });
+    });
+    const otherDb = testEnv.authenticatedContext(OTHER_CLIENT_UID).firestore();
+    await assertFails(getDoc(doc(otherDb, 'climbing_status', CLIENT_UID)));
+    await assertFails(getDoc(doc(otherDb, 'next_sessions', CLIENT_UID)));
+  });
+
+  it('un ami accepté peut lire le statut et la prochaine session', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'friendships', pairId), {
+        uids: [CLIENT_UID, OTHER_CLIENT_UID], status: 'accepted', requestedBy: CLIENT_UID, createdAt: new Date().toISOString(),
+      });
+      await setDoc(doc(context.firestore(), 'climbing_status', CLIENT_UID), { active: true, since: new Date().toISOString() });
+      await setDoc(doc(context.firestore(), 'next_sessions', CLIENT_UID), { day: 'Lundi', timeSlot: '18h-20h', updatedAt: new Date().toISOString() });
+    });
+    const otherDb = testEnv.authenticatedContext(OTHER_CLIENT_UID).firestore();
+    await assertSucceeds(getDoc(doc(otherDb, 'climbing_status', CLIENT_UID)));
+    await assertSucceeds(getDoc(doc(otherDb, 'next_sessions', CLIENT_UID)));
+  });
+
+  it('une demande encore "pending" (non acceptée) ne donne pas accès en lecture', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'friendships', pairId), {
+        uids: [CLIENT_UID, OTHER_CLIENT_UID], status: 'pending', requestedBy: CLIENT_UID, createdAt: new Date().toISOString(),
+      });
+      await setDoc(doc(context.firestore(), 'climbing_status', CLIENT_UID), { active: true, since: new Date().toISOString() });
+    });
+    const otherDb = testEnv.authenticatedContext(OTHER_CLIENT_UID).firestore();
+    await assertFails(getDoc(doc(otherDb, 'climbing_status', CLIENT_UID)));
   });
 });

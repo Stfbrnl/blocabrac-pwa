@@ -12,6 +12,15 @@ service cloud.firestore {
       return (profile.roles is list && role in profile.roles) || ('role' in profile && profile.role == role);
     }
 
+    // ✅ Tout compte doit toujours porter le rôle "client" (les 3 autres rôles
+    // s'additionnant par-dessus) : "Mon espace personnel" (protégé par role="client")
+    // héberge désormais "Potes de grimpe", ouvert à tout le monde y compris le staff.
+    // Garde-fou serveur en plus du verrou déjà posé dans AdminUsers.tsx, seul autre
+    // point d'écriture du champ "roles".
+    function hasClientRole(data) {
+      return (data.roles is list && 'client' in data.roles) || ('role' in data && data.role == 'client');
+    }
+
     // ✅ Un client ne peut valider les exercices d'une séance (client_course_results) que si :
     // elle a été activée par le moniteur ("séance du jour"), pas encore archivée, et le client
     // fait partie des participants sans s'être désisté (voir src/utils/courseSessionStatus.ts,
@@ -38,10 +47,11 @@ service cloud.firestore {
       // (l'admin) ne correspond jamais à userId (le nouveau compte), et la création
       // d'utilisateur par un admin échoue systématiquement.
       allow create: if request.auth != null &&
-                      (request.auth.uid == userId || isUserRole("admin"));
+                      (request.auth.uid == userId || isUserRole("admin")) &&
+                      hasClientRole(request.resource.data);
       allow update: if request.auth != null &&
                       (
-                        isUserRole("admin") ||
+                        (isUserRole("admin") && hasClientRole(request.resource.data)) ||
                         (request.auth.uid == userId &&
                          // ✅ "levelOverride" ajouté : seul un admin doit pouvoir verrouiller/déverrouiller
                          // le niveau d'un client, sinon celui-ci pourrait geler son propre niveau à volonté.
@@ -314,7 +324,61 @@ service cloud.firestore {
       allow create, update, delete: if request.auth != null && isUserRole("admin");
     }
 
-    // ========== 16. Par défaut ==========
+    // ========== 16. Potes de grimpe (amitiés + statuts sociaux) ==========
+    // ✅ Identifiant de relation déterministe (les deux uids triés puis concaténés),
+    // pour qu'une seule relation existe entre deux personnes quel que soit qui a
+    // envoyé la demande — évite les doublons "A→B" et "B→A".
+    function friendPairId(uidA, uidB) {
+      return uidA < uidB ? uidA + '_' + uidB : uidB + '_' + uidA;
+    }
+
+    // ✅ Vérifie qu'une amitié ACCEPTÉE existe entre l'utilisateur connecté et otherUid,
+    // utilisée pour autoriser la lecture du statut "je grimpe"/"ma prochaine session"
+    // d'un ami. "exists()" d'abord : un get() sur un document absent ferait échouer
+    // toute la règle plutôt que de simplement refuser proprement l'accès.
+    function isAcceptedFriend(otherUid) {
+      let path = /databases/$(database)/documents/friendships/$(friendPairId(request.auth.uid, otherUid));
+      return exists(path) && get(path).data.status == 'accepted';
+    }
+
+    match /friendships/{pairId} {
+      allow read: if request.auth != null && request.auth.uid in resource.data.uids;
+      allow create: if request.auth != null &&
+                      request.auth.uid in request.resource.data.uids &&
+                      request.resource.data.uids.size() == 2 &&
+                      request.resource.data.uids[0] != request.resource.data.uids[1] &&
+                      pairId == friendPairId(request.resource.data.uids[0], request.resource.data.uids[1]) &&
+                      request.resource.data.requestedBy == request.auth.uid &&
+                      request.resource.data.status == 'pending';
+      // ✅ Seule la personne qui N'A PAS envoyé la demande peut l'accepter, pour ne
+      // jamais permettre de s'auto-confirmer sa propre demande d'ami.
+      allow update: if request.auth != null &&
+                      request.auth.uid in resource.data.uids &&
+                      request.auth.uid != resource.data.requestedBy &&
+                      resource.data.status == 'pending' &&
+                      request.resource.data.status == 'accepted';
+      // ✅ Sert à la fois à refuser une demande reçue et à retirer un ami accepté :
+      // dans les deux cas, n'importe laquelle des deux personnes peut supprimer la
+      // relation.
+      allow delete: if request.auth != null && request.auth.uid in resource.data.uids;
+    }
+
+    // ✅ Statut éphémère "je suis en train de grimper", tenu à jour par son
+    // propriétaire uniquement. La péremption (3h) est calculée à l'affichage côté
+    // client (voir Friends.tsx) plutôt que par une tâche planifiée serveur.
+    match /climbing_status/{uid} {
+      allow read: if request.auth != null && (request.auth.uid == uid || isAcceptedFriend(uid));
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // ✅ "Ma prochaine session" : jour/créneau déclarés librement par l'utilisateur,
+    // sans lien avec les séances moniteur (courses) déjà existantes.
+    match /next_sessions/{uid} {
+      allow read: if request.auth != null && (request.auth.uid == uid || isAcceptedFriend(uid));
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // ========== 17. Par défaut ==========
     match /{otherDocument=**} {
       allow read, write: if false;
     }

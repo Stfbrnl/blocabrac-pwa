@@ -265,6 +265,16 @@ const ClientScreen: React.FC = () => {
             </Button>
           )}
 
+          {/* Potes de grimpe : ajout d'amis, statut "je grimpe", prochaine session */}
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={() => navigate('/client/friends')}
+            sx={{ p: 2 }}
+          >
+            Potes de grimpe
+          </Button>
+
           {/* Bouton 5 : Modifier mes informations */}
           <Button
             variant="contained"

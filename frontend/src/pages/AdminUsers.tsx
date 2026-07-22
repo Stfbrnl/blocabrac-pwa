@@ -12,7 +12,7 @@ import { db, auth } from '../services/firebaseConfig';
 import {
   collection, getDocs, doc, deleteDoc, writeBatch
 } from 'firebase/firestore';
-import { createUserWithEmailAndPassword, sendPasswordResetEmail, getAuth, signOut } from 'firebase/auth';
+import { createUserWithEmailAndPassword, sendPasswordResetEmail, getAuth, signOut, connectAuthEmulator } from 'firebase/auth';
 import { initializeApp, deleteApp, FirebaseError } from 'firebase/app';
 import { getSeasonAge } from '../utils/ageCategory';
 
@@ -97,7 +97,10 @@ const AdminUsers: React.FC = () => {
     email: '',
     first_name: '',
     last_name: '',
-    roles: [],
+    // ✅ "client" toujours présent par défaut (voir MenuItem désactivé ci-dessous
+    // et firestore.rules : tout compte doit porter ce rôle, les 3 autres
+    // s'additionnant par-dessus).
+    roles: ['client'],
     age: undefined,
     dateOfBirth: '',
     gender: '',
@@ -279,6 +282,13 @@ const AdminUsers: React.FC = () => {
     // de l'admin sur l'app principale n'est jamais affectée.
     const secondaryApp = initializeApp(auth.app.options, `Secondary-${Date.now()}`);
     const secondaryAuth = getAuth(secondaryApp);
+    // ✅ Sans ça, cette instance secondaire appelle toujours le vrai Firebase Auth,
+    // même quand VITE_USE_EMULATOR=true (contrairement à "auth" dans
+    // firebaseConfig.ts) : un test contre l'émulateur créerait alors un vrai compte
+    // en production à chaque exécution.
+    if (import.meta.env.DEV && import.meta.env.VITE_USE_EMULATOR === 'true') {
+      connectAuthEmulator(secondaryAuth, 'http://localhost:9099', { disableWarnings: true });
+    }
 
     try {
       const userCredential = await createUserWithEmailAndPassword(
@@ -383,7 +393,10 @@ const AdminUsers: React.FC = () => {
       email: user.email,
       first_name: user.first_name,
       last_name: user.last_name,
-      roles: user.roles || [],
+      // ✅ Fusion défensive avec "client" (voir MenuItem désactivé ci-dessous et
+      // firestore.rules) : tout compte existant en a déjà un, mais on ne dépend
+      // jamais uniquement des données déjà en base pour garantir l'invariant.
+      roles: Array.from(new Set([...(user.roles || []), 'client'])) as UserRole[],
       age: user.age,
       dateOfBirth: user.dateOfBirth || '',
       gender: user.gender || '',
@@ -779,7 +792,10 @@ const AdminUsers: React.FC = () => {
                   <MenuItem value="admin">Admin</MenuItem>
                   <MenuItem value="ouvreur">Ouvreur</MenuItem>
                   <MenuItem value="moniteur">Moniteur</MenuItem>
-                  <MenuItem value="client">Client</MenuItem>
+                  {/* ✅ Toujours présent et non désélectionnable : tout compte doit
+                      porter le rôle "client" (voir roles par défaut ci-dessus et
+                      firestore.rules), les 3 autres rôles s'additionnant par-dessus. */}
+                  <MenuItem value="client" disabled>Client (toujours actif)</MenuItem>
                 </Select>
               </FormControl>
               <FormControl fullWidth required>
@@ -861,7 +877,10 @@ const AdminUsers: React.FC = () => {
                   <MenuItem value="admin">Admin</MenuItem>
                   <MenuItem value="ouvreur">Ouvreur</MenuItem>
                   <MenuItem value="moniteur">Moniteur</MenuItem>
-                  <MenuItem value="client">Client</MenuItem>
+                  {/* ✅ Toujours présent et non désélectionnable : tout compte doit
+                      porter le rôle "client" (voir roles par défaut ci-dessus et
+                      firestore.rules), les 3 autres rôles s'additionnant par-dessus. */}
+                  <MenuItem value="client" disabled>Client (toujours actif)</MenuItem>
                 </Select>
               </FormControl>
               <FormControl fullWidth required>
