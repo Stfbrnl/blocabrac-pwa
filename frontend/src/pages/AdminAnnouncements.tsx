@@ -67,7 +67,10 @@ const AdminAnnouncements: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchAnnouncements();
+    const load = () => {
+      fetchAnnouncements();
+    };
+    load();
   }, []);
 
   const handleCreate = async () => {
