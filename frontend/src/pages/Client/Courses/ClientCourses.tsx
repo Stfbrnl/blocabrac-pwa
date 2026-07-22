@@ -103,8 +103,8 @@ const ClientCourses: React.FC = () => {
         }
 
         setSessions(allSessions);
-      } catch (err: any) {
-        setError(`Erreur: ${err.message}`);
+      } catch (err: unknown) {
+        setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
         console.error("Erreur Firestore:", err);
       } finally {
         setLoading(false);
@@ -124,8 +124,8 @@ const ClientCourses: React.FC = () => {
       setSessions(prev => prev.map(s => s.id === session.id
         ? { ...s, optedOut: hasOptedOut ? s.optedOut.filter(uid => uid !== user.uid) : [...s.optedOut, user.uid] }
         : s));
-    } catch (err: any) {
-      setError(`Erreur lors de la mise à jour de votre inscription : ${err.message}`);
+    } catch (err: unknown) {
+      setError(`Erreur lors de la mise à jour de votre inscription : ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 

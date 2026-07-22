@@ -6,9 +6,9 @@ import {
 } from 'firebase/firestore';
 import {
   Container, Typography, Box, Button, CircularProgress, Alert,
-  Dialog, DialogTitle, DialogContent, DialogActions, Paper,
-  Grid, Card, CardContent, CardMedia, Rating, TextField,
-  FormControl, InputLabel, Select, MenuItem, Chip,
+  Dialog, DialogTitle, DialogContent, DialogActions,
+  Grid, Card, CardContent, CardMedia, Rating,
+  FormControl, InputLabel, Select, MenuItem,
   useMediaQuery
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
@@ -37,6 +37,12 @@ interface Competition {
   registered_count: number;
   minLevel?: string;
   maxLevel?: string;
+}
+
+interface RegistrableUser {
+  uid?: string;
+  inscritAuxCompetitions?: boolean;
+  level?: string;
 }
 
 interface Boulder {
@@ -72,7 +78,7 @@ const ClientCompetitions: React.FC = () => {
     proposedDifficulty: string;
   }>>({});
 
-  const [currentUserDoc, setCurrentUserDoc] = useState<any>(null);
+  const [currentUserDoc, setCurrentUserDoc] = useState<RegistrableUser | null>(null);
 
   // ✅ Détection mobile pour passer les Dialogs en plein écran
   const theme = useTheme();
@@ -88,7 +94,7 @@ const ClientCompetitions: React.FC = () => {
       try {
         const snap = await getDoc(doc(db, 'users', user.uid));
         if (snap.exists()) {
-          setCurrentUserDoc({ uid: snap.id, ...(snap.data() as any) });
+          setCurrentUserDoc({ uid: snap.id, ...snap.data() });
         }
       } catch (err) {
         console.error('Erreur fetch user', err);
@@ -120,8 +126,8 @@ const ClientCompetitions: React.FC = () => {
           maxLevel: doc.data().maxLevel
         }));
         setCompetitions(competitionsData);
-      } catch (err: any) {
-        setError(`Erreur: ${err.message}`);
+      } catch (err: unknown) {
+        setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
         console.error("Erreur Firestore:", err);
       } finally {
         setLoading(false);
@@ -157,14 +163,14 @@ const ClientCompetitions: React.FC = () => {
       }))
       .sort((a, b) => a.number - b.number);
       setBoulders(bouldersData);
-    } catch (err: any) {
-      setError(`Erreur: ${err.message}`);
+    } catch (err: unknown) {
+      setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setLoading(false);
     }
   };
 
-  const canUserRegister = (user: any, competition: Competition): boolean => {
+  const canUserRegister = (user: RegistrableUser, competition: Competition): boolean => {
     if (!user.inscritAuxCompetitions) {
       return false;
     }
@@ -250,8 +256,8 @@ const ClientCompetitions: React.FC = () => {
       setSuccess("Inscription réussie !");
       setOpenRegisterDialog(false);
       setTimeout(() => setSuccess(null), 3000);
-    } catch (err: any) {
-      setError(`Erreur: ${err.message}`);
+    } catch (err: unknown) {
+      setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -282,8 +288,8 @@ const ClientCompetitions: React.FC = () => {
       setOpenValidationDialog(false);
       setValidationResults({});
       setTimeout(() => setSuccess(null), 3000);
-    } catch (err: any) {
-      setError(`Erreur: ${err.message}`);
+    } catch (err: unknown) {
+      setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Typography, Paper, Box, MenuItem, Select, InputLabel, FormControl,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  LinearProgress, Chip
+  LinearProgress
 } from '@mui/material';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { useAuthState } from 'react-firebase-hooks/auth';
@@ -47,6 +47,24 @@ interface Participant {
   level?: string;
 }
 
+interface ScoreEntry {
+  participant: Participant;
+  score: number;
+  boulders: number;
+}
+
+interface CategoryGroup {
+  category: string;
+  participants: ScoreEntry[];
+}
+
+// ✅ Signatures surchargées : le type de retour dépend de la valeur littérale passée
+// ("global" -> liste plate, "age"/"gender" -> groupes), pour éviter un cast à chaque appel.
+type GetClassementByCategory = {
+  (category: 'global'): ScoreEntry[];
+  (category: 'age' | 'gender'): CategoryGroup[];
+};
+
 interface User {
   uid: string;
   age?: number;
@@ -55,6 +73,7 @@ interface User {
   first_name?: string;
   last_name?: string;
   email?: string;
+  level?: string;
 }
 
 const CompetitionStats: React.FC = () => {
@@ -81,7 +100,7 @@ const CompetitionStats: React.FC = () => {
           email: doc.data().email
         }));
         setUsers(usersData);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Erreur:", err);
       }
     };
@@ -114,7 +133,7 @@ const CompetitionStats: React.FC = () => {
             date: doc.data().date || ''
           }));
         setCompetitions(competitionsData);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Erreur:", err);
       } finally {
         setLoading(false);
@@ -177,11 +196,11 @@ const CompetitionStats: React.FC = () => {
             age: user?.age || doc.data().age,
             dateOfBirth: user?.dateOfBirth || doc.data().dateOfBirth,
             gender: user?.gender || doc.data().gender,
-            level: (user as any)?.level || doc.data().level
+            level: user?.level || doc.data().level
           };
         });
         setParticipants(participantsData);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Erreur:", err);
       } finally {
         setLoading(false);
@@ -191,7 +210,7 @@ const CompetitionStats: React.FC = () => {
     fetchData();
   }, [selectedCompetition, users]);
 
-  const getParticipantScores = (): { participant: Participant; score: number; boulders: number }[] => {
+  const getParticipantScores = (): ScoreEntry[] => {
     const scores: Record<string, { score: number; boulders: number }> = {};
 
     results.forEach(result => {
@@ -221,13 +240,13 @@ const CompetitionStats: React.FC = () => {
     }).sort((a, b) => b.score - a.score);
   };
 
-  const getClassementByCategory = (category: 'global' | 'age' | 'gender'): any[] => {
+  const getClassementByCategory = ((category: 'global' | 'age' | 'gender') => {
     const scores = getParticipantScores();
 
     if (category === 'global') {
       return scores;
     } else if (category === 'age') {
-      const byAge: Record<string, any[]> = {};
+      const byAge: Record<string, ScoreEntry[]> = {};
       scores.forEach(score => {
         const ageCategory = getFfmeCategory(getSeasonAge(score.participant.dateOfBirth, score.participant.age));
         if (!byAge[ageCategory]) {
@@ -240,7 +259,7 @@ const CompetitionStats: React.FC = () => {
         participants: scores
       }));
     } else {
-      const byGender: Record<string, any[]> = {};
+      const byGender: Record<string, ScoreEntry[]> = {};
       scores.forEach(score => {
         const gender = score.participant.gender || 'Inconnu';
         if (!byGender[gender]) {
@@ -253,7 +272,7 @@ const CompetitionStats: React.FC = () => {
         participants: scores
       }));
     }
-  };
+  }) as GetClassementByCategory;
 
   return (
     <Box sx={{ p: { xs: 1.5, sm: 3 } }}>
@@ -337,7 +356,7 @@ const CompetitionStats: React.FC = () => {
                         </TableRow>
                       </TableHead>
                       <TableBody>
-                        {category.participants.map((item: any, index: number) => (
+                        {category.participants.map((item: ScoreEntry, index: number) => (
                           <TableRow key={index}>
                             <TableCell>{index + 1}</TableCell>
                             <TableCell>{item.participant.first_name} {item.participant.last_name}</TableCell>
@@ -370,7 +389,7 @@ const CompetitionStats: React.FC = () => {
                         </TableRow>
                       </TableHead>
                       <TableBody>
-                        {gender.participants.map((item: any, index: number) => (
+                        {gender.participants.map((item: ScoreEntry, index: number) => (
                           <TableRow key={index}>
                             <TableCell>{index + 1}</TableCell>
                             <TableCell>{item.participant.first_name} {item.participant.last_name}</TableCell>

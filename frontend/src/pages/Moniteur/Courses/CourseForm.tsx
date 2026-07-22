@@ -25,7 +25,6 @@ import {
   Snackbar,
   Alert,
   Autocomplete,
-  Chip,
   Checkbox,
   ListItemText,
 } from '@mui/material';

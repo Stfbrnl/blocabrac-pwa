@@ -14,12 +14,11 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  Snackbar,
   Alert,
   Switch,
   FormControlLabel
 } from '@mui/material';
-import { doc, getDoc, updateDoc, writeBatch } from 'firebase/firestore';
+import { doc, getDoc, writeBatch } from 'firebase/firestore';
 
 // Tableau de correspondance code-couleur/cotations internationales
 const levelOptions = [
@@ -123,11 +122,6 @@ const ClientProfile: React.FC = () => {
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const handleCloseSnackbar = () => {
-    setError(null);
-    setSuccess(null);
   };
 
   if (loadingAuth || loading || !userData) {

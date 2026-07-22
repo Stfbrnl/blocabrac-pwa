@@ -48,9 +48,6 @@ interface Exercise {
   createdAt: Date;
 }
 
-const difficulties = ['Facile', 'Moyen', 'Difficile', 'Expert'];
-const categories = ['Échauffement', 'Bloc', 'Plyométrie', 'Renforcement', 'Équipement'];
-
 const ExercisesList: React.FC = () => {
   const [user, loadingAuth] = useAuthState(auth);
   const [exercises, setExercises] = useState<Exercise[]>([]);
@@ -63,34 +60,37 @@ const ExercisesList: React.FC = () => {
   useEffect(() => {
     if (!user) return;
 
-    setIsLoading(true);
-    setError(null);
+    const subscribe = () => {
+      setIsLoading(true);
+      setError(null);
 
-    const q = query(
-      collection(db, 'exercises'),
-      where('createdBy', '==', user.uid)
-    );
+      const q = query(
+        collection(db, 'exercises'),
+        where('createdBy', '==', user.uid)
+      );
 
-    const unsubscribe = onSnapshot(
-      q,
-      (querySnapshot) => {
-        const exercisesData: Exercise[] = [];
-        querySnapshot.forEach((doc) => {
-          exercisesData.push({
-            id: doc.id,
-            ...doc.data(),
-            createdAt: doc.data().createdAt?.toDate() || new Date(),
-          } as Exercise);
-        });
-        setExercises(exercisesData);
-        setIsLoading(false);
-      },
-      (err) => {
-        setError(`Erreur lors de la récupération des exercices : ${err.message}`);
-        setIsLoading(false);
-      }
-    );
+      return onSnapshot(
+        q,
+        (querySnapshot) => {
+          const exercisesData: Exercise[] = [];
+          querySnapshot.forEach((doc) => {
+            exercisesData.push({
+              id: doc.id,
+              ...doc.data(),
+              createdAt: doc.data().createdAt?.toDate() || new Date(),
+            } as Exercise);
+          });
+          setExercises(exercisesData);
+          setIsLoading(false);
+        },
+        (err) => {
+          setError(`Erreur lors de la récupération des exercices : ${err.message}`);
+          setIsLoading(false);
+        }
+      );
+    };
 
+    const unsubscribe = subscribe();
     return () => unsubscribe();
   }, [user]);
 

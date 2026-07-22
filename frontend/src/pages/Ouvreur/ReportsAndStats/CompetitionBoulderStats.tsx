@@ -2,16 +2,11 @@ import React, { useState, useEffect } from 'react';
 import {
   Typography, Paper, Box, MenuItem, Select, InputLabel, FormControl,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  LinearProgress, Chip, Collapse, IconButton, Tooltip
+  LinearProgress, Chip, Collapse, IconButton
 } from '@mui/material';
 import { ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon } from '@mui/icons-material';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../../services/firebaseConfig';
-
-const levelColors: Record<string, string> = {
-  jaune: '#FFFF00', vert: '#00FF00', bleu: '#0000FF', violet: '#800080',
-  rouge: '#FF0000', noir: '#000000', blanc: '#FFFFFF', rose: '#FFC0CB'
-};
 
 interface Competition {
   id: string;
@@ -65,7 +60,7 @@ const CompetitionBoulderStats: React.FC = () => {
           email: doc.data().email || ''
         }));
         setUsers(usersData);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Erreur:", err);
       }
     };
@@ -83,7 +78,7 @@ const CompetitionBoulderStats: React.FC = () => {
           date: doc.data().date || ''
         }));
         setCompetitions(competitionsData);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Erreur:", err);
       } finally {
         setLoading(false);
@@ -134,7 +129,7 @@ const CompetitionBoulderStats: React.FC = () => {
           };
         });
         setResults(resultsData);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Erreur:", err);
       } finally {
         setLoading(false);

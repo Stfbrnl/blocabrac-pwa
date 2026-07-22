@@ -3,7 +3,7 @@ import {
   Typography, Paper, Box, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Chip, Select, MenuItem,
   InputLabel, FormControl, IconButton, Button, Dialog, DialogTitle,
-  DialogContent, DialogActions
+  DialogContent, DialogActions, SelectChangeEvent
 } from '@mui/material';
 import { Check as CheckIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import { collection, query, where, onSnapshot, updateDoc, doc, deleteDoc, getDocs } from 'firebase/firestore';
@@ -99,7 +99,7 @@ export default function ReportsList(): JSX.Element {
           <Select
             labelId="filtrer-par-type-select-label" id="filtrer-par-type-select"
             value={filterType}
-            onChange={(e: any): void => setFilterType(e.target.value as ReportType | 'all')}
+            onChange={(e: SelectChangeEvent): void => setFilterType(e.target.value as ReportType | 'all')}
             label="Filtrer par type"
           >
             <MenuItem value="all">Tous les signalements</MenuItem>

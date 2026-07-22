@@ -78,7 +78,7 @@ const AdminCompetitionManagement: React.FC = () => {
           maxLevel: doc.data().maxLevel  // ✅ Nouveau
         }));
         setCompetitions(competitionsData);
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error("Erreur :", error);
         setSnackbarMessage("Erreur lors du chargement des compétitions.");
         setOpenSnackbar(true);
@@ -124,7 +124,7 @@ const AdminCompetitionManagement: React.FC = () => {
       setOpenCreateDialog(false);
       setSnackbarMessage("Compétition créée avec succès !");
       setOpenSnackbar(true);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Erreur :", error);
       setSnackbarMessage("Erreur lors de la création de la compétition.");
       setOpenSnackbar(true);
@@ -174,7 +174,7 @@ const AdminCompetitionManagement: React.FC = () => {
       setOpenEditDialog(false);
       setSnackbarMessage("Compétition mise à jour avec succès !");
       setOpenSnackbar(true);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Erreur :", error);
       setSnackbarMessage("Erreur lors de la mise à jour de la compétition.");
       setOpenSnackbar(true);
@@ -188,7 +188,7 @@ const AdminCompetitionManagement: React.FC = () => {
       setCompetitions(competitions.filter(comp => comp.id !== competitionToDelete));
       setSnackbarMessage("Compétition supprimée avec succès !");
       setOpenSnackbar(true);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Erreur :", error);
       setSnackbarMessage("Erreur lors de la suppression de la compétition.");
       setOpenSnackbar(true);

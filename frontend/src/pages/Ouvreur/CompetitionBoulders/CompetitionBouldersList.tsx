@@ -6,6 +6,7 @@ import {
   TableCell, TableContainer, TableHead, TableRow, TextField, Chip,
   Dialog, DialogTitle, DialogContent, DialogActions
 } from '@mui/material';
+import type { SelectChangeEvent } from '@mui/material';
 import { Delete as DeleteIcon, Edit as EditIcon, Add as AddIcon } from '@mui/icons-material';
 import { collection, query, where, getDocs, orderBy, updateDoc, doc } from 'firebase/firestore';
 import { db } from '../../../services/firebaseConfig';
@@ -52,12 +53,12 @@ export default function CompetitionBouldersList(): JSX.Element {
   }, []);
 
   useEffect(() => {
-    if (!selectedCompetition) {
-      setBoulders([]);
-      return;
-    }
-
     const fetchBoulders = async (): Promise<void> => {
+      if (!selectedCompetition) {
+        setBoulders([]);
+        return;
+      }
+
       try {
         const q = query(
           collection(db, 'boulders'),
@@ -124,7 +125,7 @@ export default function CompetitionBouldersList(): JSX.Element {
           <Select
             labelId="selectionnez-une-competition-select-label" id="selectionnez-une-competition-select"
             value={selectedCompetition}
-            onChange={(e: any): void => setSelectedCompetition(e.target.value as string)}
+            onChange={(e: SelectChangeEvent): void => setSelectedCompetition(e.target.value)}
             label="Compétition"
           >
             {competitions.map((comp: Competition) => (
@@ -174,7 +175,7 @@ export default function CompetitionBouldersList(): JSX.Element {
                           <TextField
                             type="number"
                             value={boulder.number}
-                            onChange={(e: any): void => {
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>): void => {
                               const newBoulders = [...boulders];
                               const index = newBoulders.findIndex(b => b.id === boulder.id);
                               if (index !== -1) {

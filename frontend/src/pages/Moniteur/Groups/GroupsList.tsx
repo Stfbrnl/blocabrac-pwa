@@ -57,36 +57,39 @@ const GroupsList: React.FC = () => {
   useEffect(() => {
     if (!user) return;
 
-    setIsLoading(true);
-    setError(null);
+    const subscribe = () => {
+      setIsLoading(true);
+      setError(null);
 
-    const q = query(
-      collection(db, 'Groups'),
-      where('moniteurId', '==', user.uid)
-    );
+      const q = query(
+        collection(db, 'Groups'),
+        where('moniteurId', '==', user.uid)
+      );
 
-    const unsubscribe = onSnapshot(
-      q,
-      (querySnapshot) => {
-        const groupsData: Group[] = [];
-        querySnapshot.forEach((doc) => {
-          groupsData.push({
-            id: doc.id,
-            name: doc.data().name,
-            description: doc.data().description || '',
-            students: doc.data().students || [],
-            moniteurId: doc.data().moniteurId,
+      return onSnapshot(
+        q,
+        (querySnapshot) => {
+          const groupsData: Group[] = [];
+          querySnapshot.forEach((doc) => {
+            groupsData.push({
+              id: doc.id,
+              name: doc.data().name,
+              description: doc.data().description || '',
+              students: doc.data().students || [],
+              moniteurId: doc.data().moniteurId,
+            });
           });
-        });
-        setGroups(groupsData);
-        setIsLoading(false);
-      },
-      (err) => {
-        setError(`Erreur lors de la récupération des groupes : ${err.message}`);
-        setIsLoading(false);
-      }
-    );
+          setGroups(groupsData);
+          setIsLoading(false);
+        },
+        (err) => {
+          setError(`Erreur lors de la récupération des groupes : ${err.message}`);
+          setIsLoading(false);
+        }
+      );
+    };
 
+    const unsubscribe = subscribe();
     return () => unsubscribe();
   }, [user]);
 

@@ -4,9 +4,10 @@ import {
   TextField, Button, MenuItem, Select, InputLabel, FormControl, Box,
   Typography, Container, Paper, IconButton, Stack, CircularProgress
 } from '@mui/material';
+import type { SelectChangeEvent } from '@mui/material';
 import { Delete as DeleteIcon, Check as CheckIcon } from '@mui/icons-material';
 import {
-  addDoc, collection, doc, updateDoc, getDoc, query, where, getDocs
+  addDoc, collection, doc, updateDoc, getDoc
 } from 'firebase/firestore';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '../../../services/firebaseConfig';
@@ -144,9 +145,7 @@ export default function CompetitionBoulderForm(): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  // ✅ Même correctif que DailyBoulderForm : force le remontage de l'input file
-  // après une création réussie, pour éviter le bug "il faut recharger l'écran"
-  const [fileInputKey, setFileInputKey] = useState<number>(0);
+  const [fileInputKey] = useState<number>(0);
 
   useEffect(() => {
     if (!competitionId) return;
@@ -275,22 +274,6 @@ export default function CompetitionBoulderForm(): JSX.Element {
       newAnnotations[type] = newAnnotations[type].filter((_, i) => i !== index);
       return { ...prev, annotations: newAnnotations };
     });
-  };
-
-  const resetForm = (): void => {
-    setFormData({
-      number: '',
-      wall: '',
-      difficulty: '',
-      difficulty_types: [],
-      instructions: '',
-      imageFile: null,
-      imagePreview: '',
-      annotations: { start_holds: [], end_holds: [] },
-      difficulty_level: 'Égal'
-    });
-    // ✅ Force le remontage de l'input file natif (même correctif que DailyBoulderForm)
-    setFileInputKey((k) => k + 1);
   };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
@@ -433,7 +416,7 @@ export default function CompetitionBoulderForm(): JSX.Element {
               <Select
                 labelId="mur-select-label" id="mur-select"
                 value={formData.wall}
-                onChange={(e: any): void => setFormData({ ...formData, wall: e.target.value as string })}
+                onChange={(e: SelectChangeEvent): void => setFormData({ ...formData, wall: e.target.value })}
                 label="Mur"
               >
                 {availableWalls.map((w: string) => (
@@ -450,7 +433,7 @@ export default function CompetitionBoulderForm(): JSX.Element {
               <Select
                 labelId="cotation-select-label" id="cotation-select"
                 value={formData.difficulty}
-                onChange={(e: any): void => setFormData({ ...formData, difficulty: e.target.value as string })}
+                onChange={(e: SelectChangeEvent): void => setFormData({ ...formData, difficulty: e.target.value })}
                 label="Cotation"
                 required
               >
@@ -465,7 +448,7 @@ export default function CompetitionBoulderForm(): JSX.Element {
               <Select
                 labelId="difficulte-dans-le-niveau-select-label" id="difficulte-dans-le-niveau-select"
                 value={formData.difficulty_level}
-                onChange={(e: any): void => setFormData({ ...formData, difficulty_level: e.target.value as DifficultyLevel })}
+                onChange={(e: SelectChangeEvent): void => setFormData({ ...formData, difficulty_level: e.target.value as DifficultyLevel })}
                 label="Difficulté dans le niveau"
               >
                 {difficultyLevels.map((level: DifficultyLevel) => (
@@ -482,11 +465,11 @@ export default function CompetitionBoulderForm(): JSX.Element {
 
           <FormControl fullWidth margin="normal" disabled={isUploading}>
             <InputLabel id="types-de-difficulte-multiple-select-label">Types de difficulté (multiple)</InputLabel>
-            <Select
+            <Select<string[]>
               labelId="types-de-difficulte-multiple-select-label" id="types-de-difficulte-multiple-select"
               multiple
               value={formData.difficulty_types}
-              onChange={(e: any): void => setFormData({
+              onChange={(e): void => setFormData({
                 ...formData,
                 difficulty_types: e.target.value as string[]
               })}

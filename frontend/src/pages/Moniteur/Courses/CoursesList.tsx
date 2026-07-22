@@ -44,10 +44,10 @@ import {
 import { useNavigate } from 'react-router-dom';
 
 // ✅ Fonction utilitaire pour convertir les dates Firestore
-const convertFirestoreDate = (date: any): Date => {
+const convertFirestoreDate = (date: unknown): Date => {
   if (!date) return new Date();
   if (date instanceof Date) return date;
-  if (date?.toDate) return date.toDate();
+  if (typeof date === 'object' && 'toDate' in date && typeof date.toDate === 'function') return date.toDate();
   if (typeof date === 'string') return new Date(date);
   return new Date();
 };
@@ -78,37 +78,40 @@ const CoursesList: React.FC = () => {
   useEffect(() => {
     if (!user) return;
 
-    setIsLoading(true);
-    setError(null);
+    const subscribe = () => {
+      setIsLoading(true);
+      setError(null);
 
-    const q = query(
-      collection(db, 'courses'),
-      where('createdBy', '==', user.uid)
-    );
+      const q = query(
+        collection(db, 'courses'),
+        where('createdBy', '==', user.uid)
+      );
 
-    const unsubscribe = onSnapshot(
-      q,
-      (querySnapshot) => {
-        const coursesData: Course[] = [];
-        querySnapshot.forEach((doc) => {
-          coursesData.push({
-            id: doc.id,
-            ...doc.data(),
-            date: convertFirestoreDate(doc.data().date),
-            createdAt: convertFirestoreDate(doc.data().createdAt),
-            activatedAt: doc.data().activatedAt,
-            archivedAt: doc.data().archivedAt,
-          } as Course);
-        });
-        setCourses(coursesData);
-        setIsLoading(false);
-      },
-      (err) => {
-        setError(`Erreur lors de la récupération des séances : ${err.message}`);
-        setIsLoading(false);
-      }
-    );
+      return onSnapshot(
+        q,
+        (querySnapshot) => {
+          const coursesData: Course[] = [];
+          querySnapshot.forEach((doc) => {
+            coursesData.push({
+              id: doc.id,
+              ...doc.data(),
+              date: convertFirestoreDate(doc.data().date),
+              createdAt: convertFirestoreDate(doc.data().createdAt),
+              activatedAt: doc.data().activatedAt,
+              archivedAt: doc.data().archivedAt,
+            } as Course);
+          });
+          setCourses(coursesData);
+          setIsLoading(false);
+        },
+        (err) => {
+          setError(`Erreur lors de la récupération des séances : ${err.message}`);
+          setIsLoading(false);
+        }
+      );
+    };
 
+    const unsubscribe = subscribe();
     return () => unsubscribe();
   }, [user]);
 

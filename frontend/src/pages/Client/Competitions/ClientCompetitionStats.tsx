@@ -78,7 +78,7 @@ const ClientCompetitionStats: React.FC = () => {
           date: doc.data().date || ''
         }));
         setCompetitions(competitionsData);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Erreur:", err);
       } finally {
         setLoading(false);
@@ -124,7 +124,7 @@ const ClientCompetitionStats: React.FC = () => {
           wall: doc.data().wall
         }));
         setBoulders(bouldersData);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Erreur:", err);
       } finally {
         setLoading(false);

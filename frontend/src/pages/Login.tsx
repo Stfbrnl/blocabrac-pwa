@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { signInWithEmailAndPassword } from 'firebase/auth';
+import { FirebaseError } from 'firebase/app';
 import { auth } from '../services/firebaseConfig';
 import {
   TextField,
@@ -22,15 +23,15 @@ export default function Login() {
     try {
       await signInWithEmailAndPassword(auth, email, password);
       navigate('/');
-    } catch (err: any) {
+    } catch (err: unknown) {
       let errorMessage = 'Email ou mot de passe incorrect.';
-      if (err.code === 'auth/user-not-found') {
+      if (err instanceof FirebaseError && err.code === 'auth/user-not-found') {
         errorMessage = 'Aucun compte trouvé avec cet email.';
-      } else if (err.code === 'auth/wrong-password') {
+      } else if (err instanceof FirebaseError && err.code === 'auth/wrong-password') {
         errorMessage = 'Mot de passe incorrect.';
-      } else if (err.code === 'auth/invalid-credential') {
+      } else if (err instanceof FirebaseError && err.code === 'auth/invalid-credential') {
         errorMessage = 'Email ou mot de passe incorrect.';
-      } else if (err.message) {
+      } else if (err instanceof Error && err.message) {
         errorMessage = err.message;
       }
       setError(errorMessage);

@@ -188,7 +188,7 @@ const ExerciseForm: React.FC = () => {
     setError(null);
 
     try {
-      const exerciseData: any = {
+      const exerciseData: Exercise = {
         name: exercise.name.trim(),
         description: exercise.description,
         difficulty: exercise.difficulty,
@@ -207,7 +207,10 @@ const ExerciseForm: React.FC = () => {
       }
 
       if (isEditMode && exerciseId) {
-        await updateDoc(doc(db, 'exercises', exerciseId), exerciseData);
+        // ✅ Cast nécessaire : le type "UpdateData" de updateDoc attend des clés en
+        // notation pointée pour les mises à jour partielles imbriquées, incompatible
+        // avec une interface "à plat" comme Exercise même quand toutes les clés existent.
+        await updateDoc(doc(db, 'exercises', exerciseId), exerciseData as Partial<Record<keyof Exercise, unknown>>);
         setSuccess('Exercice mis à jour avec succès !');
       } else {
         await addDoc(collection(db, 'exercises'), exerciseData);

@@ -1,10 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { Typography, Container, Box } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth } from '../services/firebaseConfig';
 
-// @ts-ignore (pour éviter les erreurs TypeScript sur l'import d'images)
 import logo from '../assets/logo-blocabrac.png';
 
 const Home = () => {

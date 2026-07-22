@@ -45,7 +45,7 @@ interface LastBadge {
 
 const ClientScreen: React.FC = () => {
   const [user, loading] = useAuthState(auth);
-  const [userData, setUserData] = React.useState<any>(null);
+  const [userData, setUserData] = React.useState<{ level?: string; inscritAuxCours?: boolean } | null>(null);
   const [loadingData, setLoadingData] = React.useState(true);
   const [nextCompetition, setNextCompetition] = React.useState<NextCompetition | null>(null);
   const [lastBadge, setLastBadge] = React.useState<LastBadge | null>(null);

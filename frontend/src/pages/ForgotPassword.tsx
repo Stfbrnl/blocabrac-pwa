@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { sendPasswordResetEmail } from 'firebase/auth';
+import { FirebaseError } from 'firebase/app';
 import { auth } from '../services/firebaseConfig';
 import {
   TextField,
@@ -31,11 +32,11 @@ export default function ForgotPassword() {
       setTimeout(() => {
         navigate('/login');
       }, 5000);
-    } catch (err: any) {
+    } catch (err: unknown) {
       let errorMessage = 'Une erreur est survenue.';
-      if (err.code === 'auth/user-not-found') {
+      if (err instanceof FirebaseError && err.code === 'auth/user-not-found') {
         errorMessage = 'Aucun compte trouvé avec cet email.';
-      } else if (err.code === 'auth/invalid-email') {
+      } else if (err instanceof FirebaseError && err.code === 'auth/invalid-email') {
         errorMessage = 'L\'email saisi est invalide.';
       }
       setError(errorMessage);

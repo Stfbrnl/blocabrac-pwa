@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { FirebaseError } from 'firebase/app';
 import { auth, db } from '../services/firebaseConfig';
 import { doc, writeBatch } from 'firebase/firestore';
 import {
@@ -102,16 +103,16 @@ export default function Register() {
         navigate('/login');
       }, 2000);
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       let errorMessage = 'Une erreur est survenue lors de l\'inscription.';
 
-      if (err.code === 'auth/email-already-in-use') {
+      if (err instanceof FirebaseError && err.code === 'auth/email-already-in-use') {
         errorMessage = 'Cet email est déjà utilisé.';
-      } else if (err.code === 'auth/weak-password') {
+      } else if (err instanceof FirebaseError && err.code === 'auth/weak-password') {
         errorMessage = 'Le mot de passe doit contenir au moins 6 caractères.';
-      } else if (err.code === 'auth/invalid-email') {
+      } else if (err instanceof FirebaseError && err.code === 'auth/invalid-email') {
         errorMessage = 'L\'email saisi est invalide.';
-      } else if (err.message) {
+      } else if (err instanceof Error && err.message) {
         errorMessage = err.message;
       }
 

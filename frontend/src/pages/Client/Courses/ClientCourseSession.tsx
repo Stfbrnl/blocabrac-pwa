@@ -44,6 +44,12 @@ interface Session {
   exercises: Exercise[];
 }
 
+interface ValidationResult {
+  success?: boolean;
+  attempts?: number;
+  data?: Record<string, string | number>;
+}
+
 const statusLabels: Record<SessionStatus, string> = {
   scheduled: 'À venir',
   active: 'Active',
@@ -57,11 +63,7 @@ const ClientCourseSession: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [validationResults, setValidationResults] = useState<Record<string, {
-    success?: boolean;
-    attempts?: number;
-    data?: Record<string, string | number>;
-  }>>({});
+  const [validationResults, setValidationResults] = useState<Record<string, ValidationResult>>({});
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -144,7 +146,7 @@ const ClientCourseSession: React.FC = () => {
           where('courseId', '==', sessionId)
         );
         const resultsSnapshot = await getDocs(resultsQuery);
-        const results: Record<string, any> = {};
+        const results: Record<string, ValidationResult> = {};
         resultsSnapshot.forEach(doc => {
           const data = doc.data();
           results[data.exerciseId] = {
@@ -154,8 +156,8 @@ const ClientCourseSession: React.FC = () => {
           };
         });
         setValidationResults(results);
-      } catch (err: any) {
-        setError(`Erreur: ${err.message}`);
+      } catch (err: unknown) {
+        setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
         console.error("Erreur Firestore:", err);
       } finally {
         setLoading(false);
@@ -184,7 +186,7 @@ const ClientCourseSession: React.FC = () => {
     try {
       for (const [exerciseId, result] of Object.entries(validationResults)) {
         const resultId = `${user.uid}_${exerciseId}_${session.id}`;
-        const resultData: any = {
+        const resultData: Record<string, unknown> = {
           userId: user.uid,
           courseId: session.id,
           exerciseId,
@@ -201,8 +203,8 @@ const ClientCourseSession: React.FC = () => {
         setSuccess(null);
         navigate('/client/courses');
       }, 3000);
-    } catch (err: any) {
-      setError(`Erreur: ${err.message}`);
+    } catch (err: unknown) {
+      setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -217,8 +219,8 @@ const ClientCourseSession: React.FC = () => {
         ...session,
         optedOut: hasOptedOut ? session.optedOut.filter(uid => uid !== user.uid) : [...session.optedOut, user.uid]
       });
-    } catch (err: any) {
-      setError(`Erreur lors de la mise à jour de votre inscription : ${err.message}`);
+    } catch (err: unknown) {
+      setError(`Erreur lors de la mise à jour de votre inscription : ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
