@@ -10,8 +10,11 @@ import {
   Button,
   CircularProgress,
   Chip,
-  Divider
+  Divider,
+  IconButton,
+  Tooltip
 } from '@mui/material';
+import { HelpOutlined as HelpOutlineIcon } from '@mui/icons-material';
 import { doc, getDoc, collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
 import AnnouncementBanner from '../../components/AnnouncementBanner';
 
@@ -151,9 +154,20 @@ const ClientScreen: React.FC = () => {
   return (
     <Container maxWidth="lg">
       <Paper sx={{ p: 3, mt: 3 }}>
-        <Typography variant="h4" gutterBottom sx={{ textAlign: 'center' }}>
-          Mon espace personnel
-        </Typography>
+        <Box sx={{ position: 'relative' }}>
+          <Typography variant="h4" gutterBottom sx={{ textAlign: 'center' }}>
+            Mon espace personnel
+          </Typography>
+          <Tooltip title="Comment ça marche ?">
+            <IconButton
+              aria-label="Aide"
+              onClick={() => navigate('/client/aide')}
+              sx={{ position: 'absolute', top: 0, right: 0 }}
+            >
+              <HelpOutlineIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
 
         <AnnouncementBanner />
 

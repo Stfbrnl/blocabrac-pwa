@@ -21,6 +21,7 @@ const ClientStats = lazy(() => import('./pages/Client/Stats/ClientStats'));
 const ClientMessages = lazy(() => import('./pages/Client/Messages/ClientMessages'));
 const ClientClassement = lazy(() => import('./pages/Client/Classement/ClientClassement'));
 const ClientFriends = lazy(() => import('./pages/Client/Friends/ClientFriends'));
+const ClientHelp = lazy(() => import('./pages/Client/Help/ClientHelp'));
 
 // Pages Ouvreur
 const OuvreurScreen = lazy(() => import('./pages/Ouvreur/OuvreurScreen'));
@@ -79,6 +80,7 @@ export default function AppRoutes() {
         {/* ✅ Accessible au staff aussi : tout compte porte le rôle "client" en plus de
             ses éventuels autres rôles (voir AdminUsers.tsx + firestore.rules). */}
         <Route path="/client/friends" element={<ProtectedRoute role="client"><ClientFriends /></ProtectedRoute>} />
+        <Route path="/client/aide" element={<ProtectedRoute role="client"><ClientHelp /></ProtectedRoute>} />
 
         {/* ========== ROUTES OUVREUR ========== */}
         <Route path="/ouvreur" element={<ProtectedRoute role="ouvreur"><OuvreurScreen /></ProtectedRoute>} />
