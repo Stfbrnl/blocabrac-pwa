@@ -31,14 +31,14 @@ const sections: HelpSection[] = [
       "Ouvrez un bloc pour voir sa photo, son niveau et les conseils éventuels de l'ouvreur.",
       'Indiquez si vous l\'avez réussi ou échoué, et le nombre d\'essais.',
       'Pour un bloc marqué « Mystère », proposez votre propre cotation avant de valider.',
-      'Chaque validation alimente automatiquement vos statistiques, votre série de jours consécutifs et le classement des grimpeurs.',
+      'Chaque validation alimente automatiquement vos statistiques, votre série et le classement des grimpeurs.',
     ],
   },
   {
     title: 'Série, objectif de la semaine & partage',
     intro: 'Directement sur « Mon espace personnel », sous votre niveau et votre dernier badge.',
     points: [
-      'Votre série de jours consécutifs (🔥) se met à jour automatiquement dès que vous validez un bloc réussi ; elle se casse si vous manquez une journée entière.',
+      'Votre série (🔥) se met à jour automatiquement dès que vous validez un bloc réussi ; elle n\'est perdue qu\'après 9 jours sans validation, pas de quoi paniquer si vous manquez une séance.',
       'Vous pouvez définir un objectif personnel (un nombre de blocs à valider cette semaine), modifiable ou supprimable à tout moment.',
       'Le bouton « Partager ma progression » génère une image avec votre niveau, votre dernier badge et votre série, à télécharger ou partager directement depuis votre téléphone.',
     ],
