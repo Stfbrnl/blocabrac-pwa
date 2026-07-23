@@ -1,14 +1,12 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { ThemeModeProvider } from './context/ThemeModeContext';
 import { AuthProvider } from './context/AuthContext';
 
 // Composants partagés
 import Navbar from './components/Navbar';
 import AppRoutes from './AppRoutes';
-
-const theme = createTheme();
 
 // ✅ Après un déploiement, un onglet resté ouvert (ou un index.html mis en cache) peut
 // encore référencer un chunk JS (ex: Admin-<hash>.js) qui n'existe plus sur le serveur :
@@ -23,13 +21,13 @@ window.addEventListener('vite:preloadError', () => {
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <ThemeProvider theme={theme}>
+    <ThemeModeProvider>
       <BrowserRouter>
         <AuthProvider>
           <Navbar />
           <AppRoutes />
         </AuthProvider>
       </BrowserRouter>
-    </ThemeProvider>
+    </ThemeModeProvider>
   </React.StrictMode>
 );

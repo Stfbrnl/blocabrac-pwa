@@ -27,10 +27,20 @@ const sections: HelpSection[] = [
     intro: "Les blocs disponibles aujourd'hui sur chaque mur de la salle.",
     points: [
       'Choisissez un mur pour voir la liste des blocs qui y sont ouverts.',
+      'Ou utilisez le filtre « Filtrer par niveau » pour retrouver un niveau donné sur tous les murs à la fois, sans les ouvrir un par un.',
       "Ouvrez un bloc pour voir sa photo, son niveau et les conseils éventuels de l'ouvreur.",
       'Indiquez si vous l\'avez réussi ou échoué, et le nombre d\'essais.',
       'Pour un bloc marqué « Mystère », proposez votre propre cotation avant de valider.',
-      'Chaque validation alimente automatiquement vos statistiques et le classement des grimpeurs.',
+      'Chaque validation alimente automatiquement vos statistiques, votre série de jours consécutifs et le classement des grimpeurs.',
+    ],
+  },
+  {
+    title: 'Série, objectif de la semaine & partage',
+    intro: 'Directement sur « Mon espace personnel », sous votre niveau et votre dernier badge.',
+    points: [
+      'Votre série de jours consécutifs (🔥) se met à jour automatiquement dès que vous validez un bloc réussi ; elle se casse si vous manquez une journée entière.',
+      'Vous pouvez définir un objectif personnel (un nombre de blocs à valider cette semaine), modifiable ou supprimable à tout moment.',
+      'Le bouton « Partager ma progression » génère une image avec votre niveau, votre dernier badge et votre série, à télécharger ou partager directement depuis votre téléphone.',
     ],
   },
   {
@@ -107,6 +117,7 @@ const ClientHelp: React.FC = () => {
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
           Le détail des fonctions disponibles depuis « Mon espace personnel ». Cliquez sur une section pour la déplier.
+          Astuce : l'icône <em>lune/soleil</em> en haut de l'écran bascule entre thème clair et sombre, sur toutes les pages.
         </Typography>
 
         <Box>

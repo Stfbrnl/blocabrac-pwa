@@ -24,7 +24,10 @@ import { useTheme } from '@mui/material/styles';
 import MenuIcon from '@mui/icons-material/Menu';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import Brightness4Icon from '@mui/icons-material/Brightness4';
+import Brightness7Icon from '@mui/icons-material/Brightness7';
 import { Link } from 'react-router-dom';
+import { useThemeMode } from '../context/ThemeModeContext';
 
 type UserRole = 'admin' | 'ouvreur' | 'moniteur' | 'client';
 
@@ -43,6 +46,7 @@ const Navbar: React.FC = () => {
 
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const { mode, toggleMode } = useThemeMode();
 
   useEffect(() => {
     if (user) {
@@ -132,6 +136,15 @@ const Navbar: React.FC = () => {
         <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
           BLOCABRAC
         </Typography>
+
+        {/* ✅ Bascule thème clair/sombre : toujours visible, avant le reste de la nav */}
+        <IconButton
+          color="inherit"
+          aria-label={mode === 'dark' ? 'Passer au thème clair' : 'Passer au thème sombre'}
+          onClick={toggleMode}
+        >
+          {mode === 'dark' ? <Brightness7Icon /> : <Brightness4Icon />}
+        </IconButton>
 
         {/* ✅ Desktop / tablette large : boutons horizontaux comme avant */}
         {!isMobile && (

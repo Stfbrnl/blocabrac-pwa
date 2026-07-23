@@ -88,6 +88,9 @@ const ClientDaily: React.FC = () => {
 
   const [openWallDialog, setOpenWallDialog] = useState(false);
   const [openBoulderDialog, setOpenBoulderDialog] = useState(false);
+  // ✅ "tous" = vue par mur historique ; une couleur = vue transversale (tous les murs)
+  // pour retrouver son niveau sans avoir à ouvrir chaque mur un par un.
+  const [levelFilter, setLevelFilter] = useState<string>('tous');
 
   // ✅ Détection mobile pour passer les Dialogs en plein écran
   const theme = useTheme();
@@ -189,6 +192,40 @@ const ClientDaily: React.FC = () => {
     setSelectedBoulder(boulder);
     setOpenBoulderDialog(true);
   };
+
+  const getFilteredBoulders = () => {
+    if (levelFilter === 'tous') return [];
+    return boulders.filter((b) => (b.color || b.difficulty) === levelFilter);
+  };
+
+  // ✅ Carte de bloc factorisée : utilisée à la fois dans la modale "par mur" et dans
+  // la vue transversale "par niveau" (showWall affiche alors le nom du mur dessus).
+  const renderBoulderCard = (boulder: Boulder, showWall = false) => (
+    <Grid size={{ xs: 12, sm: 6, md: 4 }} key={boulder.id}>
+      <Card sx={{ cursor: 'pointer' }} onClick={() => handleOpenBoulder(boulder)}>
+        <CardMedia
+          component="img"
+          height="100"
+          image={boulder.image_url || boulder.image_base64 || '/images/logo-blocabrac.png'}
+          alt={`Bloc ${boulder.number}`}
+          sx={{ objectFit: 'cover' }}
+        />
+        <CardContent sx={{ p: 1 }}>
+          {showWall && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', textAlign: 'center' }}>
+              {boulder.wall}
+            </Typography>
+          )}
+          <Typography variant="body2" sx={{ textAlign: 'center' }}>
+            Bloc n°{boulder.number}
+            {isMysteryBoulder(boulder) && (
+              <Chip label="Mystère" size="small" sx={{ ml: 1, backgroundColor: levelColors.mystère }} />
+            )}
+          </Typography>
+        </CardContent>
+      </Card>
+    </Grid>
+  );
 
   // ✅ Classement en continu (ClientClassement.tsx) : un client ne peut pas lire les
   // résultats des AUTRES clients (règles Firestore), donc chaque client recalcule et
@@ -316,26 +353,63 @@ const ClientDaily: React.FC = () => {
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
       {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
 
-      <Typography variant="h6" sx={{ mb: 2 }}>Sélectionnez un mur :</Typography>
-      <Grid container spacing={2} sx={{ mb: 4 }}>
-        {wallList.map((wall) => {
-          const boulderCount = getBouldersByWall(wall).length;
-          return (
-            <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={wall}>
-              <Button
-                variant="outlined"
-                onClick={() => handleOpenWall(wall)}
-                sx={{ width: '100%', p: 2, textTransform: 'none' }}
-              >
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-                  <Typography>{wall}</Typography>
-                  <Chip label={boulderCount} color="primary" />
-                </Box>
-              </Button>
+      <FormControl size="small" sx={{ mb: 3, minWidth: 220 }}>
+        <InputLabel id="level-filter-label">Filtrer par niveau</InputLabel>
+        <Select
+          labelId="level-filter-label"
+          label="Filtrer par niveau"
+          value={levelFilter}
+          onChange={(e) => setLevelFilter(e.target.value)}
+        >
+          <MenuItem value="tous">Tous les niveaux (par mur)</MenuItem>
+          {Object.keys(levelColors).map((color) => (
+            <MenuItem key={color} value={color}>
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <Box sx={{ width: 14, height: 14, backgroundColor: levelColors[color], border: '1px solid #ccc', mr: 1 }} />
+                {color.charAt(0).toUpperCase() + color.slice(1)}
+              </Box>
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+
+      {levelFilter === 'tous' ? (
+        <>
+          <Typography variant="h6" sx={{ mb: 2 }}>Sélectionnez un mur :</Typography>
+          <Grid container spacing={2} sx={{ mb: 4 }}>
+            {wallList.map((wall) => {
+              const boulderCount = getBouldersByWall(wall).length;
+              return (
+                <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={wall}>
+                  <Button
+                    variant="outlined"
+                    onClick={() => handleOpenWall(wall)}
+                    sx={{ width: '100%', p: 2, textTransform: 'none' }}
+                  >
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                      <Typography>{wall}</Typography>
+                      <Chip label={boulderCount} color="primary" />
+                    </Box>
+                  </Button>
+                </Grid>
+              );
+            })}
+          </Grid>
+        </>
+      ) : (
+        <>
+          <Typography variant="h6" sx={{ mb: 2 }}>
+            Blocs de niveau {levelFilter}, tous murs confondus :
+          </Typography>
+          {getFilteredBoulders().length === 0 ? (
+            <Typography sx={{ mb: 4 }}>Aucun bloc de ce niveau pour le moment.</Typography>
+          ) : (
+            <Grid container spacing={2} sx={{ mb: 4 }}>
+              {getFilteredBoulders().map((boulder) => renderBoulderCard(boulder, true))}
             </Grid>
-          );
-        })}
-      </Grid>
+          )}
+        </>
+      )}
 
       {/* Modale 1 : Liste des blocs d'un mur — plein écran sur mobile */}
       <Dialog
@@ -351,27 +425,7 @@ const ClientDaily: React.FC = () => {
             <Typography>Aucun bloc disponible sur ce mur.</Typography>
           ) : (
             <Grid container spacing={2} sx={{ mt: 1 }}>
-              {selectedWall && getBouldersByWall(selectedWall).map((boulder) => (
-                <Grid size={{ xs: 12, sm: 6, md: 4 }} key={boulder.id}>
-                  <Card sx={{ cursor: 'pointer' }} onClick={() => handleOpenBoulder(boulder)}>
-                    <CardMedia
-                      component="img"
-                      height="100"
-                      image={boulder.image_url || boulder.image_base64 || '/images/logo-blocabrac.png'}
-                      alt={`Bloc ${boulder.number}`}
-                      sx={{ objectFit: 'cover' }}
-                    />
-                    <CardContent sx={{ p: 1 }}>
-                      <Typography variant="body2" sx={{ textAlign: 'center' }}>
-                        Bloc n°{boulder.number}
-                        {isMysteryBoulder(boulder) && (
-                          <Chip label="Mystère" size="small" sx={{ ml: 1, backgroundColor: levelColors.mystère }} />
-                        )}
-                      </Typography>
-                    </CardContent>
-                  </Card>
-                </Grid>
-              ))}
+              {selectedWall && getBouldersByWall(selectedWall).map((boulder) => renderBoulderCard(boulder))}
             </Grid>
           )}
         </DialogContent>
