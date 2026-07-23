@@ -11,7 +11,7 @@ describe('computeStreakDays', () => {
     expect(computeStreakDays([new Date('2026-07-23T09:00:00')], now)).toBe(1);
   });
 
-  it('compte les jours consécutifs y compris aujourd\'hui', () => {
+  it('compte les jours de validation, même non consécutifs, y compris aujourd\'hui', () => {
     const now = new Date('2026-07-23T18:00:00');
     const dates = [
       new Date('2026-07-21T09:00:00'),
@@ -21,7 +21,7 @@ describe('computeStreakDays', () => {
     expect(computeStreakDays(dates, now)).toBe(3);
   });
 
-  it('ne casse pas la série si aujourd\'hui n\'a pas encore de validation, tant qu\'hier en a une', () => {
+  it('ne casse pas la série si aujourd\'hui n\'a pas encore de validation, tant que le dernier écart reste sous le seuil', () => {
     const now = new Date('2026-07-23T08:00:00');
     const dates = [
       new Date('2026-07-21T09:00:00'),
@@ -30,10 +30,31 @@ describe('computeStreakDays', () => {
     expect(computeStreakDays(dates, now)).toBe(2);
   });
 
-  it('casse la série si un jour entier a été manqué', () => {
+  it('ne casse pas la série pour un grimpeur qui vient 2-3 fois par semaine (écarts de quelques jours)', () => {
     const now = new Date('2026-07-23T18:00:00');
     const dates = [
-      new Date('2026-07-20T09:00:00'),
+      new Date('2026-07-13T09:00:00'), // lundi
+      new Date('2026-07-15T09:00:00'), // mercredi
+      new Date('2026-07-17T09:00:00'), // vendredi
+      new Date('2026-07-20T09:00:00'), // lundi
+      new Date('2026-07-23T09:00:00'), // jeudi (aujourd\'hui)
+    ];
+    expect(computeStreakDays(dates, now)).toBe(5);
+  });
+
+  it('ne casse pas la série pour un écart de 8 jours', () => {
+    const now = new Date('2026-07-23T18:00:00');
+    const dates = [
+      new Date('2026-07-15T09:00:00'),
+      new Date('2026-07-23T09:00:00'),
+    ];
+    expect(computeStreakDays(dates, now)).toBe(2);
+  });
+
+  it('casse la série si 9 jours ou plus se sont écoulés sans validation', () => {
+    const now = new Date('2026-07-23T18:00:00');
+    const dates = [
+      new Date('2026-07-14T09:00:00'),
       new Date('2026-07-23T09:00:00'),
     ];
     expect(computeStreakDays(dates, now)).toBe(1);
