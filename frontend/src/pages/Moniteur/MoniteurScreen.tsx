@@ -6,9 +6,6 @@ import {
   query,
   where,
   onSnapshot,
-  addDoc,
-  serverTimestamp,
-  getDocs,
   orderBy,
 } from 'firebase/firestore';
 import {
@@ -21,19 +18,10 @@ import {
   CardContent,
   CardHeader,
   CircularProgress,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
   Snackbar,
   Alert,
   Divider,
   Chip,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   Badge
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
@@ -50,46 +38,18 @@ interface Message {
   isRead: boolean;
 }
 
-interface User {
-  id: string;
-  displayName: string;
-  email?: string;
-}
-
 const MoniteurScreen: React.FC = () => {
   const [user, loadingAuth] = useAuthState(auth);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [openSendDialog, setOpenSendDialog] = useState(false);
-  const [messageTitle, setMessageTitle] = useState('');
-  const [messageContent, setMessageContent] = useState('');
-  const [recipients, setRecipients] = useState<string[]>([]);
-  const [allClients, setAllClients] = useState<User[]>([]);
-  const [success, setSuccess] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const navigate = useNavigate();
 
-  // Charger les clients
+  // Charger les messages reçus (où le moniteur est le destinataire)
   useEffect(() => {
     if (!user) return;
 
-    const fetchClients = async () => {
-      try {
-        const usersQuery = query(collection(db, 'users'), where('role', '==', 'client'));
-        const querySnapshot = await getDocs(usersQuery);
-        const clients: User[] = querySnapshot.docs.map((doc) => ({
-          id: doc.id,
-          displayName: doc.data().displayName || doc.data().email?.split('@')[0] || doc.id,
-          email: doc.data().email || '',
-        }));
-        setAllClients(clients);
-      } catch (err) {
-        setError(`Erreur lors du chargement des clients : ${err}`);
-      }
-    };
-
-    // Charger les messages reçus (où le moniteur est le destinataire)
     const unsubscribe = onSnapshot(
       query(
         collection(db, 'messages'),
@@ -117,45 +77,18 @@ const MoniteurScreen: React.FC = () => {
         setMessages(messagesData);
         setUnreadCount(unread);
         setIsLoading(false);
+      },
+      (err) => {
+        setError(`Erreur lors du chargement des messages : ${err}`);
+        setIsLoading(false);
       }
     );
 
-    fetchClients();
     return () => unsubscribe();
   }, [user]);
 
-  const handleSendMessage = async () => {
-    if (!messageTitle.trim() || !messageContent.trim() || recipients.length === 0) {
-      setError('Veuillez remplir tous les champs et sélectionner au moins un destinataire.');
-      return;
-    }
-
-    try {
-      for (const recipientId of recipients) {
-        await addDoc(collection(db, 'messages'), {
-          title: messageTitle,
-          content: messageContent,
-          senderId: user?.uid || '',
-          senderName: user?.displayName || 'Moniteur',
-          receiverId: recipientId,
-          createdAt: serverTimestamp(),
-          isRead: false,
-        });
-      }
-
-      setSuccess('Message(s) envoyé(s) avec succès !');
-      setOpenSendDialog(false);
-      setMessageTitle('');
-      setMessageContent('');
-      setRecipients([]);
-    } catch (err) {
-      setError(`Erreur lors de l'envoi du message : ${err}`);
-    }
-  };
-
   const handleCloseSnackbar = () => {
     setError(null);
-    setSuccess(null);
   };
 
   if (loadingAuth || isLoading) {
@@ -274,72 +207,14 @@ const MoniteurScreen: React.FC = () => {
           </Box>
         </Box>
 
-        {/* Dialogue pour envoyer un message */}
-        <Dialog
-          open={openSendDialog}
-          onClose={() => setOpenSendDialog(false)}
-          maxWidth="md"
-          fullWidth
-        >
-          <DialogTitle>Envoyer un message</DialogTitle>
-          <DialogContent>
-            <TextField
-              label="Titre"
-              value={messageTitle}
-              onChange={(e) => setMessageTitle(e.target.value)}
-              fullWidth
-              margin="normal"
-              required
-            />
-            <TextField
-              label="Contenu"
-              value={messageContent}
-              onChange={(e) => setMessageContent(e.target.value)}
-              fullWidth
-              margin="normal"
-              multiline
-              rows={4}
-              required
-            />
-            <FormControl fullWidth margin="normal">
-              <InputLabel>Destinataires</InputLabel>
-              <Select
-                multiple
-                value={recipients}
-                onChange={(e) => setRecipients(e.target.value as string[])}
-                label="Destinataires"
-                renderValue={(selected) => (
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                    {selected.map((value) => (
-                      <Chip key={value} label={allClients.find(c => c.id === value)?.displayName || value} />
-                    ))}
-                  </Box>
-                )}
-              >
-                {allClients.map((client) => (
-                  <MenuItem key={client.id} value={client.id}>
-                    {client.displayName}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setOpenSendDialog(false)}>Annuler</Button>
-            <Button onClick={handleSendMessage} color="primary" variant="contained">
-              Envoyer
-            </Button>
-          </DialogActions>
-        </Dialog>
-
         <Snackbar
-          open={!!error || !!success}
+          open={!!error}
           autoHideDuration={6000}
           onClose={handleCloseSnackbar}
           anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
         >
-          <Alert onClose={handleCloseSnackbar} severity={error ? 'error' : 'success'} sx={{ width: '100%' }}>
-            {error || success}
+          <Alert onClose={handleCloseSnackbar} severity="error" sx={{ width: '100%' }}>
+            {error}
           </Alert>
         </Snackbar>
       </Paper>
