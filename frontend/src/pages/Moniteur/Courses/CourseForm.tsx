@@ -39,6 +39,7 @@ interface Course {
   level: string;
   groupId: string;
   exercises?: string[];
+  miniCompetitions?: string[];
   createdBy: string;
   createdAt: Date;
   isActive: boolean;
@@ -68,6 +69,8 @@ const CourseForm: React.FC = () => {
   const [groups, setGroups] = useState<{ id: string; name: string; students: string[] }[]>([]);
   const [exercises, setExercises] = useState<{ id: string; name: string; type: 'validation' | 'data' }[]>([]);
   const [selectedExercises, setSelectedExercises] = useState<{ id: string; name: string; type: 'validation' | 'data' }[]>([]);
+  const [miniCompetitions, setMiniCompetitions] = useState<{ id: string; name: string }[]>([]);
+  const [selectedMiniCompetitions, setSelectedMiniCompetitions] = useState<{ id: string; name: string }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -118,6 +121,20 @@ const CourseForm: React.FC = () => {
       }
     };
 
+    const fetchMiniCompetitions = async () => {
+      try {
+        const q = query(collection(db, 'mini_competitions'));
+        const querySnapshot = await getDocs(q);
+        const miniCompetitionsData: { id: string; name: string }[] = [];
+        querySnapshot.forEach((doc) => {
+          miniCompetitionsData.push({ id: doc.id, name: doc.data().name });
+        });
+        setMiniCompetitions(miniCompetitionsData);
+      } catch (err) {
+        setError(`Erreur lors du chargement des mini-compétitions : ${err}`);
+      }
+    };
+
     const fetchCourse = async () => {
       if (!isEditMode || !courseId) {
         setIsLoading(false);
@@ -140,6 +157,10 @@ const CourseForm: React.FC = () => {
             const selectedExercisesData = exercises.filter(ex => data.exercises.includes(ex.id));
             setSelectedExercises(selectedExercisesData);
           }
+          if (data.miniCompetitions && data.miniCompetitions.length > 0) {
+            const selectedMiniCompetitionsData = miniCompetitions.filter(mc => data.miniCompetitions.includes(mc.id));
+            setSelectedMiniCompetitions(selectedMiniCompetitionsData);
+          }
         }
       } catch (err) {
         setError(`Erreur lors du chargement de la séance : ${err}`);
@@ -148,7 +169,7 @@ const CourseForm: React.FC = () => {
       }
     };
 
-    Promise.all([fetchGroups(), fetchExercises()]).then(() => {
+    Promise.all([fetchGroups(), fetchExercises(), fetchMiniCompetitions()]).then(() => {
       fetchCourse();
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -175,6 +196,7 @@ const CourseForm: React.FC = () => {
         level: course.level,
         groupId: course.groupId,
         exercises: selectedExercises.map(ex => ex.id),
+        miniCompetitions: selectedMiniCompetitions.map(mc => mc.id),
         createdBy: user.uid,
         createdAt: isEditMode ? course.createdAt : new Date(),
         MaxParticipants: course.MaxParticipants,
@@ -365,6 +387,41 @@ const CourseForm: React.FC = () => {
                     {...params}
                     variant="outlined"
                     placeholder="Sélectionnez les exercices pour cette séance"
+                  />
+                )}
+                isOptionEqualToValue={(option, value) => option.id === value.id}
+                filterSelectedOptions
+                sx={{ width: '100%' }}
+              />
+            )}
+          </FormControl>
+
+          <FormControl fullWidth margin="normal">
+            <FormLabel>Mini-compétitions</FormLabel>
+            {miniCompetitions.length === 0 ? (
+              <Typography color="text.secondary" sx={{ mt: 1 }}>
+                Aucune mini-compétition disponible. Vous pouvez en créer une depuis "Mini-compétitions".
+              </Typography>
+            ) : (
+              <Autocomplete
+                multiple
+                options={miniCompetitions}
+                getOptionLabel={(option) => option.name}
+                value={selectedMiniCompetitions}
+                onChange={(_event, newValue) => {
+                  setSelectedMiniCompetitions(newValue);
+                }}
+                renderOption={(props, option) => (
+                  <li {...props}>
+                    <Checkbox checked={selectedMiniCompetitions.some(mc => mc.id === option.id)} />
+                    <ListItemText primary={option.name} />
+                  </li>
+                )}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    variant="outlined"
+                    placeholder="Sélectionnez les mini-compétitions pour cette séance"
                   />
                 )}
                 isOptionEqualToValue={(option, value) => option.id === value.id}

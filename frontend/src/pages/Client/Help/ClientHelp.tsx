@@ -76,6 +76,7 @@ const sections: HelpSection[] = [
     points: [
       'Retrouvez vos séances à venir, la ou les séances du jour, et vos séances archivées.',
       'Ouvrez une séance pour en voir le détail.',
+      'Une séance peut inclure une mini-compétition (blocs déjà présents sur les murs, notés comme au quotidien) : validez-la comme les autres exercices, votre moniteur en suit le classement de son côté.',
       'Échangez des messages directement avec votre moniteur depuis cette section.',
     ],
   },

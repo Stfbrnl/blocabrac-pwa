@@ -7,6 +7,7 @@ describe('calculatePoints', () => {
   });
 
   it('rapporte les points de base au premier essai réussi', () => {
+    expect(calculatePoints('jaune', 1, true)).toBe(25);
     expect(calculatePoints('bleu', 1, true)).toBe(100);
     expect(calculatePoints('rose', 1, true)).toBe(1000);
   });

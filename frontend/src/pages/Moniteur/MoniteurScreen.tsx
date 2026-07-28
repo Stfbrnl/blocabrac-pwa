@@ -199,6 +199,14 @@ const MoniteurScreen: React.FC = () => {
             <Button
               variant="outlined"
               color="primary"
+              onClick={() => navigate('/moniteur/mini-competitions')}
+              sx={{ flex: 1, minWidth: 200 }}
+            >
+              Mini-compétitions
+            </Button>
+            <Button
+              variant="outlined"
+              color="primary"
               onClick={() => navigate('/moniteur/stats')}
               sx={{ flex: 1, minWidth: 200 }}
             >

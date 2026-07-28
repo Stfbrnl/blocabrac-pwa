@@ -168,6 +168,19 @@ service cloud.firestore {
                                        isUserRole("ouvreur"));
     }
 
+    // ========== 6bis. Mini-compétitions (moniteur) ==========
+    // ✅ Distinct du système de compétitions officielles (§12) : un moniteur y
+    // référence des blocs quotidiens existants pour un petit défi noté, inclus
+    // dans une séance (courses.miniCompetitions). Mêmes permissions que les
+    // exercices, dont c'est le pendant "compétition".
+    match /mini_competitions/{miniCompetitionId} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if request.auth != null &&
+                                      (isUserRole("moniteur") ||
+                                       isUserRole("admin") ||
+                                       isUserRole("ouvreur"));
+    }
+
     // ========== 7. Messages ==========
     match /messages/{messageId} {
       allow read: if request.auth != null &&

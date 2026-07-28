@@ -11,6 +11,7 @@ import {
   FormControl, InputLabel, Select, MenuItem, TextField, Chip
 } from '@mui/material';
 import { getSessionStatus, type SessionStatus } from '../../../utils/courseSessionStatus';
+import { calculatePoints } from '../../../utils/climbingPoints';
 
 const levelColors: Record<string, string> = {
   jaune: '#FFFF00', vert: '#00FF00', bleu: '#0000FF', violet: '#800080',
@@ -28,6 +29,21 @@ interface Exercise {
   dataFields?: { label: string; type: 'number' | 'text' | 'time' }[];
 }
 
+interface MiniCompetitionBoulder {
+  id: string;
+  wall: string;
+  number: number | string;
+  color?: string;
+  image_base64?: string;
+  is_child_route?: boolean;
+}
+
+interface MiniCompetition {
+  id: string;
+  name: string;
+  boulders: MiniCompetitionBoulder[];
+}
+
 interface Session {
   id: string;
   name: string;
@@ -42,12 +58,19 @@ interface Session {
   optedOut: string[];
   exercisesCount: number;
   exercises: Exercise[];
+  miniCompetitionsCount: number;
+  miniCompetitions: MiniCompetition[];
 }
 
 interface ValidationResult {
   success?: boolean;
   attempts?: number;
   data?: Record<string, string | number>;
+}
+
+interface BoulderValidationResult {
+  success?: boolean;
+  attempts?: number;
 }
 
 const statusLabels: Record<SessionStatus, string> = {
@@ -64,6 +87,7 @@ const ClientCourseSession: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [validationResults, setValidationResults] = useState<Record<string, ValidationResult>>({});
+  const [boulderResults, setBoulderResults] = useState<Record<string, BoulderValidationResult>>({});
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -123,6 +147,35 @@ const ClientCourseSession: React.FC = () => {
           exercises = (await Promise.all(exercisesPromises)).filter(Boolean) as Exercise[];
         }
 
+        // ✅ Même règle de visibilité que les exercices : le détail (et donc les
+        // blocs) n'est chargé qu'une fois la séance active/archivée.
+        const miniCompetitionIds: string[] = sessionData.miniCompetitions || [];
+        let miniCompetitions: MiniCompetition[] = [];
+        if (status !== 'scheduled' && miniCompetitionIds.length > 0) {
+          const miniCompetitionsPromises = miniCompetitionIds.map(async (miniCompetitionId: string) => {
+            const miniCompetitionDoc = await getDoc(doc(db, 'mini_competitions', miniCompetitionId));
+            if (!miniCompetitionDoc.exists()) return null;
+            const miniCompetitionData = miniCompetitionDoc.data();
+            const boulderIds: string[] = miniCompetitionData.boulderIds || [];
+            const bouldersPromises = boulderIds.map(async (boulderId: string) => {
+              const boulderDoc = await getDoc(doc(db, 'boulders', boulderId));
+              if (!boulderDoc.exists()) return null;
+              const boulderData = boulderDoc.data();
+              return {
+                id: boulderDoc.id,
+                wall: boulderData.wall || '',
+                number: boulderData.number || '?',
+                color: boulderData.color,
+                image_base64: boulderData.image_base64,
+                is_child_route: boulderData.is_child_route || false,
+              } as MiniCompetitionBoulder;
+            });
+            const boulders = (await Promise.all(bouldersPromises)).filter(Boolean) as MiniCompetitionBoulder[];
+            return { id: miniCompetitionDoc.id, name: miniCompetitionData.name || '', boulders } as MiniCompetition;
+          });
+          miniCompetitions = (await Promise.all(miniCompetitionsPromises)).filter(Boolean) as MiniCompetition[];
+        }
+
         const session: Session = {
           id: docSnap.id,
           name: sessionData.name || sessionData.title || '',
@@ -137,6 +190,8 @@ const ClientCourseSession: React.FC = () => {
           optedOut: sessionData.optedOut || [],
           exercisesCount: exercisesIds.length,
           exercises,
+          miniCompetitionsCount: miniCompetitionIds.length,
+          miniCompetitions,
         };
         setSession(session);
 
@@ -147,15 +202,24 @@ const ClientCourseSession: React.FC = () => {
         );
         const resultsSnapshot = await getDocs(resultsQuery);
         const results: Record<string, ValidationResult> = {};
+        const boulderResultsData: Record<string, BoulderValidationResult> = {};
         resultsSnapshot.forEach(doc => {
           const data = doc.data();
-          results[data.exerciseId] = {
-            success: data.success,
-            attempts: data.attempts,
-            data: data.data || {}
-          };
+          if (data.boulderId) {
+            boulderResultsData[data.boulderId] = {
+              success: data.success,
+              attempts: data.attempts,
+            };
+          } else {
+            results[data.exerciseId] = {
+              success: data.success,
+              attempts: data.attempts,
+              data: data.data || {}
+            };
+          }
         });
         setValidationResults(results);
+        setBoulderResults(boulderResultsData);
       } catch (err: unknown) {
         setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
         console.error("Erreur Firestore:", err);
@@ -181,6 +245,20 @@ const ClientCourseSession: React.FC = () => {
     }));
   };
 
+  const handleValidateBoulder = (
+    boulderId: string,
+    field: 'success' | 'attempts',
+    value: boolean | number
+  ) => {
+    setBoulderResults(prev => ({
+      ...prev,
+      [boulderId]: {
+        ...prev[boulderId],
+        [field]: value
+      }
+    }));
+  };
+
   const handleSubmitResults = async () => {
     if (!user || !session) return;
     try {
@@ -198,6 +276,28 @@ const ClientCourseSession: React.FC = () => {
 
         await setDoc(doc(db, 'client_course_results', resultId), resultData);
       }
+
+      // ✅ Blocs des mini-compétitions : la couleur est enregistrée telle qu'au
+      // moment de la validation (plutôt que relue en direct sur le bloc), pour
+      // que le classement ne bouge pas si le bloc est recoté plus tard.
+      for (const miniCompetition of session.miniCompetitions) {
+        for (const boulder of miniCompetition.boulders) {
+          const result = boulderResults[boulder.id];
+          if (!result || result.success === undefined) continue;
+          const resultId = `${user.uid}_mini_${boulder.id}_${session.id}`;
+          await setDoc(doc(db, 'client_course_results', resultId), {
+            userId: user.uid,
+            courseId: session.id,
+            miniCompetitionId: miniCompetition.id,
+            boulderId: boulder.id,
+            boulderColor: boulder.color || '',
+            success: result.success,
+            attempts: result.attempts || 1,
+            createdAt: new Date().toISOString()
+          });
+        }
+      }
+
       setSuccess("Résultats enregistrés avec succès !");
       setTimeout(() => {
         setSuccess(null);
@@ -263,6 +363,9 @@ const ClientCourseSession: React.FC = () => {
         <Typography>Date: {new Date(session.date).toLocaleDateString('fr-FR')}</Typography>
         <Typography>Heure: {session.time}</Typography>
         <Typography>Nombre d'exercices: {session.exercisesCount}</Typography>
+        {session.miniCompetitionsCount > 0 && (
+          <Typography>Mini-compétitions: {session.miniCompetitionsCount}</Typography>
+        )}
         {session.description && (
           <Typography sx={{ mt: 1 }}><strong>Objectifs :</strong> {session.description}</Typography>
         )}
@@ -432,6 +535,98 @@ const ClientCourseSession: React.FC = () => {
               );
             })}
           </Box>
+
+          {session.miniCompetitions.map((miniCompetition) => (
+            <Box key={miniCompetition.id} sx={{ mt: 4 }}>
+              <Typography variant="h6" sx={{ mb: 2 }}>🏆 Mini-compétition : {miniCompetition.name}</Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+                {miniCompetition.boulders.map((boulder) => {
+                  const result = boulderResults[boulder.id] || {};
+                  return (
+                    <Card
+                      key={boulder.id}
+                      sx={{ width: { xs: '100%', sm: 'calc(50% - 8px)', md: 300 }, mb: 2 }}
+                    >
+                      {boulder.image_base64 && (
+                        <CardMedia
+                          component="img"
+                          height="150"
+                          image={boulder.image_base64}
+                          alt={`Bloc ${boulder.number}`}
+                          sx={{ objectFit: 'contain' }}
+                        />
+                      )}
+                      <CardContent>
+                        <Typography variant="body2" sx={{ mb: 1 }}>
+                          Bloc n°{boulder.number} - {boulder.wall}
+                          {boulder.is_child_route && <Chip label="🐒 Enfant" size="small" color="info" sx={{ ml: 1 }} />}
+                        </Typography>
+                        <Box sx={{
+                          backgroundColor: levelColors[boulder.color || ''] || '#CCCCCC',
+                          color: ['noir', 'blanc'].includes(boulder.color || '') ? 'black' : 'white',
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          display: 'inline-block',
+                          mb: 1
+                        }}>
+                          {boulder.color || 'Non spécifiée'}
+                        </Box>
+
+                        {canValidate ? (
+                          <>
+                            <Box sx={{ display: 'flex', gap: 1, mb: 1, flexWrap: 'wrap' }}>
+                              <Button
+                                variant={result.success ? "contained" : "outlined"}
+                                color="success"
+                                size="small"
+                                onClick={() => handleValidateBoulder(boulder.id, 'success', true)}
+                              >
+                                ✅ Réussi
+                              </Button>
+                              <Button
+                                variant={result.success === false ? "contained" : "outlined"}
+                                color="error"
+                                size="small"
+                                onClick={() => handleValidateBoulder(boulder.id, 'success', false)}
+                              >
+                                ❌ Échoué
+                              </Button>
+                            </Box>
+                            <FormControl fullWidth sx={{ mb: 1 }}>
+                              <InputLabel>Nombre d'essais</InputLabel>
+                              <Select
+                                value={result.attempts || 1}
+                                onChange={(e) => handleValidateBoulder(boulder.id, 'attempts', e.target.value as number)}
+                                label="Nombre d'essais"
+                              >
+                                {Array.from({ length: 15 }, (_, i) => i + 1).map(num => (
+                                  <MenuItem key={num} value={num}>
+                                    {num} essai{num > 1 ? 's' : ''}
+                                  </MenuItem>
+                                ))}
+                              </Select>
+                            </FormControl>
+                          </>
+                        ) : (
+                          <Box sx={{ mt: 1 }}>
+                            {result.success !== undefined ? (
+                              <Chip
+                                label={result.success ? `Réussi (${result.attempts || 1} essai(s)) — ${calculatePoints(boulder.color || '', result.attempts || 1, result.success)} pts` : 'Échoué'}
+                                color={result.success ? 'success' : 'error'}
+                                size="small"
+                              />
+                            ) : (
+                              <Typography variant="body2" color="textSecondary">Aucun résultat enregistré.</Typography>
+                            )}
+                          </Box>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </Box>
+            </Box>
+          ))}
 
           {canValidate && (
             <Box sx={{ display: 'flex', justifyContent: { xs: 'stretch', sm: 'flex-end' }, mt: 2 }}>

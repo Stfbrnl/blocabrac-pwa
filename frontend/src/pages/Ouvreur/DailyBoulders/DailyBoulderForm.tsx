@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import {
   TextField, Button, MenuItem, Select, InputLabel, FormControl, Box,
   Typography, Container, Paper, IconButton, Stack, Dialog, DialogTitle,
-  DialogContent, DialogActions, Chip, CircularProgress
+  DialogContent, DialogActions, Chip, CircularProgress, Checkbox, FormControlLabel
 } from '@mui/material';
 import type { SelectChangeEvent } from '@mui/material';
 import { Delete as DeleteIcon, Check as CheckIcon } from '@mui/icons-material';
@@ -36,6 +36,7 @@ interface Boulder {
   wall: string;
   type: string;
   is_active?: boolean;
+  is_child_route?: boolean;
   difficulty_level?: DifficultyLevel;
 }
 
@@ -115,6 +116,7 @@ export default function DailyBoulderForm(): JSX.Element {
     imagePreview: string;
     annotations: BoulderAnnotations;
     difficulty_level: DifficultyLevel;
+    is_child_route: boolean;
   }>({
     number: '',
     color: '',
@@ -126,7 +128,8 @@ export default function DailyBoulderForm(): JSX.Element {
       start_holds: [],
       end_holds: []
     },
-    difficulty_level: 'Égal'
+    difficulty_level: 'Égal',
+    is_child_route: false
   });
   const [currentMode, setCurrentMode] = useState<'start' | 'end'>('start');
   const [openDeleteDialog, setOpenDeleteDialog] = useState<boolean>(false);
@@ -169,7 +172,8 @@ export default function DailyBoulderForm(): JSX.Element {
         start_holds: boulder.annotations?.start_holds || [],
         end_holds: boulder.annotations?.end_holds || []
       },
-      difficulty_level: boulder.difficulty_level || 'Égal'
+      difficulty_level: boulder.difficulty_level || 'Égal',
+      is_child_route: boulder.is_child_route || false
     });
   };
 
@@ -280,7 +284,8 @@ export default function DailyBoulderForm(): JSX.Element {
       imageFile: null,
       imagePreview: '',
       annotations: { start_holds: [], end_holds: [] },
-      difficulty_level: 'Égal'
+      difficulty_level: 'Égal',
+      is_child_route: false
     });
     setEditingBoulder(null);
     // ✅ Force le remontage de l'<input type="file"> natif : c'est ce qui
@@ -376,6 +381,7 @@ export default function DailyBoulderForm(): JSX.Element {
         competition_id: null,
         is_active: true,
         difficulty_level: formData.difficulty_level,
+        is_child_route: formData.is_child_route,
         // ✅ Ne pas écraser la date/l'auteur de création d'origine lors d'une modification
         ...(editingBoulder
           ? {}
@@ -482,6 +488,17 @@ export default function DailyBoulderForm(): JSX.Element {
               Exemple: "Rouge Plus" pour un bloc plus difficile que la moyenne du niveau Rouge.
             </Typography>
           </FormControl>
+
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={formData.is_child_route}
+                onChange={(e: ChangeEvent<HTMLInputElement>): void => setFormData({ ...formData, is_child_route: e.target.checked })}
+                disabled={isUploading}
+              />
+            }
+            label="🐒 Bloc enfant (symbole ouistiti — même cotation couleur que les adultes, sur les murs partagés comme Güllich)"
+          />
 
           <FormControl fullWidth margin="normal" disabled={isUploading}>
             <InputLabel id="types-de-difficulte-multiple-select-label">Types de difficulté (multiple)</InputLabel>
@@ -658,6 +675,9 @@ export default function DailyBoulderForm(): JSX.Element {
                     size="small"
                     sx={{ ml: 1, backgroundColor: 'action.selected' }}
                   />
+                )}
+                {boulder.is_child_route && (
+                  <Chip label="🐒 Enfant" size="small" color="info" sx={{ ml: 1 }} />
                 )}
               </Typography>
               <Typography variant="body2">

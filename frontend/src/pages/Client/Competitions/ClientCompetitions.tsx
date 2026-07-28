@@ -55,6 +55,7 @@ interface Boulder {
   instructions?: string;
   image_base64?: string;
   competition_id?: string;
+  competition_active?: boolean;
   is_active: boolean;
   color?: string;
 }
@@ -141,14 +142,29 @@ const ClientCompetitions: React.FC = () => {
     try {
       setLoading(true);
       setSelectedCompetition(competition);
-      const q = query(
-        collection(db, 'boulders'),
-        where('competition_id', '==', competition.id),
-        where('is_active', '==', true),
-        where('type', '==', 'competition')
-      );
-      const snapshot = await getDocs(q);
-      const bouldersData: Boulder[] = snapshot.docs.map(doc => ({
+      // ✅ Deux requêtes fusionnées : les blocs créés pour l'épreuve (type:
+      // 'competition', comme avant, aucun changement rétrocompatible) et les
+      // blocs quotidiens réutilisés (type: 'daily' + competition_active: true)
+      // des compétitions "régulières" bâties sur des blocs déjà en place. Un
+      // simple `type in [...]` ferait réapparaître ici, à tort, les anciens
+      // blocs de compétition redevenus 'daily' après "Terminer la compétition"
+      // (ils gardent leur competition_id pour l'historique des résultats).
+      const [classicSnapshot, reusedSnapshot] = await Promise.all([
+        getDocs(query(
+          collection(db, 'boulders'),
+          where('competition_id', '==', competition.id),
+          where('is_active', '==', true),
+          where('type', '==', 'competition')
+        )),
+        getDocs(query(
+          collection(db, 'boulders'),
+          where('competition_id', '==', competition.id),
+          where('is_active', '==', true),
+          where('type', '==', 'daily'),
+          where('competition_active', '==', true)
+        )),
+      ]);
+      const bouldersData: Boulder[] = [...classicSnapshot.docs, ...reusedSnapshot.docs].map(doc => ({
         id: doc.id,
         number: doc.data().number || 0,
         wall: doc.data().wall || '',

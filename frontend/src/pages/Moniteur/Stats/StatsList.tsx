@@ -40,6 +40,7 @@ import {
 import { jsPDF } from 'jspdf';
 import * as html2canvas from 'html2canvas';
 import diplomaBackground from '../../../assets/diploma-background.png';
+import { calculatePoints } from '../../../utils/climbingPoints';
 
 // Types pour les données
 interface User {
@@ -107,7 +108,15 @@ interface UserResult {
     courseId?: string;
     boulderId?: string;
     boulderColor?: string;
+    attempts?: number;
+    miniCompetitionId?: string;
   }[];
+}
+
+interface MiniCompetition {
+  id: string;
+  name: string;
+  boulderIds: string[];
 }
 
 const StatsList: React.FC = () => {
@@ -121,6 +130,8 @@ const StatsList: React.FC = () => {
   const [boulders, setBoulders] = useState<Boulder[]>([]);
   const [badges, setBadges] = useState<Badge[]>([]);
   const [exercises, setExercises] = useState<Exercise[]>([]);
+  const [miniCompetitions, setMiniCompetitions] = useState<MiniCompetition[]>([]);
+  const [selectedMiniCompetitionId, setSelectedMiniCompetitionId] = useState<string>('');
 
   // États pour les filtres
   const [filters, setFilters] = useState<{
@@ -234,6 +245,16 @@ const StatsList: React.FC = () => {
         }));
         setBoulders(bouldersList);
 
+        // Récupérer les mini-compétitions du moniteur
+        const miniCompetitionsQuery = query(collection(db, 'mini_competitions'), where('createdBy', '==', user.uid));
+        const miniCompetitionsSnapshot = await getDocs(miniCompetitionsQuery);
+        const miniCompetitionsList: MiniCompetition[] = miniCompetitionsSnapshot.docs.map((d) => ({
+          id: d.id,
+          name: d.data().name || '',
+          boulderIds: d.data().boulderIds || [],
+        }));
+        setMiniCompetitions(miniCompetitionsList);
+
         // Récupérer les badges
         const badgesQuery = query(collection(db, 'badges'));
         const badgesSnapshot = await getDocs(badgesQuery);
@@ -279,6 +300,8 @@ const StatsList: React.FC = () => {
               courseId: data.courseId || '',
               boulderId: data.boulderId,
               boulderColor: data.boulderColor,
+              attempts: data.attempts,
+              miniCompetitionId: data.miniCompetitionId,
             });
           } else {
             const matchedUser = usersList.find((u) => u.id === data.userId);
@@ -296,6 +319,8 @@ const StatsList: React.FC = () => {
                   courseId: data.courseId || '',
                   boulderId: data.boulderId,
                   boulderColor: data.boulderColor,
+                  attempts: data.attempts,
+                  miniCompetitionId: data.miniCompetitionId,
                 },
               ],
             });
@@ -391,6 +416,26 @@ const StatsList: React.FC = () => {
     }
 
     return filteredData.filter((userResult) => userResult.results.length > 0);
+  };
+
+  // ✅ Classement d'une mini-compétition : somme des points (barème quotidien,
+  // cf. climbingPoints.ts) sur les résultats de blocs rattachés à cette
+  // mini-compétition, tous rangs confondus (pas de filtre période/mur ici — une
+  // mini-compétition a sa propre temporalité, celle de la séance qui la contient).
+  const getMiniCompetitionRanking = (miniCompetitionId: string): { participant: string; score: number; bouldersValidated: number }[] => {
+    const ranking = userResults.map((userResult) => {
+      const miniResults = userResult.results.filter((r) => r.miniCompetitionId === miniCompetitionId);
+      const score = miniResults.reduce(
+        (total, r) => total + calculatePoints(r.boulderColor || '', r.attempts || 1, r.success),
+        0
+      );
+      const bouldersValidated = miniResults.filter((r) => r.success).length;
+      return { participant: userResult.displayName, score, bouldersValidated, hasResults: miniResults.length > 0 };
+    });
+    return ranking
+      .filter((r) => r.hasResults)
+      .sort((a, b) => b.score - a.score)
+      .map(({ participant, score, bouldersValidated }) => ({ participant, score, bouldersValidated }));
   };
 
   // Attribuer un badge à un utilisateur
@@ -937,6 +982,58 @@ const StatsList: React.FC = () => {
           </Alert>
         </Snackbar>
       </Paper>
+
+      {miniCompetitions.length > 0 && (
+        <Paper sx={{ p: { xs: 2, sm: 3 }, mt: 3 }}>
+          <Typography variant="h5" gutterBottom sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }}>
+            🏆 Classement mini-compétition
+          </Typography>
+
+          <FormControl sx={{ minWidth: 250, mb: 2 }}>
+            <InputLabel id="mini-competition-select-label">Mini-compétition</InputLabel>
+            <Select
+              labelId="mini-competition-select-label"
+              value={selectedMiniCompetitionId}
+              onChange={(e: SelectChangeEvent<string>) => setSelectedMiniCompetitionId(e.target.value)}
+              label="Mini-compétition"
+            >
+              {miniCompetitions.map((mc) => (
+                <MenuItem key={mc.id} value={mc.id}>{mc.name}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          {selectedMiniCompetitionId && (() => {
+            const ranking = getMiniCompetitionRanking(selectedMiniCompetitionId);
+            return ranking.length === 0 ? (
+              <Typography color="text.secondary">Aucun résultat enregistré pour cette mini-compétition.</Typography>
+            ) : (
+              <TableContainer sx={{ overflowX: 'auto' }}>
+                <Table sx={{ minWidth: 400 }}>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Rang</TableCell>
+                      <TableCell>Participant</TableCell>
+                      <TableCell>Blocs réussis</TableCell>
+                      <TableCell>Points</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {ranking.map((entry, index) => (
+                      <TableRow key={entry.participant} hover>
+                        <TableCell>{index + 1}</TableCell>
+                        <TableCell>{entry.participant}</TableCell>
+                        <TableCell>{entry.bouldersValidated}</TableCell>
+                        <TableCell>{entry.score}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            );
+          })()}
+        </Paper>
+      )}
     </Container>
   );
 };

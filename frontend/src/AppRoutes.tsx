@@ -42,6 +42,8 @@ const CourseForm = lazy(() => import('./pages/Moniteur/Courses/CourseForm'));
 const CourseDetail = lazy(() => import('./pages/Moniteur/Courses/CourseDetail'));
 const ExercisesList = lazy(() => import('./pages/Moniteur/Exercises/ExercisesList'));
 const ExerciseForm = lazy(() => import('./pages/Moniteur/Exercises/ExerciseForm'));
+const MiniCompetitionsList = lazy(() => import('./pages/Moniteur/MiniCompetitions/MiniCompetitionsList'));
+const MiniCompetitionForm = lazy(() => import('./pages/Moniteur/MiniCompetitions/MiniCompetitionForm'));
 const StatsList = lazy(() => import('./pages/Moniteur/Stats/StatsList'));
 const MessagesList = lazy(() => import('./pages/Moniteur/Messages/MessagesList'));
 
@@ -105,6 +107,9 @@ export default function AppRoutes() {
         <Route path="/moniteur/exercises" element={<ProtectedRoute role="moniteur"><ExercisesList /></ProtectedRoute>} />
         <Route path="/moniteur/exercises/new" element={<ProtectedRoute role="moniteur"><ExerciseForm /></ProtectedRoute>} />
         <Route path="/moniteur/exercises/edit/:exerciseId" element={<ProtectedRoute role="moniteur"><ExerciseForm /></ProtectedRoute>} />
+        <Route path="/moniteur/mini-competitions" element={<ProtectedRoute role="moniteur"><MiniCompetitionsList /></ProtectedRoute>} />
+        <Route path="/moniteur/mini-competitions/new" element={<ProtectedRoute role="moniteur"><MiniCompetitionForm /></ProtectedRoute>} />
+        <Route path="/moniteur/mini-competitions/edit/:miniCompetitionId" element={<ProtectedRoute role="moniteur"><MiniCompetitionForm /></ProtectedRoute>} />
         <Route path="/moniteur/stats" element={<ProtectedRoute role="moniteur"><StatsList /></ProtectedRoute>} />
         <Route path="/moniteur/messages" element={<ProtectedRoute role="moniteur"><MessagesList /></ProtectedRoute>} />
 

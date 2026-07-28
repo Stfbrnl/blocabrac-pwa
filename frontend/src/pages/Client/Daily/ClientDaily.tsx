@@ -67,6 +67,7 @@ interface Boulder {
   created_at?: string;
   created_by?: string;
   type?: string;
+  is_child_route?: boolean;
   is_active?: boolean;
 }
 
@@ -220,6 +221,9 @@ const ClientDaily: React.FC = () => {
             Bloc n°{boulder.number}
             {isMysteryBoulder(boulder) && (
               <Chip label="Mystère" size="small" sx={{ ml: 1, backgroundColor: levelColors.mystère }} />
+            )}
+            {boulder.is_child_route && (
+              <Chip label="🐒 Enfant" size="small" color="info" sx={{ ml: 1 }} />
             )}
           </Typography>
         </CardContent>
@@ -448,6 +452,9 @@ const ClientDaily: React.FC = () => {
               Bloc n°{selectedBoulder.number} - {selectedBoulder.wall}
               {isMysteryBoulder(selectedBoulder) && (
                 <Chip label="Mystère" size="small" sx={{ ml: 1, backgroundColor: levelColors.mystère }} />
+              )}
+              {selectedBoulder.is_child_route && (
+                <Chip label="🐒 Enfant" size="small" color="info" sx={{ ml: 1 }} />
               )}
             </DialogTitle>
             <DialogContent>
