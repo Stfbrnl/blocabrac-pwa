@@ -48,7 +48,6 @@ interface User {
   firstName?: string;
   lastName?: string;
   email?: string;
-  role?: string;
 }
 
 interface Group {
@@ -198,7 +197,6 @@ const StatsList: React.FC = () => {
             firstName: data.first_name || '',
             lastName: data.last_name || '',
             email: data.email || '',
-            role: data.role || '',
           };
         });
         setUsers(usersList);
