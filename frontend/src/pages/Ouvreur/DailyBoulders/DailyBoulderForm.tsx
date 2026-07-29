@@ -12,6 +12,7 @@ import {
 } from 'firebase/firestore';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '../../../services/firebaseConfig';
+import { colorGrades, difficultyTypes, difficultyLevels, mysteryGrade } from '../../../config/gymConfig';
 
 interface RelativeHold {
   x: number;
@@ -40,24 +41,14 @@ interface Boulder {
   difficulty_level?: DifficultyLevel;
 }
 
-const difficultyTypes: string[] = ['technique', 'équilibre', 'force', 'engagement'];
-const difficultyLevels: DifficultyLevel[] = ['Plus', 'Égal', 'Moins'];
-
 interface ColorRating {
   value: string;
   label: string;
 }
 
 const colorRatings: ColorRating[] = [
-  { value: 'jaune', label: 'Jaune (3A-3C)' },
-  { value: 'vert', label: 'Vert (4A-4B+)' },
-  { value: 'bleu', label: 'Bleu (4C-5A+)' },
-  { value: 'violet', label: 'Violet (5B-5C+)' },
-  { value: 'rouge', label: 'Rouge (6A-6B)' },
-  { value: 'noir', label: 'Noire (6B+-6C+)' },
-  { value: 'blanc', label: 'Blanc (7A-7B)' },
-  { value: 'rose', label: 'Rose (7B+-8A)' },
-  { value: 'mystere', label: 'Bloc Mystère' }
+  ...colorGrades.map(({ value, label }) => ({ value, label })),
+  mysteryGrade
 ];
 
 const resizeAndCompressImage = (file: File, maxWidth: number = 800, quality: number = 0.7): Promise<string> => {

@@ -11,23 +11,12 @@ import {
   useMediaQuery
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
+import { walls as wallList, colorGrades, mysteryColorHexKey, mysteryColorHex } from '../../../config/gymConfig';
 
 const levelColors: Record<string, string> = {
-  jaune: '#FFFF00',
-  vert: '#00FF00',
-  bleu: '#0000FF',
-  violet: '#800080',
-  rouge: '#FF0000',
-  noir: '#000000',
-  blanc: '#FFFFFF',
-  rose: '#FFC0CB',
-  mystère: '#808080'
+  ...Object.fromEntries(colorGrades.map(({ value, hex }) => [value, hex])),
+  [mysteryColorHexKey]: mysteryColorHex
 };
-
-const wallList = [
-  'Caverne des petits', 'Réta d\'initiation', 'Réta Adultes', 'Grande Face',
-  'Dalle', 'Dévers 15°', 'Dévers 30°', 'Dévers 40°', 'Grotte Adultes', 'Güllich'
-];
 
 const reportTypes = [
   { value: 'défaillance_prisede', label: 'Défaillance de prise' },

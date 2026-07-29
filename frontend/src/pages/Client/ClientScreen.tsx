@@ -32,23 +32,16 @@ import * as html2canvas from 'html2canvas';
 import AnnouncementBanner from '../../components/AnnouncementBanner';
 import WhatsNewPanel from '../../components/WhatsNewPanel';
 import { computeStreakDays, getStartOfWeek } from '../../utils/streak';
+import { colorGrades } from '../../config/gymConfig';
 
 // Tableau de correspondance code-couleur/cotations (cohérent avec ClientProfile.tsx, AdminUsers.tsx...)
-const levelOptions: Record<string, string> = {
-  jaune: 'Jaune (3A-3C)',
-  vert: 'Vert (4A-4B+)',
-  bleu: 'Bleu (4C-5A+)',
-  violet: 'Violet (5B-5C+)',
-  rouge: 'Rouge (6A-6B)',
-  noir: 'Noire (6B+-6C+)',
-  blanc: 'Blanc (7A-7B)',
-  rose: 'Rose (7B+-8A)',
-};
+const levelOptions: Record<string, string> = Object.fromEntries(
+  colorGrades.map(({ value, label }) => [value, label])
+);
 
-const levelColors: Record<string, string> = {
-  jaune: '#FFFF00', vert: '#00FF00', bleu: '#0000FF', violet: '#800080',
-  rouge: '#FF0000', noir: '#000000', blanc: '#FFFFFF', rose: '#FFC0CB'
-};
+const levelColors: Record<string, string> = Object.fromEntries(
+  colorGrades.map(({ value, hex }) => [value, hex])
+);
 
 interface NextCompetition {
   name: string;

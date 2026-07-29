@@ -15,28 +15,19 @@ import {
 import { createUserWithEmailAndPassword, sendPasswordResetEmail, getAuth, signOut, connectAuthEmulator } from 'firebase/auth';
 import { initializeApp, deleteApp, FirebaseError } from 'firebase/app';
 import { getSeasonAge } from '../utils/ageCategory';
+import { colorGrades } from '../config/gymConfig';
 
 // ✅ Rôles "staff" mirorés dans "staff_directory" (annuaire public lu par
 // ClientMessages.tsx et ClientDaily.tsx, voir handleCreateUser/handleUpdateUser).
 const STAFF_ROLES = ['admin', 'moniteur', 'ouvreur'];
 
 // ✅ Tableau de correspondance code-couleur/cotations
-const levelOptions = [
-  { value: 'jaune', label: 'Jaune (3A-3C) - Débutant' },
-  { value: 'vert', label: 'Vert (4A-4B+) - Débutant' },
-  { value: 'bleu', label: 'Bleu (4C-5A+) - En formation de grimpeur' },
-  { value: 'violet', label: 'Violet (5B-5C+) - En formation de grimpeur' },
-  { value: 'rouge', label: 'Rouge (6A-6B) - Grimpeur confirmé' },
-  { value: 'noir', label: 'Noire (6B+-6C+) - Grimpeur confirmé' },
-  { value: 'blanc', label: 'Blanc (7A-7B) - Grimpeur expert' },
-  { value: 'rose', label: 'Rose (7B+-8A) - Grimpeur mutant' }
-];
+const levelOptions = colorGrades.map(({ value, accountLabel }) => ({ value, label: accountLabel }));
 
 // Couleurs des niveaux (pour les chips)
-const levelColors: Record<string, string> = {
-  jaune: '#FFFF00', vert: '#00FF00', bleu: '#0000FF', violet: '#800080',
-  rouge: '#FF0000', noir: '#000000', blanc: '#FFFFFF', rose: '#FFC0CB'
-};
+const levelColors: Record<string, string> = Object.fromEntries(
+  colorGrades.map(({ value, hex }) => [value, hex])
+);
 
 type UserRole = 'admin' | 'ouvreur' | 'moniteur' | 'client';
 

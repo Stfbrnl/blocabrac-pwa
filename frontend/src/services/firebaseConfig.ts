@@ -4,12 +4,12 @@ import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
 import { getStorage } from "firebase/storage"; // ✅ CORRECTION : Import de getStorage depuis firebase/storage
 
 export const firebaseConfig = {
-  apiKey: "AIzaSyCKVWoaCQI2PhnOAjJBokKoXuzzmnDa9hg",
-  authDomain: "blocabrac.firebaseapp.com",
-  projectId: "blocabrac",
-  storageBucket: "blocabrac.firebasestorage.app",
-  messagingSenderId: "126818494034",
-  appId: "1:126818494034:web:f2de92ec7d22417a54618b"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
 const app = initializeApp(firebaseConfig);

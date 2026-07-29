@@ -2,11 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Typography, Paper, Container, Button } from '@mui/material';
 import { Box } from '@mui/material';
-
-const walls: string[] = [
-  'Caverne des petits', 'Réta d\'initiation', 'Réta Adultes', 'Grande Face',
-  'Dalle', 'Dévers 15°', 'Dévers 30°', 'Dévers 40°', 'Grotte Adultes', 'Güllich'
-];
+import { walls } from '../../../config/gymConfig';
 
 export default function DailyBouldersList(): JSX.Element {
   const navigate = useNavigate();

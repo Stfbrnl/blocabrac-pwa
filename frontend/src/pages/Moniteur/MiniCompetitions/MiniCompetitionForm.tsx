@@ -11,6 +11,7 @@ import {
   TableCell, TableContainer, TableHead, TableRow, Snackbar, Alert,
 } from '@mui/material';
 import type { SelectChangeEvent } from '@mui/material';
+import { walls, colorGrades } from '../../../config/gymConfig';
 
 interface Boulder {
   id: string;
@@ -20,21 +21,9 @@ interface Boulder {
   is_child_route?: boolean;
 }
 
-const walls: string[] = [
-  'Caverne des petits', 'Réta d\'initiation', 'Réta Adultes', 'Grande Face',
-  'Dalle', 'Dévers 15°', 'Dévers 30°', 'Dévers 40°', 'Grotte Adultes', 'Güllich'
-];
-
-const colorRatings: { value: string; label: string }[] = [
-  { value: 'jaune', label: 'Jaune (3A-3C)' },
-  { value: 'vert', label: 'Vert (4A-4B+)' },
-  { value: 'bleu', label: 'Bleu (4C-5A+)' },
-  { value: 'violet', label: 'Violet (5B-5C+)' },
-  { value: 'rouge', label: 'Rouge (6A-6B)' },
-  { value: 'noir', label: 'Noire (6B+-6C+)' },
-  { value: 'blanc', label: 'Blanc (7A-7B)' },
-  { value: 'rose', label: 'Rose (7B+-8A)' }
-];
+const colorRatings: { value: string; label: string }[] = colorGrades.map(
+  ({ value, label }) => ({ value, label })
+);
 const levelOrder: string[] = colorRatings.map((c) => c.value);
 
 export default function MiniCompetitionForm(): JSX.Element {
