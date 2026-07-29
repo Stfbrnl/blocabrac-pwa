@@ -1,9 +1,20 @@
 // Configuration centrale propre à la salle : nom, murs, barème couleur/cotation,
-// types de difficulté. Regroupé ici pour n'exister qu'à un seul endroit (au lieu
-// d'être dupliqué dans chaque écran) — première étape vers un futur "kit"
-// générique réutilisable par d'autres salles.
+// types de difficulté, tranches d'âge, identité visuelle. Regroupé ici pour
+// n'exister qu'à un seul endroit (au lieu d'être dupliqué dans chaque écran) —
+// première étape vers un futur "kit" générique réutilisable par d'autres salles.
 
-export const gymName = 'Blocabrac';
+// Identité visuelle et nom : lus depuis les variables VITE_* (définies dans
+// .env), à la fois consommées ici et injectées dans index.html/vite.config.ts
+// (via %VITE_XXX% ou loadEnv) — une seule source pour toute la marque.
+export const gymName = import.meta.env.VITE_GYM_NAME;
+export const appTitle = import.meta.env.VITE_APP_TITLE;
+export const appDescription = import.meta.env.VITE_APP_DESCRIPTION;
+export const themeColor = import.meta.env.VITE_THEME_COLOR;
+
+// Chemin public (dossier `public/`) et asset empaqueté (import Vite) du même
+// logo, dupliqué aujourd'hui à ces deux emplacements physiques.
+export const logoPath = '/images/logo-blocabrac.png';
+export { default as logoAssetUrl } from '../assets/logo-blocabrac.png';
 
 export const walls: string[] = [
   'Caverne des petits', "Réta d'initiation", 'Réta Adultes', 'Grande Face',
@@ -45,3 +56,30 @@ export const difficultyLevels: Array<'Plus' | 'Égal' | 'Moins'> = ['Plus', 'Ég
 
 // Clé de préfixe pour les entrées localStorage propres à la salle (ex. thème).
 export const storageKeyPrefix = 'blocabrac';
+
+export interface AgeBand {
+  key: string;
+  label: string;
+  minAge: number;
+  maxAge?: number; // undefined = pas de borne supérieure
+}
+
+// Libellés de regroupement utilisés par les classements.
+export const openCategoryLabel = 'Open';
+export const unknownCategoryLabel = 'Inconnu';
+
+// Tranches d'âge officielles FFME, par âge atteint au 31 décembre de la saison
+// (peu importe le mois de naissance dans l'année). Système fédéral français —
+// une salle d'un autre pays/fédération devra remplacer ce tableau.
+export const ageBands: AgeBand[] = [
+  { key: 'U8', label: 'U8 (6-7 ans)', minAge: 6, maxAge: 7 },
+  { key: 'U10', label: 'U10 (8-9 ans)', minAge: 8, maxAge: 9 },
+  { key: 'U12', label: 'U12 (10-11 ans)', minAge: 10, maxAge: 11 },
+  { key: 'U14', label: 'U14 (12-13 ans)', minAge: 12, maxAge: 13 },
+  { key: 'U16', label: 'U16 (14-15 ans)', minAge: 14, maxAge: 15 },
+  { key: 'U18', label: 'U18 (16-17 ans)', minAge: 16, maxAge: 17 },
+  { key: 'U20', label: 'U20 (18-19 ans)', minAge: 18, maxAge: 19 },
+  { key: 'seniors', label: 'Séniors (20-39 ans)', minAge: 20, maxAge: 39 },
+  { key: 'veterans1', label: 'Vétérans 1 (40-49 ans)', minAge: 40, maxAge: 49 },
+  { key: 'veterans2', label: 'Vétérans 2 (50 ans et +)', minAge: 50 },
+];

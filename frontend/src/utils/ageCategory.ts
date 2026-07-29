@@ -1,29 +1,11 @@
-export interface FfmeAgeBand {
-  key: string;
-  label: string;
-  minAge: number;
-  maxAge?: number; // undefined = pas de borne supérieure
-}
+import { ageBands, openCategoryLabel, unknownCategoryLabel, type AgeBand } from '../config/gymConfig';
 
-// Libellé utilisé pour le regroupement "toutes catégories confondues".
-export const OPEN_CATEGORY = 'Open';
-
-export const UNKNOWN_CATEGORY = 'Inconnu';
-
-// Tranches d'âge officielles FFME, par âge atteint au 31 décembre de la saison
-// (peu importe le mois de naissance dans l'année).
-export const FFME_AGE_BANDS: FfmeAgeBand[] = [
-  { key: 'U8', label: 'U8 (6-7 ans)', minAge: 6, maxAge: 7 },
-  { key: 'U10', label: 'U10 (8-9 ans)', minAge: 8, maxAge: 9 },
-  { key: 'U12', label: 'U12 (10-11 ans)', minAge: 10, maxAge: 11 },
-  { key: 'U14', label: 'U14 (12-13 ans)', minAge: 12, maxAge: 13 },
-  { key: 'U16', label: 'U16 (14-15 ans)', minAge: 14, maxAge: 15 },
-  { key: 'U18', label: 'U18 (16-17 ans)', minAge: 16, maxAge: 17 },
-  { key: 'U20', label: 'U20 (18-19 ans)', minAge: 18, maxAge: 19 },
-  { key: 'seniors', label: 'Séniors (20-39 ans)', minAge: 20, maxAge: 39 },
-  { key: 'veterans1', label: 'Vétérans 1 (40-49 ans)', minAge: 40, maxAge: 49 },
-  { key: 'veterans2', label: 'Vétérans 2 (50 ans et +)', minAge: 50 },
-];
+// Réexports conservés tels quels (nom historique "FFME") pour ne pas casser les
+// nombreux imports existants — la donnée elle-même vit maintenant dans gymConfig.ts.
+export type FfmeAgeBand = AgeBand;
+export const OPEN_CATEGORY = openCategoryLabel;
+export const UNKNOWN_CATEGORY = unknownCategoryLabel;
+export const FFME_AGE_BANDS: FfmeAgeBand[] = ageBands;
 
 // Âge atteint au 31 décembre de l'année de `referenceDate`, calculé depuis une date de
 // naissance (format ISO "YYYY-MM-DD"). Repli sur `legacyAge` (nombre saisi manuellement,

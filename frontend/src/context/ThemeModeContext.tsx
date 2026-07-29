@@ -1,10 +1,11 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
+import { storageKeyPrefix } from '../config/gymConfig';
 
 type Mode = 'light' | 'dark';
 
-const STORAGE_KEY = 'blocabrac_theme_mode';
+const STORAGE_KEY = `${storageKeyPrefix}_theme_mode`;
 
 interface ThemeModeContextValue {
   mode: Mode;

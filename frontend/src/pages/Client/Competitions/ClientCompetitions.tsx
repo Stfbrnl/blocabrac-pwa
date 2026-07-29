@@ -13,6 +13,7 @@ import {
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import { calculatePoints } from '../../../utils/climbingPoints';
+import { logoPath } from '../../../config/gymConfig';
 
 const levelColors: Record<string, string> = {
   jaune: '#FFFF00',
@@ -472,7 +473,7 @@ const ClientCompetitions: React.FC = () => {
                       <CardMedia
                         component="img"
                         height="150"
-                        image={boulder.image_base64 || '/images/logo-blocabrac.png'}
+                        image={boulder.image_base64 || logoPath}
                         alt={`Bloc ${boulder.number}`}
                         sx={{ objectFit: 'contain' }}
                       />

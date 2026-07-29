@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth } from '../services/firebaseConfig';
 
-import logo from '../assets/logo-blocabrac.png';
+import { logoAssetUrl as logo } from '../config/gymConfig';
 
 const Home = () => {
   const [user, loading] = useAuthState(auth);

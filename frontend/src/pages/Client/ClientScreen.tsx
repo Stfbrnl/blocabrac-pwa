@@ -32,7 +32,7 @@ import * as html2canvas from 'html2canvas';
 import AnnouncementBanner from '../../components/AnnouncementBanner';
 import WhatsNewPanel from '../../components/WhatsNewPanel';
 import { computeStreakDays, getStartOfWeek } from '../../utils/streak';
-import { colorGrades } from '../../config/gymConfig';
+import { colorGrades, logoPath, gymName } from '../../config/gymConfig';
 
 // Tableau de correspondance code-couleur/cotations (cohérent avec ClientProfile.tsx, AdminUsers.tsx...)
 const levelOptions: Record<string, string> = Object.fromEntries(
@@ -428,7 +428,7 @@ const ClientScreen: React.FC = () => {
                 textAlign: 'center',
               }}
             >
-              <Box component="img" src="/images/logo-blocabrac.png" alt="Blocabrac" sx={{ width: 56, height: 56, mb: 1 }} />
+              <Box component="img" src={logoPath} alt={gymName} sx={{ width: 56, height: 56, mb: 1 }} />
               <Typography variant="h6" sx={{ fontWeight: 700 }}>
                 {userData?.first_name ? `Bravo ${userData.first_name} !` : 'Bravo !'}
               </Typography>

@@ -17,7 +17,7 @@ const LevelCorrespondenceTable: React.FC = () => {
     { color: 'Vert', range: '4A à 4B+', label: 'Débutant', hex: '#90EE90' },
     { color: 'Bleu', range: '4C à 5A+', label: 'En formation de grimpeur', hex: '#ADD8E6' },
     { color: 'Violet', range: '5B à 5C+', label: 'En formation de grimpeur', hex: '#E6E6FA' },
-    { color: 'Rouge', range: '6A à 6B', label: 'En formation de grimpeur', hex: '#F08080' },
+    { color: 'Rouge', range: '6A à 6B', label: 'Grimpeur confirmé', hex: '#F08080' },
     { color: 'Noir', range: '6B+ à 6C+', label: 'Grimpeur confirmé', hex: '#000000' },
     { color: 'Blanc', range: '7A à 7B', label: 'Grimpeur expert', hex: '#FFFFFF' },
     { color: 'Rose', range: '7B+ à 8A', label: 'Grimpeur mutant', hex: '#FF1493' },

@@ -46,7 +46,7 @@ import {
 import MilitaryTechIcon from '@mui/icons-material/MilitaryTech';
 import { jsPDF } from 'jspdf';
 import * as html2canvas from 'html2canvas';
-import logo from '../../../assets/logo-blocabrac.png';
+import { logoAssetUrl as logo } from '../../../config/gymConfig';
 import { computeBadgeActive } from '../../../utils/badgeActivation';
 
 // Couleurs des niveaux

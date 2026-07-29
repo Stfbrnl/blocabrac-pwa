@@ -11,7 +11,7 @@ import {
   useMediaQuery
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
-import { walls as wallList, colorGrades, mysteryColorHexKey, mysteryColorHex } from '../../../config/gymConfig';
+import { walls as wallList, colorGrades, mysteryColorHexKey, mysteryColorHex, logoPath } from '../../../config/gymConfig';
 
 const levelColors: Record<string, string> = {
   ...Object.fromEntries(colorGrades.map(({ value, hex }) => [value, hex])),
@@ -196,7 +196,7 @@ const ClientDaily: React.FC = () => {
         <CardMedia
           component="img"
           height="100"
-          image={boulder.image_url || boulder.image_base64 || '/images/logo-blocabrac.png'}
+          image={boulder.image_url || boulder.image_base64 || logoPath}
           alt={`Bloc ${boulder.number}`}
           sx={{ objectFit: 'cover' }}
         />
@@ -450,7 +450,7 @@ const ClientDaily: React.FC = () => {
               <CardMedia
                 component="img"
                 height="200"
-                image={selectedBoulder.image_url || selectedBoulder.image_base64 || '/images/logo-blocabrac.png'}
+                image={selectedBoulder.image_url || selectedBoulder.image_base64 || logoPath}
                 alt={`Bloc ${selectedBoulder.number}`}
                 sx={{ mb: 2, objectFit: 'contain' }}
               />
