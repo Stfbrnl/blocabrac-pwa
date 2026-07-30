@@ -1,6 +1,9 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, connectAuthEmulator } from "firebase/auth";
-import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
+import {
+  initializeFirestore, connectFirestoreEmulator,
+  persistentLocalCache, persistentMultipleTabManager
+} from "firebase/firestore";
 import { getStorage } from "firebase/storage"; // ✅ CORRECTION : Import de getStorage depuis firebase/storage
 
 export const firebaseConfig = {
@@ -14,7 +17,22 @@ export const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(app); // ✅ Ajoutez cette ligne pour Firestore
+// ✅ Chantier 3 (PLAN-spark-images-competition.md) : cache local persistant IndexedDB,
+// décisif le jour d'une compétition pour ne pas retransférer les images inchangées à
+// chaque retour dans l'appli, et pour mettre en file les écritures hors ligne.
+// persistentMultipleTabManager() est obligatoire : sans lui, l'activation échoue dès
+// qu'un second onglet est ouvert — précisément le cas prévu côté admin (affichage TV).
+// Désactivée en mode test ET contre les émulateurs (Playwright tourne sur le vrai
+// serveur de dev, MODE='development', mais toujours avec VITE_USE_EMULATOR=true) :
+// les règles de sécurité ne s'appliquent pas aux lectures servies depuis le cache, ce
+// qui masquerait silencieusement une erreur de permission dans ces deux scénarios.
+const isTestLikeEnvironment =
+  import.meta.env.MODE === 'test' || import.meta.env.VITE_USE_EMULATOR === 'true';
+export const db = isTestLikeEnvironment
+  ? initializeFirestore(app, {})
+  : initializeFirestore(app, {
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+    });
 export const storage = getStorage(app); // ✅ Utilisation de getStorage
 
 // ✅ Opt-in explicite (VITE_USE_EMULATOR=true), jamais actif en prod : permet de

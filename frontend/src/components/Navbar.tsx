@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '../services/firebaseConfig';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, terminate, clearIndexedDbPersistence } from 'firebase/firestore';
 import {
   Button,
   AppBar,
@@ -77,6 +77,25 @@ const Navbar: React.FC = () => {
       clear();
     }
   }, [user]);
+
+  // ✅ Chantier 3 (PLAN-spark-images-competition.md) : IndexedDB est rattaché à
+  // l'origine du site, pas au compte connecté — sur un appareil partagé (poste admin,
+  // téléphone prêté), les données du compte précédent doivent disparaître à la
+  // déconnexion. Ordre strict imposé par l'API Firestore : signOut avant terminate
+  // (sinon les requêtes en cours empêchent l'arrêt propre), terminate avant
+  // clearIndexedDbPersistence (elle exige Firestore inactif), puis rechargement de la
+  // page car l'instance Firestore est inutilisable après terminate().
+  const handleLogout = async (): Promise<void> => {
+    try {
+      await auth.signOut();
+      await terminate(db);
+      await clearIndexedDbPersistence(db);
+    } catch (error) {
+      console.error('Erreur lors de la déconnexion :', error);
+    } finally {
+      window.location.reload();
+    }
+  };
 
   if (loadingAuth || loadingRole) {
     return null;
@@ -188,7 +207,7 @@ const Navbar: React.FC = () => {
               </Button>
             ))}
             {user && (
-              <Button color="inherit" size="small" onClick={() => auth.signOut()}>
+              <Button color="inherit" size="small" onClick={() => handleLogout()}>
                 DÉCONNEXION
               </Button>
             )}
@@ -257,7 +276,7 @@ const Navbar: React.FC = () => {
               <ListItem disablePadding>
                 <ListItemButton
                   onClick={() => {
-                    auth.signOut();
+                    handleLogout();
                     handleDrawerClose();
                   }}
                 >
