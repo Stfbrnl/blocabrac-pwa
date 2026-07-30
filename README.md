@@ -35,6 +35,13 @@ cd blocabrac-pwa
 npm install
 ```
 
+## ⚙️ Configuration
+
+Copier `frontend/.env.example` vers `frontend/.env` et renseigner les variables :
+config Firebase web (Console Firebase > Paramètres du projet), et config Cloudinary
+pour l'upload des images de blocs (cloud name en haut du Dashboard Cloudinary,
+upload preset créé en mode "Unsigned" dans Settings > Upload > Upload presets).
+
 ## 💻 Démarrage
 
 ```bash

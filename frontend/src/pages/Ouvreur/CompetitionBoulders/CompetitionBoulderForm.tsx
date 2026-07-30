@@ -12,6 +12,7 @@ import {
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '../../../services/firebaseConfig';
 import { walls, colorGrades, difficultyTypes, difficultyLevels } from '../../../config/gymConfig';
+import { uploadBoulderImage, getBoulderImageUrl } from '../../../services/imageStorage';
 
 interface RelativeHold {
   x: number;
@@ -33,6 +34,7 @@ interface Boulder {
   difficulty_types: string[];
   instructions: string;
   image_base64?: string;
+  image_public_id?: string;
   annotations?: BoulderAnnotations;
   competition_id: string;
   is_active: boolean;
@@ -52,6 +54,16 @@ interface ColorRating {
 }
 
 const colorRatings: ColorRating[] = colorGrades.map(({ value, label }) => ({ value, label }));
+
+const dataUrlToFile = (dataUrl: string, filename: string): File => {
+  const [header, base64Data] = dataUrl.split(',');
+  const mimeMatch = header.match(/:(.*?);/);
+  const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+  const binary = atob(base64Data);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new File([bytes], filename, { type: mime });
+};
 
 const resizeAndCompressImage = (file: File, maxWidth: number = 800, quality: number = 0.7): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -160,7 +172,7 @@ export default function CompetitionBoulderForm(): JSX.Element {
             difficulty_types: data.difficulty_types || [],
             instructions: data.instructions || '',
             imageFile: null,
-            imagePreview: data.image_base64 || '',
+            imagePreview: (data.image_public_id ? getBoulderImageUrl(data.image_public_id, 'full') : data.image_base64) || '',
             annotations: data.annotations || { start_holds: [], end_holds: [] },
             difficulty_level: data.difficulty_level || 'Égal'
           });
@@ -331,11 +343,14 @@ export default function CompetitionBoulderForm(): JSX.Element {
         }
       }
 
-      const base64Data = annotatedImageBase64.split(',')[1];
-      if (base64Data && atob(base64Data).length > 900000) {
-        alert('L\'image est trop grande (max ~1 Mo). Veuillez choisir une image plus petite ou la recadrer.');
-        setIsUploading(false);
-        return;
+      // ✅ Chantier 2 : upload Cloudinary uniquement si une nouvelle photo a été choisie
+      // (voir DailyBoulderForm.tsx pour le raisonnement complet). En cas d'échec réseau,
+      // le catch plus bas alerte sans réinitialiser le formulaire : rien n'est perdu.
+      let uploadedPublicId: string | undefined;
+      if (formData.imageFile) {
+        const imageFile = dataUrlToFile(annotatedImageBase64, `boulder-comp-${formData.wall}-${formData.number}.jpg`);
+        const uploaded = await uploadBoulderImage(imageFile);
+        uploadedPublicId = uploaded.publicId;
       }
 
       const boulderData = {
@@ -344,7 +359,7 @@ export default function CompetitionBoulderForm(): JSX.Element {
         difficulty: formData.difficulty,
         difficulty_types: formData.difficulty_types,
         instructions: formData.instructions,
-        image_base64: annotatedImageBase64,
+        ...(uploadedPublicId ? { image_public_id: uploadedPublicId } : {}),
         annotations: formData.annotations,
         type: 'competition',
         competition_id: competitionId,

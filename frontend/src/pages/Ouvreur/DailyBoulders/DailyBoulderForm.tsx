@@ -13,6 +13,7 @@ import {
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '../../../services/firebaseConfig';
 import { colorGrades, difficultyTypes, difficultyLevels, mysteryGrade } from '../../../config/gymConfig';
+import { uploadBoulderImage, getBoulderImageUrl } from '../../../services/imageStorage';
 
 interface RelativeHold {
   x: number;
@@ -33,6 +34,7 @@ interface Boulder {
   difficulty_types?: string[];
   instructions?: string;
   image_base64?: string;
+  image_public_id?: string;
   annotations?: BoulderAnnotations;
   wall: string;
   type: string;
@@ -91,6 +93,16 @@ const resizeAndCompressImage = (file: File, maxWidth: number = 800, quality: num
     };
     img.onerror = reject;
   });
+};
+
+const dataUrlToFile = (dataUrl: string, filename: string): File => {
+  const [header, base64Data] = dataUrl.split(',');
+  const mimeMatch = header.match(/:(.*?);/);
+  const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+  const binary = atob(base64Data);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new File([bytes], filename, { type: mime });
 };
 
 export default function DailyBoulderForm(): JSX.Element {
@@ -158,7 +170,7 @@ export default function DailyBoulderForm(): JSX.Element {
       difficulty_types: boulder.difficulty_types || [],
       instructions: boulder.instructions || '',
       imageFile: null,
-      imagePreview: boulder.image_base64 || '',
+      imagePreview: (boulder.image_public_id ? getBoulderImageUrl(boulder.image_public_id, 'full') : boulder.image_base64) || '',
       annotations: {
         start_holds: boulder.annotations?.start_holds || [],
         end_holds: boulder.annotations?.end_holds || []
@@ -353,11 +365,17 @@ export default function DailyBoulderForm(): JSX.Element {
         }
       }
 
-      const base64Data = annotatedImageBase64.split(',')[1];
-      if (base64Data && atob(base64Data).length > 900000) {
-        alert('L\'image est trop grande (max ~1 Mo). Veuillez choisir une image plus petite ou la recadrer.');
-        setIsUploading(false);
-        return;
+      // ✅ Chantier 2 : l'image annotée part sur Cloudinary (image_public_id), plus de
+      // base64 en Firestore pour les nouveaux blocs. Upload uniquement si une nouvelle
+      // photo a été choisie — en modification sans changement de photo, formData.imageFile
+      // est null et image_public_id existant reste inchangé (updateDoc ne touche pas les
+      // champs absents du payload). En cas d'échec réseau, on relance simplement le
+      // bouton "Créer le bloc" — la saisie n'est jamais perdue (catch plus bas, sans resetForm).
+      let uploadedPublicId: string | undefined;
+      if (formData.imageFile) {
+        const imageFile = dataUrlToFile(annotatedImageBase64, `boulder-${wall}-${formData.number}.jpg`);
+        const uploaded = await uploadBoulderImage(imageFile);
+        uploadedPublicId = uploaded.publicId;
       }
 
       const boulderData = {
@@ -366,7 +384,7 @@ export default function DailyBoulderForm(): JSX.Element {
         color: formData.color,
         difficulty_types: formData.difficulty_types,
         instructions: formData.instructions,
-        image_base64: annotatedImageBase64,
+        ...(uploadedPublicId ? { image_public_id: uploadedPublicId } : {}),
         annotations: formData.annotations,
         type: 'daily',
         competition_id: null,
@@ -679,9 +697,9 @@ export default function DailyBoulderForm(): JSX.Element {
                   {boulder.instructions}
                 </Typography>
               )}
-              {boulder.image_base64 && (
+              {(boulder.image_public_id || boulder.image_base64) && (
                 <img
-                  src={boulder.image_base64}
+                  src={boulder.image_public_id ? getBoulderImageUrl(boulder.image_public_id, 'thumb') : boulder.image_base64}
                   alt={`Bloc ${boulder.number || '?'}`}
                   style={{ width: '100%', marginTop: '8px', border: '1px solid #ddd' }}
                 />

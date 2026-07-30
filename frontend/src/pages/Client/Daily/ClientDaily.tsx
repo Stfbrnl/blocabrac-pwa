@@ -12,6 +12,7 @@ import {
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import { walls as wallList, colorGrades, mysteryColorHexKey, mysteryColorHex, logoPath } from '../../../config/gymConfig';
+import { getBoulderImageUrl } from '../../../services/imageStorage';
 
 const levelColors: Record<string, string> = {
   ...Object.fromEntries(colorGrades.map(({ value, hex }) => [value, hex])),
@@ -52,6 +53,7 @@ interface Boulder {
   difficulty_types?: string[];
   image_url?: string;
   image_base64?: string;
+  image_public_id?: string;
   instructions?: string;
   created_at?: string;
   created_by?: string;
@@ -59,6 +61,11 @@ interface Boulder {
   is_child_route?: boolean;
   is_active?: boolean;
 }
+
+// ✅ Chantier 2 : image_public_id (Cloudinary) prioritaire, repli sur l'ancien
+// base64 pour les blocs non encore migrés (voir imageStorage.ts).
+const boulderImageSrc = (boulder: Boulder, variant: 'thumb' | 'full'): string =>
+  (boulder.image_public_id ? getBoulderImageUrl(boulder.image_public_id, variant) : boulder.image_url || boulder.image_base64) || logoPath;
 
 const ClientDaily: React.FC = () => {
   const [user, loadingAuth] = useAuthState(auth);
@@ -196,7 +203,7 @@ const ClientDaily: React.FC = () => {
         <CardMedia
           component="img"
           height="100"
-          image={boulder.image_url || boulder.image_base64 || logoPath}
+          image={boulderImageSrc(boulder, 'thumb')}
           alt={`Bloc ${boulder.number}`}
           sx={{ objectFit: 'cover' }}
         />
@@ -450,7 +457,7 @@ const ClientDaily: React.FC = () => {
               <CardMedia
                 component="img"
                 height="200"
-                image={selectedBoulder.image_url || selectedBoulder.image_base64 || logoPath}
+                image={boulderImageSrc(selectedBoulder, 'full')}
                 alt={`Bloc ${selectedBoulder.number}`}
                 sx={{ mb: 2, objectFit: 'contain' }}
               />

@@ -12,6 +12,7 @@ import {
 } from '@mui/material';
 import { getSessionStatus, type SessionStatus } from '../../../utils/courseSessionStatus';
 import { calculatePoints } from '../../../utils/climbingPoints';
+import { getBoulderImageUrl } from '../../../services/imageStorage';
 
 const levelColors: Record<string, string> = {
   jaune: '#FFFF00', vert: '#00FF00', bleu: '#0000FF', violet: '#800080',
@@ -35,6 +36,7 @@ interface MiniCompetitionBoulder {
   number: number | string;
   color?: string;
   image_base64?: string;
+  image_public_id?: string;
   is_child_route?: boolean;
 }
 
@@ -167,6 +169,7 @@ const ClientCourseSession: React.FC = () => {
                 number: boulderData.number || '?',
                 color: boulderData.color,
                 image_base64: boulderData.image_base64,
+                image_public_id: boulderData.image_public_id,
                 is_child_route: boulderData.is_child_route || false,
               } as MiniCompetitionBoulder;
             });
@@ -547,11 +550,11 @@ const ClientCourseSession: React.FC = () => {
                       key={boulder.id}
                       sx={{ width: { xs: '100%', sm: 'calc(50% - 8px)', md: 300 }, mb: 2 }}
                     >
-                      {boulder.image_base64 && (
+                      {(boulder.image_public_id || boulder.image_base64) && (
                         <CardMedia
                           component="img"
                           height="150"
-                          image={boulder.image_base64}
+                          image={boulder.image_public_id ? getBoulderImageUrl(boulder.image_public_id, 'thumb') : boulder.image_base64}
                           alt={`Bloc ${boulder.number}`}
                           sx={{ objectFit: 'contain' }}
                         />
