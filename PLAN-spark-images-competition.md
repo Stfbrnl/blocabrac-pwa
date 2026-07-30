@@ -358,8 +358,11 @@ en prod, aucun échec) et vérification via les deux scénarios Playwright exist
 (`e2e-daily-flow.mjs` 7/7, `e2e-competition-flow.mjs` 15/15) contre les émulateurs, avec
 upload Cloudinary réel. Écart noté au 2.5 : upload lancé à l'enregistrement (pas à la
 sélection du fichier) — décision prise avec l'utilisateur, voir CLAUDE.md.
-**Passe B (suppression du base64) non lancée** — à faire plus tard, après vérification
-visuelle en production par l'utilisateur.
+**Passe B exécutée le 30/07/2026** après vérification visuelle en production par
+l'utilisateur : 24/24 blocs nettoyés (`image_base64` supprimé), 0 échec. Prod compte
+désormais 25 blocs (le 25e créé directement par l'utilisateur via le nouveau flux
+Cloudinary, jamais eu de base64 — confirme que la création fonctionne bien de bout en
+bout en prod).
 
 ---
 

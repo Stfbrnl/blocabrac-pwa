@@ -2,8 +2,8 @@ name: Nettoyage images Cloudinary orphelines
 
 # Chantier 4 (PLAN-spark-images-competition.md) : supprime mensuellement les images de
 # blocs qui ne sont plus référencées par aucun document Firestore "boulders" et qui ont
-# plus de 7 jours (voir firestore-migration/cleanup-orphan-boulder-images.js pour tous
-# les garde-fous — mode simulation par défaut, ce workflow passe explicitement --delete).
+# plus de 7 jours (voir scripts/cleanup-orphan-boulder-images.js pour tous les
+# garde-fous — mode simulation par défaut, ce workflow passe explicitement --delete).
 on:
   schedule:
     - cron: '0 3 1 * *' # 03h00 UTC le 1er de chaque mois
@@ -29,7 +29,7 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
           CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
           CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
-        run: node firestore-migration/cleanup-orphan-boulder-images.js --delete
+        run: node scripts/cleanup-orphan-boulder-images.js --delete
 
       - name: Committer l'état mis à jour (garde-fou anti-chute + journal)
         run: |
