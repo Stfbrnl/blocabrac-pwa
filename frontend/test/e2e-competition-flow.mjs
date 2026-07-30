@@ -127,21 +127,57 @@ async function main() {
     await clientP.getByText('Inscription réussie', { exact: false }).waitFor({ timeout: 10000 });
   });
 
-  await step('Client : valide le bloc de compétition', async () => {
+  await step('Client : valide le bloc de compétition (écriture au fil de l\'eau)', async () => {
     await clientP.waitForTimeout(3500); // laisser le message de succès se refermer
     const card = clientP.locator('.MuiCard-root', { hasText: COMPETITION_NAME });
     await card.getByRole('button', { name: 'Valider mes blocs' }).click();
     await clientP.getByText('Validation des blocs', { exact: false }).waitFor({ timeout: 10000 });
     await clientP.screenshot({ path: '/tmp/comp-05-client-validation-dialog.png', fullPage: true });
     await clientP.getByRole('button', { name: '✅ Réussi' }).first().click();
+    // ✅ Laisser le temps à l'écriture immédiate de partir avant de fermer/recharger,
+    // pour tester la reprise (1.3) sans dépendre du bouton "Soumettre".
+    await clientP.waitForTimeout(1000);
+    await clientP.getByRole('button', { name: 'Fermer' }).click();
+  });
+
+  await step('Client : recharge la page et retrouve sa validation (1.3 — reprise après rechargement)', async () => {
+    await clientP.reload();
+    await clientP.getByText('Mes Compétitions').waitFor({ timeout: 10000 });
+    const card = clientP.locator('.MuiCard-root', { hasText: COMPETITION_NAME });
+    await card.getByRole('button', { name: 'Valider mes blocs' }).click();
+    await clientP.getByText('Validation des blocs', { exact: false }).waitFor({ timeout: 10000 });
+    const successButton = clientP.getByRole('button', { name: '✅ Réussi' }).first();
+    await successButton.waitFor({ timeout: 10000 });
+    const className = await successButton.getAttribute('class');
+    assert(className && className.includes('contained'), 'La validation "Réussi" doit être retrouvée après rechargement (état non perdu)');
+    await clientP.screenshot({ path: '/tmp/comp-05b-client-reprise.png', fullPage: true });
+  });
+
+  await step('Client : verrouille ses résultats (1.4 — soumission = verrouillage)', async () => {
+    // ✅ handleLockResults ouvre un window.confirm natif : l'écouteur doit être posé
+    // avant le clic, sinon Playwright resterait bloqué sur le dialogue natif.
+    clientP.once('dialog', (dialog) => dialog.accept());
     await clientP.getByRole('button', { name: 'Soumettre les résultats' }).click();
-    await clientP.getByText('Résultats soumis avec succès', { exact: false }).waitFor({ timeout: 10000 });
+    await clientP.getByText('Résultats verrouillés avec succès', { exact: false }).waitFor({ timeout: 10000 });
+    await clientP.getByRole('button', { name: 'Fermer' }).click();
+  });
+
+  await step('Client : les résultats soumis sont en lecture seule', async () => {
+    const card = clientP.locator('.MuiCard-root', { hasText: COMPETITION_NAME });
+    await card.getByRole('button', { name: 'Valider mes blocs' }).click();
+    await clientP.getByText('Résultats soumis', { exact: false }).waitFor({ timeout: 10000 });
+    await clientP.getByRole('button', { name: 'Soumettre les résultats' }).waitFor({ state: 'hidden' }).catch(() => {});
+    const stillHasSubmit = await clientP.getByRole('button', { name: 'Soumettre les résultats' }).isVisible().catch(() => false);
+    assert(!stillHasSubmit, 'Le bouton de soumission ne doit plus apparaître après verrouillage');
+    await clientP.screenshot({ path: '/tmp/comp-05c-client-locked.png', fullPage: true });
+    await clientP.getByRole('button', { name: 'Fermer' }).click();
   });
 
   await step('Admin : consulte les stats et publie le classement', async () => {
     await gotoAndWait(adminP, '/admin/competitions/stats', 'Classement et Statistiques des Compétitions');
     await adminP.locator('#selectionnez-une-competition-select').click();
     await adminP.getByRole('option', { name: new RegExp(COMPETITION_NAME) }).click();
+    await adminP.getByText('Classement Open', { exact: false }).waitFor({ timeout: 10000 }).catch(() => {});
     await adminP.screenshot({ path: '/tmp/comp-06-admin-stats.png', fullPage: true });
     assert(await adminP.getByText('Classement Open', { exact: false }).isVisible().catch(() => false)
       || await adminP.getByText('Cliff Ompete', { exact: false }).isVisible().catch(() => false),

@@ -302,12 +302,19 @@ service cloud.firestore {
                     (resource.data.user_id == request.auth.uid ||
                      isUserRole("admin") ||
                      isUserRole("ouvreur"));
+      // ✅ Un grimpeur ne peut pas créer directement un résultat déjà verrouillé
+      // (submitted: true) — seul handleLockResults, via update, peut le poser.
       allow create: if request.auth != null &&
-                      (request.resource.data.user_id == request.auth.uid ||
+                      ((request.resource.data.user_id == request.auth.uid &&
+                        request.resource.data.submitted != true) ||
                        isUserRole("admin") ||
                        isUserRole("ouvreur"));
+      // ✅ Une fois submitted: true, le propriétaire ne peut plus modifier son
+      // résultat (verrouillage serveur) ; admin/ouvreur gardent leur droit de
+      // correction sans restriction (statu quo assumé, cf. PLAN-spark-images-competition.md).
       allow update: if request.auth != null &&
-                      (resource.data.user_id == request.auth.uid ||
+                      ((resource.data.user_id == request.auth.uid &&
+                        resource.data.submitted != true) ||
                        isUserRole("admin") ||
                        isUserRole("ouvreur"));
       allow delete: if request.auth != null &&

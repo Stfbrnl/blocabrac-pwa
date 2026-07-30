@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '../../../services/firebaseConfig';
 import {
-  collection, query, where, getDocs, addDoc, doc, updateDoc, getDoc, setDoc, increment
+  collection, query, where, getDocs, addDoc, doc, updateDoc, getDoc, setDoc, increment,
+  writeBatch
 } from 'firebase/firestore';
 import {
   Container, Typography, Box, Button, CircularProgress, Alert,
@@ -14,6 +15,7 @@ import {
 import { useTheme } from '@mui/material/styles';
 import { calculatePoints } from '../../../utils/climbingPoints';
 import { logoPath } from '../../../config/gymConfig';
+import { getBoulderImageUrl } from '../../../services/imageStorage';
 
 const levelColors: Record<string, string> = {
   jaune: '#FFFF00',
@@ -55,6 +57,7 @@ interface Boulder {
   difficulty_types?: string[];
   instructions?: string;
   image_base64?: string;
+  image_public_id?: string;
   competition_id?: string;
   competition_active?: boolean;
   is_active: boolean;
@@ -79,6 +82,19 @@ const ClientCompetitions: React.FC = () => {
     rating: number;
     proposedDifficulty: string;
   }>>({});
+
+  // ✅ Verrouillage des résultats : une fois soumis (submitted: true côté
+  // Firestore), plus aucune modification n'est possible — ni ici ni côté règles.
+  const [isLocked, setIsLocked] = useState(false);
+  const [lockedAt, setLockedAt] = useState<string | null>(null);
+
+  // ✅ Debounce des champs à saisie répétée (essais, note, cotation proposée) :
+  // évite une écriture Firestore à chaque interaction avec un Select/Rating.
+  // Le clic Réussi/Échoué, lui, écrit immédiatement (voir persistResult).
+  const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  // ✅ Ids des blocs déjà persistés (chargés au 1.3 ou écrits cette session) :
+  // permet de ne poser created_at qu'une seule fois par document.
+  const persistedBoulderIds = useRef<Set<string>>(new Set());
 
   const [currentUserDoc, setCurrentUserDoc] = useState<RegistrableUser | null>(null);
 
@@ -174,6 +190,7 @@ const ClientCompetitions: React.FC = () => {
         difficulty_types: doc.data().difficulty_types || [],
         instructions: doc.data().instructions || '',
         image_base64: doc.data().image_base64,
+        image_public_id: doc.data().image_public_id,
         competition_id: doc.data().competition_id,
         is_active: doc.data().is_active || false,
         color: doc.data().color
@@ -184,6 +201,45 @@ const ClientCompetitions: React.FC = () => {
       setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // ✅ 1.3 — Reprise après rechargement : recharge les résultats déjà écrits par
+  // ce grimpeur pour cette compétition et préremplit validationResults, pour que
+  // la fermeture d'onglet/le rechargement/l'"Annuler" ne fasse plus jamais perdre
+  // une validation déjà enregistrée côté serveur.
+  const loadExistingResults = async (competition: Competition) => {
+    if (!user) return;
+    persistedBoulderIds.current = new Set();
+    try {
+      const q = query(
+        collection(db, 'competition_results'),
+        where('user_id', '==', user.uid),
+        where('competition_id', '==', competition.id)
+      );
+      const snapshot = await getDocs(q);
+      const results: typeof validationResults = {};
+      let locked = false;
+      let lockedAtValue: string | null = null;
+      snapshot.forEach(docSnap => {
+        const data = docSnap.data();
+        results[data.boulder_id] = {
+          success: data.success || false,
+          attempts: data.attempts || 1,
+          rating: data.rating || 0,
+          proposedDifficulty: data.proposed_difficulty || ''
+        };
+        persistedBoulderIds.current.add(data.boulder_id);
+        if (data.submitted) {
+          locked = true;
+          lockedAtValue = data.submitted_at || null;
+        }
+      });
+      setValidationResults(results);
+      setIsLocked(locked);
+      setLockedAt(lockedAtValue);
+    } catch (err: unknown) {
+      setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -278,32 +334,91 @@ const ClientCompetitions: React.FC = () => {
     }
   };
 
-  const handleValidateBoulder = (boulderId: string, success: boolean, attempts: number, rating: number, proposedDifficulty: string) => {
-    setValidationResults(prev => ({
-      ...prev,
-      [boulderId]: { success, attempts, rating, proposedDifficulty }
-    }));
+  // ✅ 1.2 — Écrit chaque validation dans Firestore (merge: true), en plus de
+  // l'état React local qui pilote l'affichage immédiat. Ne pose created_at que
+  // sur la première écriture du document (voir persistedBoulderIds).
+  const persistResult = async (boulderId: string, result: {
+    success: boolean; attempts: number; rating: number; proposedDifficulty: string;
+  }) => {
+    if (!user || !selectedCompetition) return;
+    const resultId = `${user.uid}_${boulderId}_${selectedCompetition.id}`;
+    const isFirstWrite = !persistedBoulderIds.current.has(boulderId);
+    try {
+      await setDoc(doc(db, 'competition_results', resultId), {
+        user_id: user.uid,
+        competition_id: selectedCompetition.id,
+        boulder_id: boulderId,
+        success: result.success,
+        attempts: result.attempts,
+        rating: result.rating,
+        proposed_difficulty: result.proposedDifficulty,
+        ...(isFirstWrite ? { createdAt: new Date().toISOString(), submitted: false } : {}),
+        updated_at: new Date().toISOString()
+      }, { merge: true });
+      persistedBoulderIds.current.add(boulderId);
+    } catch (err: unknown) {
+      setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
+    }
   };
 
-  const handleSubmitResults = async () => {
-    if (!user || !selectedCompetition) return;
-    try {
-      for (const [boulderId, result] of Object.entries(validationResults)) {
-        const resultId = `${user.uid}_${boulderId}_${selectedCompetition.id}`;
-        await setDoc(doc(db, 'competition_results', resultId), {
-          user_id: user.uid,
-          competition_id: selectedCompetition.id,
-          boulder_id: boulderId,
-          success: result.success,
-          attempts: result.attempts,
-          rating: result.rating,
-          proposed_difficulty: result.proposedDifficulty,
-          createdAt: new Date().toISOString()
-        });
+  const handleValidateBoulder = (
+    boulderId: string,
+    success: boolean,
+    attempts: number,
+    rating: number,
+    proposedDifficulty: string,
+    immediate: boolean = false
+  ) => {
+    if (isLocked) return;
+    const result = { success, attempts, rating, proposedDifficulty };
+    setValidationResults(prev => ({ ...prev, [boulderId]: result }));
+
+    if (immediate) {
+      // ✅ Réussi/Échoué : écriture immédiate, jamais de debounce — c'est
+      // l'information qu'on ne veut jamais perdre.
+      if (debounceTimers.current[boulderId]) {
+        clearTimeout(debounceTimers.current[boulderId]);
+        delete debounceTimers.current[boulderId];
       }
-      setSuccess("Résultats soumis avec succès !");
-      setOpenValidationDialog(false);
-      setValidationResults({});
+      persistResult(boulderId, result);
+    } else {
+      // ✅ Essais / note / cotation proposée : debounce ~800ms pour éviter une
+      // écriture à chaque interaction avec un Select.
+      if (debounceTimers.current[boulderId]) {
+        clearTimeout(debounceTimers.current[boulderId]);
+      }
+      debounceTimers.current[boulderId] = setTimeout(() => {
+        persistResult(boulderId, result);
+        delete debounceTimers.current[boulderId];
+      }, 800);
+    }
+  };
+
+  // ✅ 1.4 — "Soumettre" devient un verrouillage : un seul writeBatch pose
+  // submitted: true sur tous les résultats du grimpeur pour cette compétition
+  // (atomique, un aller-retour), et les règles refusent ensuite toute
+  // modification par le propriétaire (voir firestore.rules).
+  const handleLockResults = async () => {
+    if (!user || !selectedCompetition) return;
+    const confirmed = window.confirm(
+      "Une fois vos résultats soumis, ils ne pourront plus être modifiés. Confirmer la soumission définitive ?"
+    );
+    if (!confirmed) return;
+    try {
+      const now = new Date().toISOString();
+      const batch = writeBatch(db);
+      Object.keys(validationResults).forEach((boulderId) => {
+        const resultId = `${user.uid}_${boulderId}_${selectedCompetition.id}`;
+        batch.set(doc(db, 'competition_results', resultId), {
+          submitted: true,
+          submitted_at: now,
+          updated_at: now
+        }, { merge: true });
+      });
+      await batch.commit();
+      setIsLocked(true);
+      setLockedAt(now);
+      setSuccess("Résultats verrouillés avec succès !");
       setTimeout(() => setSuccess(null), 3000);
     } catch (err: unknown) {
       setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
@@ -370,6 +485,7 @@ const ClientCompetitions: React.FC = () => {
                           isAlreadyRegistered(competition.id).then(registered => {
                             if (registered) {
                               loadBoulders(competition);
+                              loadExistingResults(competition);
                               setOpenValidationDialog(true);
                             } else {
                               if (canRegister) {
@@ -455,9 +571,15 @@ const ClientCompetitions: React.FC = () => {
           <>
             <DialogTitle>Validation des blocs - {selectedCompetition.name}</DialogTitle>
             <DialogContent>
-              <Typography variant="h6" sx={{ mb: 2 }}>
-                Validez vos blocs et proposez une cotation (tous les blocs de compétition sont considérés comme "mystère").
-              </Typography>
+              {isLocked ? (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  Résultats soumis{lockedAt ? ` le ${new Date(lockedAt).toLocaleString()}` : ''} — lecture seule, plus aucune modification possible.
+                </Alert>
+              ) : (
+                <Typography variant="h6" sx={{ mb: 2 }}>
+                  Validez vos blocs et proposez une cotation (tous les blocs de compétition sont considérés comme "mystère").
+                </Typography>
+              )}
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
                 {boulders.map((boulder) => {
                   const result = validationResults[boulder.id] || {
@@ -473,7 +595,7 @@ const ClientCompetitions: React.FC = () => {
                       <CardMedia
                         component="img"
                         height="150"
-                        image={boulder.image_base64 || logoPath}
+                        image={(boulder.image_public_id ? getBoulderImageUrl(boulder.image_public_id, 'thumb') : boulder.image_base64) || logoPath}
                         alt={`Bloc ${boulder.number}`}
                         sx={{ objectFit: 'contain' }}
                       />
@@ -484,12 +606,14 @@ const ClientCompetitions: React.FC = () => {
                             variant={result.success ? "contained" : "outlined"}
                             color="success"
                             size="small"
+                            disabled={isLocked}
                             onClick={() => handleValidateBoulder(
                               boulder.id,
                               true,
                               result.attempts,
                               result.rating,
-                              result.proposedDifficulty
+                              result.proposedDifficulty,
+                              true
                             )}
                           >
                             ✅ Réussi
@@ -498,22 +622,25 @@ const ClientCompetitions: React.FC = () => {
                             variant={!result.success ? "contained" : "outlined"}
                             color="error"
                             size="small"
+                            disabled={isLocked}
                             onClick={() => handleValidateBoulder(
                               boulder.id,
                               false,
                               result.attempts,
                               result.rating,
-                              result.proposedDifficulty
+                              result.proposedDifficulty,
+                              true
                             )}
                           >
                             ❌ Échoué
                           </Button>
                         </Box>
-                        <FormControl fullWidth sx={{ mt: 1 }}>
+                        <FormControl fullWidth sx={{ mt: 1 }} disabled={isLocked}>
                           <InputLabel id="nombre-d-essais-select-label">Nombre d'essais</InputLabel>
                           <Select
                             labelId="nombre-d-essais-select-label" id="nombre-d-essais-select"
                             value={result.attempts}
+                            disabled={isLocked}
                             onChange={(e) => handleValidateBoulder(
                               boulder.id,
                               result.success,
@@ -533,6 +660,7 @@ const ClientCompetitions: React.FC = () => {
                           <Rating
                             name={`rating-${boulder.id}`}
                             value={result.rating}
+                            disabled={isLocked}
                             onChange={(e, newValue) => handleValidateBoulder(
                               boulder.id,
                               result.success,
@@ -542,11 +670,12 @@ const ClientCompetitions: React.FC = () => {
                             )}
                           />
                         </Box>
-                        <FormControl fullWidth sx={{ mt: 1 }}>
+                        <FormControl fullWidth sx={{ mt: 1 }} disabled={isLocked}>
                           <InputLabel id="cotation-proposee-select-label">Cotation proposée</InputLabel>
                           <Select
                             labelId="cotation-proposee-select-label" id="cotation-proposee-select"
                             value={result.proposedDifficulty}
+                            disabled={isLocked}
                             onChange={(e) => handleValidateBoulder(
                               boulder.id,
                               result.success,
@@ -582,14 +711,16 @@ const ClientCompetitions: React.FC = () => {
               </Box>
             </DialogContent>
             <DialogActions>
-              <Button onClick={() => setOpenValidationDialog(false)}>Annuler</Button>
-              <Button
-                variant="contained"
-                color="primary"
-                onClick={handleSubmitResults}
-              >
-                Soumettre les résultats
-              </Button>
+              <Button onClick={() => setOpenValidationDialog(false)}>Fermer</Button>
+              {!isLocked && (
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={handleLockResults}
+                >
+                  Soumettre les résultats
+                </Button>
+              )}
             </DialogActions>
           </>
         )}
