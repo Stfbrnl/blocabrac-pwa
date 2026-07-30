@@ -333,6 +333,7 @@ export default function DailyBoulderForm(): JSX.Element {
         const canvas: HTMLCanvasElement | null = canvasRef.current;
         if (canvas) {
           const img = new Image();
+          img.crossOrigin = 'anonymous';
           img.src = formData.imagePreview;
           await new Promise<void>((resolve) => {
             img.onload = () => {
@@ -555,6 +556,7 @@ export default function DailyBoulderForm(): JSX.Element {
                 ref={imageRef}
                 src={formData.imagePreview}
                 alt="Bloc"
+                crossOrigin="anonymous"
                 style={{ maxWidth: '100%', display: 'block', border: '1px solid #ddd' }}
               />
               <canvas
