@@ -327,3 +327,30 @@ Signalé comme encore ouvert dans ce handoff (section 3/6), mais supprimé sur
 demande explicite de l'utilisateur juste après (doc
 `competition_participants/Ue6AHXLFriXlufC4Bfn4`) — voir section 3, déjà mis à
 jour ci-dessus.
+
+---
+
+## 8. Suite du 15/08/2026 (bis) — ta demande de vérification "par acquit de
+conscience"
+
+Tu avais raison de douter plutôt que de me croire sur parole : le recalcul
+de 7a supposait que `exists(p) && get(p)` sur le même chemin compte pour 1
+lecture facturée (pas 2), affirmé sans source au moment d'écrire
+`isParticipationSubmitted`. Vérifié cette fois contre la documentation
+officielle plutôt que ré-affirmé : [Understand Cloud Firestore billing](https://firebase.google.com/docs/firestore/pricing),
+section "Cloud Firestore Security Rules" — *"You are charged for reads that
+are necessary to evaluate your Cloud Firestore Security Rules. [...] You are
+only charged one read per dependent document even if your rules refer to
+that document more than once."*
+
+Recoupé par deux méthodes indépendantes (citation avec paragraphe
+environnant depuis la page officielle, puis recherche web qui retombe sur le
+même passage cité comme extrait) pour écarter le risque d'hallucination d'un
+résumé automatique sur une seule source.
+
+**Confirmé : 1 lecture, pas 2.** Le chiffre de 7a (≈10 700-11 000, 21-22%)
+reste le bon — s'il s'était agi de 2 lectures, le total serait monté à
+≈18 000 (36%, toujours sous le plafond, mais le chiffre affiché aurait de
+nouveau été faux). Le commentaire de `firestore.rules` sur
+`isParticipationSubmitted` cite maintenant cette source directement, pour
+qu'une prochaine relecture n'ait pas à re-vérifier la même chose.

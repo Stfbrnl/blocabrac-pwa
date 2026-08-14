@@ -262,6 +262,14 @@ de 20 000, donc aucun correctif de code nécessaire dans l'immédiat. Détail co
 `PLAN-spark-images-competition.md`. Migration déplacée entretemps vers
 `scripts/rekey-competition-participants.js` (voir plus bas).
 
+**Vérification demandée par Claude navigateur, faite** : ce recalcul suppose que
+`exists(p) && get(p)` sur le même document compte pour 1 lecture facturée, pas 2 —
+confirmé contre la doc officielle
+([Understand Cloud Firestore billing](https://firebase.google.com/docs/firestore/pricing),
+"You are only charged one read per dependent document even if your rules refer to
+that document more than once"), pas juste supposé une seconde fois. Si ç'avait été 2,
+le total serait monté à ≈18 000 (36%) — toujours sous le plafond.
+
 ---
 
 ## Ce que je déconseille explicitement

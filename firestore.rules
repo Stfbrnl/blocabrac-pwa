@@ -48,7 +48,12 @@ service cloud.firestore {
     // refuserait à tort la validation d'un grimpeur dont la participation n'a
     // pas encore été migrée (ou, en test, jamais seedée). Les deux appels
     // portent sur le même chemin : Firestore ne facture qu'une seule lecture
-    // par document réellement accédé au sein d'une même évaluation de règle.
+    // par document réellement accédé au sein d'une même évaluation de règle —
+    // vérifié le 15/08/2026 contre la doc officielle (pas supposé), voir
+    // https://firebase.google.com/docs/firestore/pricing, section "Cloud
+    // Firestore Security Rules" : "You are only charged one read per
+    // dependent document even if your rules refer to that document more
+    // than once."
     // `.get('submitted', false)` plutôt qu'un accès direct : une participation
     // fraîchement enregistrée n'a pas encore ce champ, et y accéder directement
     // ferait échouer l'évaluation (voir la même remarque sur la règle update).

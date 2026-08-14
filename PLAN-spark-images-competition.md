@@ -231,6 +231,19 @@ pas par écritures réelles (80 : 35 Réussi + 35 essais + 10 corrections). Reca
   uniquement côté client jusqu'au verrouillage final. Pas fait : prématuré tant que la
   marge reste confortable.
 
+**Vérification du 15/08/2026 (Claude navigateur, par acquit de conscience)** : le
+recalcul ci-dessus suppose que `exists(partPath) && get(partPath)...` sur le même
+chemin, dans une même évaluation de règle, compte pour **1** lecture facturée et non 2
+— une affirmation faite sans source au moment d'écrire `isParticipationSubmitted`.
+Vérifiée depuis contre la documentation officielle plutôt que supposée deux fois de
+suite : [Understand Cloud Firestore billing](https://firebase.google.com/docs/firestore/pricing),
+section "Cloud Firestore Security Rules" — *"You are only charged one read per
+dependent document even if your rules refer to that document more than once."*
+Confirmé : le chiffre ci-dessus (≈10 700-11 000, 21-22%) est le bon ; s'il s'était agi
+de 2 lectures, le total serait monté à ≈18 000, 36% du plafond — toujours sous la
+cible, la conclusion n'aurait pas changé, mais le chiffre affiché aurait de nouveau été
+faux.
+
 ---
 
 ## Chantier 1 — Résultats de compétition écrits au fil de l'eau
