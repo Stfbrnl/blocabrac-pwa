@@ -86,6 +86,40 @@ lecture seule, mesure directe sur les 24 blocs en production) :**
   activité fraîche, à relever séparément quand utile. Non bloquant : le Chantier 1 est
   indépendant des quotas et peut démarrer sans ces deux chiffres.
 
+**Mesure du 14/08/2026 (seconde passe, après la Passe B — script
+`firestore-migration/measure-boulder-images-v2.js`, lecture seule, 25 blocs en
+production) :**
+
+- 25 blocs, tous avec `image_public_id`, 0 avec `image_base64` résiduel (Passe B propre).
+- Document Firestore moyen (hors `annotations`, jamais relu à l'affichage) : **0,4 Ko**.
+- Image thumb Cloudinary (`f_auto,q_auto,w_400`, taille réelle mesurée via l'URL exacte
+  que sert `getBoulderImageUrl`) : **29,8 Ko** en moyenne (min 7,0 / max 103,1 Ko).
+  Important : mesuré avec un en-tête `Accept` simulant un navigateur moderne — sans ça,
+  `fetch()` côté Node ne déclare pas supporter WebP/AVIF et Cloudinary répond en JPEG
+  (36,4 Ko de moyenne, mesure erronée par excès). Avec l'en-tête correct, `f_auto` sert
+  bien du WebP (24/25 images, la 25e probablement déjà petite/simple en JPEG natif) —
+  confirme le 3e point de contrôle du protocole.
+- Volume par bloc affiché (doc + thumb) : **30,2 Ko**. Estimation pour 1 mur de 15 blocs :
+  **≈ 453 Ko**.
+- **Gain en premier chargement : facteur ≈ 2,9x** (vs 1,3 Mo en base64 le 30/07/2026) —
+  **en dessous du facteur 5-10 attendu**. Écart expliqué : l'estimation initiale visait
+  surtout la compression/format, pas seulement la taille du thumb vs l'image pleine
+  résolution encodée en base64.
+- Le facteur 5-10 se vérifie côté **rechargement**, pas premier chargement :
+  `Cache-Control: private, no-transform, max-age=2592000` (30 jours) sur les réponses
+  Cloudinary — un rechargement dans les 30 jours ne retransfère rien (servi depuis le
+  cache disque du navigateur), ce que confirme le 4e point de contrôle du protocole. Non
+  mesuré directement ici (Node ne simule pas le cache HTTP navigateur) — à confirmer une
+  fois en conditions réelles onglet Réseau si le chiffre exact importe un jour.
+- Limite de cette mesure : elle porte sur les octets réels transférés en HTTP, pas sur un
+  relevé "onglet Réseau" en conditions réelles (TLS/en-têtes/overhead non inclus, mais
+  marginal à cette échelle). Suffisant pour trancher les 4 points de contrôle du
+  protocole et pour le dimensionnement ci-dessous.
+- Dimensionnement compétition 90 participants / 35 blocs, sur la base du premier
+  chargement (30,2 Ko/bloc) : ≈ 95 Mo pour l'ensemble des participants ouvrant tous les
+  blocs une fois — largement sous le quota mensuel de 10 Gio, y compris avec plusieurs
+  rechargements par grimpeur pendant la soirée.
+
 ---
 
 ## Chantier 1 — Résultats de compétition écrits au fil de l'eau
