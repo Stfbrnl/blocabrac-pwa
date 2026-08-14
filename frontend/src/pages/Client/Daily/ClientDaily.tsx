@@ -130,6 +130,27 @@ const ClientDaily: React.FC = () => {
   const successfulAttemptsRef = useRef<Map<string, number>>(new Map());
   const initialResultsLoadedRef = useRef<Promise<void> | null>(null);
 
+  // ✅ Chantier écritures point 5 : classement_profiles est un résumé dérivé
+  // (pas la donnée source), recalculé après chaque validation — pas besoin
+  // d'être exact à la seconde près. Debounce quelques secondes pour coalescer
+  // plusieurs validations rapprochées en une seule écriture, avec flush sur
+  // fermeture de la modale de détail et sur "pagehide" (mêmes précautions que
+  // le point 4 côté compétition/cours) — le résultat du bloc lui-même
+  // (client_boulder_results), lui, continue d'être écrit immédiatement.
+  const CLASSEMENT_DEBOUNCE_MS = 3000;
+  const classementWriteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const classementWritePending = useRef(false);
+
+  // ✅ Chantier écritures point 3 : dernière valeur réellement PERSISTÉE (pas
+  // affichée) par bloc pour client_boulder_results — évite une écriture si un
+  // reclic sur "Réussi" déjà actif ou un "Enregistrer" sans changement
+  // reproduit exactement l'état déjà écrit. Ne couvre que la session en cours
+  // (pas de lecture au montage : en ajouter une reviendrait sur le correctif
+  // de lectures de ClientDaily fait plus tôt ce jour-là).
+  const lastPersistedResultRef = useRef<Record<string, {
+    success: boolean; rating: number; comment: string; attempts: number; proposedDifficulty: string | null;
+  }>>({});
+
   const loadSuccessfulResults = React.useCallback(async (forceServer: boolean) => {
     if (!user) return;
     try {
@@ -307,26 +328,26 @@ const ClientDaily: React.FC = () => {
   // le classement se contente ensuite de lire ces résumés déjà calculés. Appelé même
   // en cas d'échec, pour que le score baisse correctement si "Réussi" est changé en
   // "Échoué" (recalcul complet, jamais un simple incrément).
-  const updateClassementProfile = async (uid: string, boulderId: string, success: boolean, resultAttempts: number) => {
+  //
+  // ✅ Chantier écritures point 5 : l'écriture Firestore elle-même est
+  // débounced (voir CLASSEMENT_DEBOUNCE_MS) — la mutation du cache en mémoire
+  // (successfulAttemptsRef), elle, reste immédiate, donc l'état local
+  // (classement affiché ailleurs dans la session) n'est jamais en retard.
+  const flushClassementWrite = React.useCallback(async () => {
+    if (classementWriteTimer.current) {
+      clearTimeout(classementWriteTimer.current);
+      classementWriteTimer.current = null;
+    }
+    if (!classementWritePending.current || !user) return;
+    classementWritePending.current = false;
     try {
-      // ✅ Attend le chargement initial (au montage) avant de muter le cache, au
-      // cas où un clic arrive avant que la première lecture soit terminée.
-      if (initialResultsLoadedRef.current) {
-        await initialResultsLoadedRef.current;
-      }
-      if (success) {
-        successfulAttemptsRef.current.set(boulderId, resultAttempts);
-      } else {
-        successfulAttemptsRef.current.delete(boulderId);
-      }
-
       const colorById = new Map(boulders.map((b) => [b.id, b.color || b.difficulty || 'Inconnu']));
       const validatedResults = Array.from(successfulAttemptsRef.current.entries())
         .filter(([bId]) => colorById.has(bId))
         .map(([bId, resAttempts]) => ({ color: colorById.get(bId) as string, attempts: resAttempts }));
 
       const summary = summarizeValidatedResults(validatedResults);
-      await setDoc(doc(db, 'classement_profiles', uid), {
+      await setDoc(doc(db, 'classement_profiles', user.uid), {
         score: summary.score,
         bouldersValidated: summary.bouldersValidated,
         bestColorRank: summary.bestColorRank,
@@ -334,27 +355,68 @@ const ClientDaily: React.FC = () => {
     } catch (err) {
       console.error('Erreur lors de la mise à jour du classement:', err);
     }
+  }, [user, boulders]);
+
+  // ✅ Flush sur "pagehide" (mêmes précautions que le point 4 côté compétition
+  // / cours) : sans ça, une validation juste avant fermeture de l'onglet
+  // perdrait sa mise à jour de classement (le résultat du bloc, lui, est déjà
+  // en base — seul le résumé dérivé serait en retard).
+  useEffect(() => {
+    window.addEventListener('pagehide', flushClassementWrite);
+    return () => window.removeEventListener('pagehide', flushClassementWrite);
+  }, [flushClassementWrite]);
+
+  const updateClassementProfile = async (uid: string, boulderId: string, success: boolean, resultAttempts: number) => {
+    // ✅ Attend le chargement initial (au montage) avant de muter le cache, au
+    // cas où un clic arrive avant que la première lecture soit terminée.
+    if (initialResultsLoadedRef.current) {
+      await initialResultsLoadedRef.current;
+    }
+    if (success) {
+      successfulAttemptsRef.current.set(boulderId, resultAttempts);
+    } else {
+      successfulAttemptsRef.current.delete(boulderId);
+    }
+
+    classementWritePending.current = true;
+    if (classementWriteTimer.current) clearTimeout(classementWriteTimer.current);
+    classementWriteTimer.current = setTimeout(() => { flushClassementWrite(); }, CLASSEMENT_DEBOUNCE_MS);
   };
 
   const handleValidateSuccess = async (boulderId: string, success: boolean) => {
     if (!user) return;
+    const candidate = {
+      success,
+      rating: ratings[boulderId] || 0,
+      comment: comments[boulderId] || '',
+      attempts: attempts[boulderId] || 1,
+      proposedDifficulty: proposedDifficulties[boulderId] || null,
+    };
+    const last = lastPersistedResultRef.current[boulderId];
+    if (last &&
+        last.success === candidate.success &&
+        last.rating === candidate.rating &&
+        last.comment === candidate.comment &&
+        last.attempts === candidate.attempts &&
+        last.proposedDifficulty === candidate.proposedDifficulty) {
+      // ✅ Chantier écritures point 3 : état déjà persisté à l'identique
+      // (reclic sur "Réussi" déjà actif) — rien à écrire.
+      return;
+    }
     try {
       const resultId = `${user.uid}_${boulderId}`;
       await setDoc(doc(db, 'client_boulder_results', resultId), {
         userId: user.uid,
         boulderId,
-        success,
-        rating: ratings[boulderId] || 0,
-        comment: comments[boulderId] || '',
-        attempts: attempts[boulderId] || 1,
-        proposedDifficulty: proposedDifficulties[boulderId] || null,
+        ...candidate,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
+      lastPersistedResultRef.current[boulderId] = candidate;
       setSuccessResults(prev => ({ ...prev, [boulderId]: success }));
       setSuccess('Réussite enregistrée!');
       setTimeout(() => setSuccess(null), 3000);
-      await updateClassementProfile(user.uid, boulderId, success, attempts[boulderId] || 1);
+      await updateClassementProfile(user.uid, boulderId, success, candidate.attempts);
     } catch (err: unknown) {
       setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -362,19 +424,32 @@ const ClientDaily: React.FC = () => {
 
   const handleRate = async (boulderId: string, rating: number | null, comment: string) => {
     if (!rating || !user) return;
+    const candidate = {
+      success: successResults[boulderId] || false,
+      rating,
+      comment,
+      attempts: attempts[boulderId] || 1,
+      proposedDifficulty: proposedDifficulties[boulderId] || null,
+    };
+    const last = lastPersistedResultRef.current[boulderId];
+    if (last &&
+        last.success === candidate.success &&
+        last.rating === candidate.rating &&
+        last.comment === candidate.comment &&
+        last.attempts === candidate.attempts &&
+        last.proposedDifficulty === candidate.proposedDifficulty) {
+      return;
+    }
     try {
       const resultId = `${user.uid}_${boulderId}`;
       await setDoc(doc(db, 'client_boulder_results', resultId), {
         userId: user.uid,
         boulderId,
-        success: successResults[boulderId] || false,
-        rating,
-        comment,
-        attempts: attempts[boulderId] || 1,
-        proposedDifficulty: proposedDifficulties[boulderId] || null,
+        ...candidate,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
+      lastPersistedResultRef.current[boulderId] = candidate;
       setRatings(prev => ({ ...prev, [boulderId]: rating }));
       setComments(prev => ({ ...prev, [boulderId]: comment }));
       setSuccess('Note enregistrée!');
@@ -383,7 +458,7 @@ const ClientDaily: React.FC = () => {
       // après le clic Réussi/Échoué initial est réellement sauvegardé (même doc,
       // ré-écrit ici) : il faut donc aussi rafraîchir le classement à ce moment,
       // sinon le score reste basé sur la valeur d'essais du tout premier clic.
-      await updateClassementProfile(user.uid, boulderId, successResults[boulderId] || false, attempts[boulderId] || 1);
+      await updateClassementProfile(user.uid, boulderId, candidate.success, candidate.attempts);
     } catch (err: unknown) {
       setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -518,7 +593,7 @@ const ClientDaily: React.FC = () => {
       {/* Modale 2 : Détails d'un bloc — plein écran sur mobile */}
       <Dialog
         open={openBoulderDialog}
-        onClose={() => setOpenBoulderDialog(false)}
+        onClose={() => { flushClassementWrite(); setOpenBoulderDialog(false); }}
         maxWidth="sm"
         fullWidth
         fullScreen={isMobile}
@@ -694,11 +769,12 @@ const ClientDaily: React.FC = () => {
               </Button>
             </DialogContent>
             <DialogActions>
-              <Button onClick={() => setOpenBoulderDialog(false)}>Annuler</Button>
+              <Button onClick={() => { flushClassementWrite(); setOpenBoulderDialog(false); }}>Annuler</Button>
               <Button
                 variant="contained"
-                onClick={() => {
-                  handleRate(selectedBoulder.id, ratings[selectedBoulder.id] || 0, comments[selectedBoulder.id] || '');
+                onClick={async () => {
+                  await handleRate(selectedBoulder.id, ratings[selectedBoulder.id] || 0, comments[selectedBoulder.id] || '');
+                  await flushClassementWrite();
                   setOpenBoulderDialog(false);
                 }}
               >

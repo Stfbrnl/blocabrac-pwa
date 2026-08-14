@@ -95,15 +95,26 @@ const ClientCourseSession: React.FC = () => {
   // ✅ Écriture au fil de l'eau (même principe que ClientCompetitions.tsx,
   // chantier 1) : sans ça, toute la progression d'une séance restait en state
   // React jusqu'au clic final "Enregistrer les résultats" — un onglet fermé ou
-  // un rechargement avant ce clic perdait tout. `debounceTimers` évite une
+  // un rechargement avant ce clic perdait tout. `debounceEntries` évite une
   // écriture à chaque interaction avec un Select/TextField ; les clics
   // Réussi/Échoué, eux, écrivent toujours immédiatement.
-  const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  // ✅ Chantier écritures point 4 : 2500ms (au lieu de 800ms), sûr uniquement
+  // parce que les trois conditions du suivi sont tenues : flush à la
+  // soumission (handleSubmitResults), flush sur "pagehide" plus bas, et le
+  // clic Réussi/Échoué reste immédiat.
+  const DEBOUNCE_MS = 2500;
+  // Stocke aussi un callback de flush (pas seulement le timer), pour pouvoir
+  // écrire immédiatement sans attendre le délai — voir flushPendingResults.
+  const debounceEntries = useRef<Record<string, { timer: ReturnType<typeof setTimeout>; flush: () => void }>>({});
   // ✅ Ids déjà persistés (chargés au montage ou écrits cette session) : ne pose
   // createdAt qu'une seule fois par document (lu par ClientStats.tsx comme date
   // de validation).
   const persistedExerciseIds = useRef<Set<string>>(new Set());
   const persistedBoulderResultIds = useRef<Set<string>>(new Set());
+  // ✅ Chantier écritures point 3 : dernière valeur réellement PERSISTÉE (pas
+  // affichée) par exercice/bloc — persist* compare avant d'écrire.
+  const lastPersistedExerciseRef = useRef<Record<string, ValidationResult>>({});
+  const lastPersistedBoulderRef = useRef<Record<string, BoulderValidationResult>>({});
 
   useEffect(() => {
     if (!user || !sessionId || loadingAuth) return;
@@ -227,6 +238,7 @@ const ClientCourseSession: React.FC = () => {
               attempts: data.attempts,
             };
             persistedBoulderResultIds.current.add(data.boulderId);
+            lastPersistedBoulderRef.current[data.boulderId] = boulderResultsData[data.boulderId];
           } else {
             results[data.exerciseId] = {
               success: data.success,
@@ -234,6 +246,7 @@ const ClientCourseSession: React.FC = () => {
               data: data.data || {}
             };
             persistedExerciseIds.current.add(data.exerciseId);
+            lastPersistedExerciseRef.current[data.exerciseId] = results[data.exerciseId];
           }
         });
         setValidationResults(results);
@@ -252,8 +265,17 @@ const ClientCourseSession: React.FC = () => {
   // ✅ Écrit un exercice dans Firestore (merge: true), en plus de l'état React
   // local qui pilote l'affichage immédiat. Ne pose createdAt que sur la
   // première écriture du document (voir persistedExerciseIds).
+  // ✅ Chantier écritures point 3 : rien à écrire si le résultat est identique
+  // à la dernière valeur réellement persistée (voir lastPersistedExerciseRef).
   const persistExerciseResult = async (exerciseId: string, result: ValidationResult) => {
     if (!user || !session) return;
+    const last = lastPersistedExerciseRef.current[exerciseId];
+    if (last &&
+        last.success === result.success &&
+        last.attempts === result.attempts &&
+        JSON.stringify(last.data ?? {}) === JSON.stringify(result.data ?? {})) {
+      return;
+    }
     const resultId = `${user.uid}_${exerciseId}_${session.id}`;
     const isFirstWrite = !persistedExerciseIds.current.has(exerciseId);
     const resultData: Record<string, unknown> = {
@@ -269,6 +291,7 @@ const ClientCourseSession: React.FC = () => {
     try {
       await setDoc(doc(db, 'client_course_results', resultId), resultData, { merge: true });
       persistedExerciseIds.current.add(exerciseId);
+      lastPersistedExerciseRef.current[exerciseId] = result;
     } catch (err: unknown) {
       setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -277,10 +300,16 @@ const ClientCourseSession: React.FC = () => {
   // ✅ Blocs des mini-compétitions : la couleur est enregistrée telle qu'au
   // moment de la validation (plutôt que relue en direct sur le bloc), pour que
   // le classement ne bouge pas si le bloc est recoté plus tard.
+  // ✅ Chantier écritures point 3 : même comparaison avant écriture que pour
+  // les exercices (voir lastPersistedBoulderRef).
   const persistBoulderResult = async (
     boulderId: string, miniCompetitionId: string, boulderColor: string, result: BoulderValidationResult
   ) => {
     if (!user || !session || result.success === undefined) return;
+    const last = lastPersistedBoulderRef.current[boulderId];
+    if (last && last.success === result.success && last.attempts === result.attempts) {
+      return;
+    }
     const resultId = `${user.uid}_mini_${boulderId}_${session.id}`;
     const isFirstWrite = !persistedBoulderResultIds.current.has(boulderId);
     try {
@@ -296,10 +325,27 @@ const ClientCourseSession: React.FC = () => {
         updatedAt: new Date().toISOString()
       }, { merge: true });
       persistedBoulderResultIds.current.add(boulderId);
+      lastPersistedBoulderRef.current[boulderId] = result;
     } catch (err: unknown) {
       setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
+
+  // ✅ Chantier écritures point 4 : vide immédiatement les écritures en
+  // attente de debounce (sans attendre les 2500ms) — appelé à la soumission et
+  // sur "pagehide".
+  const flushPendingResults = () => {
+    Object.values(debounceEntries.current).forEach(({ timer, flush }) => {
+      clearTimeout(timer);
+      flush();
+    });
+    debounceEntries.current = {};
+  };
+
+  useEffect(() => {
+    window.addEventListener('pagehide', flushPendingResults);
+    return () => window.removeEventListener('pagehide', flushPendingResults);
+  }, []);
 
   const handleValidateExercise = (
     exerciseId: string,
@@ -314,21 +360,20 @@ const ClientCourseSession: React.FC = () => {
     if (immediate) {
       // ✅ Réussi/Échoué : écriture immédiate, jamais de debounce — c'est
       // l'information qu'on ne veut jamais perdre.
-      if (debounceTimers.current[timerKey]) {
-        clearTimeout(debounceTimers.current[timerKey]);
-        delete debounceTimers.current[timerKey];
+      if (debounceEntries.current[timerKey]) {
+        clearTimeout(debounceEntries.current[timerKey].timer);
+        delete debounceEntries.current[timerKey];
       }
       persistExerciseResult(exerciseId, updated);
     } else {
-      // ✅ Essais / données saisies : debounce ~800ms pour éviter une écriture
-      // à chaque interaction avec un Select/TextField.
-      if (debounceTimers.current[timerKey]) {
-        clearTimeout(debounceTimers.current[timerKey]);
+      // ✅ Essais / données saisies : debounce (voir DEBOUNCE_MS) pour éviter
+      // une écriture à chaque interaction avec un Select/TextField.
+      if (debounceEntries.current[timerKey]) {
+        clearTimeout(debounceEntries.current[timerKey].timer);
       }
-      debounceTimers.current[timerKey] = setTimeout(() => {
-        persistExerciseResult(exerciseId, updated);
-        delete debounceTimers.current[timerKey];
-      }, 800);
+      const flush = () => persistExerciseResult(exerciseId, updated);
+      const timer = setTimeout(() => { flush(); delete debounceEntries.current[timerKey]; }, DEBOUNCE_MS);
+      debounceEntries.current[timerKey] = { timer, flush };
     }
   };
 
@@ -345,19 +390,18 @@ const ClientCourseSession: React.FC = () => {
 
     const timerKey = `mini_${boulderId}`;
     if (immediate) {
-      if (debounceTimers.current[timerKey]) {
-        clearTimeout(debounceTimers.current[timerKey]);
-        delete debounceTimers.current[timerKey];
+      if (debounceEntries.current[timerKey]) {
+        clearTimeout(debounceEntries.current[timerKey].timer);
+        delete debounceEntries.current[timerKey];
       }
       persistBoulderResult(boulderId, miniCompetitionId, boulderColor, updated);
     } else {
-      if (debounceTimers.current[timerKey]) {
-        clearTimeout(debounceTimers.current[timerKey]);
+      if (debounceEntries.current[timerKey]) {
+        clearTimeout(debounceEntries.current[timerKey].timer);
       }
-      debounceTimers.current[timerKey] = setTimeout(() => {
-        persistBoulderResult(boulderId, miniCompetitionId, boulderColor, updated);
-        delete debounceTimers.current[timerKey];
-      }, 800);
+      const flush = () => persistBoulderResult(boulderId, miniCompetitionId, boulderColor, updated);
+      const timer = setTimeout(() => { flush(); delete debounceEntries.current[timerKey]; }, DEBOUNCE_MS);
+      debounceEntries.current[timerKey] = { timer, flush };
     }
   };
 
@@ -367,12 +411,10 @@ const ClientCourseSession: React.FC = () => {
       // ✅ Les résultats sont déjà écrits au fil de l'eau (persistExerciseResult
       // / persistBoulderResult, voir plus haut) à chaque validation — "Enregistrer"
       // ne fait plus qu'annuler les debounces en attente et réécrire l'état
-      // courant (idempotent), pour garantir qu'aucune saisie très récente
-      // (< 800ms) ne soit perdue avant la navigation.
-      Object.keys(debounceTimers.current).forEach((key) => {
-        clearTimeout(debounceTimers.current[key]);
-        delete debounceTimers.current[key];
-      });
+      // courant (idempotent, et sans effet grâce au point 3 si rien n'a
+      // changé), pour garantir qu'aucune saisie très récente ne soit perdue
+      // avant la navigation.
+      flushPendingResults();
 
       await Promise.all([
         ...Object.entries(validationResults).map(([exerciseId, result]) =>

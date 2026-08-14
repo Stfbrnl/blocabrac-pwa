@@ -88,13 +88,34 @@ const ClientCompetitions: React.FC = () => {
   const [isLocked, setIsLocked] = useState(false);
   const [lockedAt, setLockedAt] = useState<string | null>(null);
 
+  // ✅ Chantier écritures point 4 : 2500ms (au lieu de 800ms) — un grimpeur qui
+  // ajuste son nombre d'essais en plusieurs clics successifs déclenchait une
+  // écriture intermédiaire à chaque pause dépassant 800ms. Sûr uniquement parce
+  // que les trois conditions du suivi sont tenues ci-dessous : flush à la
+  // fermeture de la modale, flush sur "pagehide", et le clic Réussi/Échoué
+  // reste immédiat (jamais debouncé, voir handleValidateBoulder).
+  const DEBOUNCE_MS = 2500;
   // ✅ Debounce des champs à saisie répétée (essais, note, cotation proposée) :
   // évite une écriture Firestore à chaque interaction avec un Select/Rating.
   // Le clic Réussi/Échoué, lui, écrit immédiatement (voir persistResult).
-  const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  // Stocke aussi le résultat en attente (pas seulement le timer) pour pouvoir
+  // le flusher immédiatement (voir flushPendingResults) sans attendre le délai.
+  const debounceEntries = useRef<Record<string, {
+    timer: ReturnType<typeof setTimeout>;
+    boulderId: string;
+    result: { success: boolean; attempts: number; rating: number; proposedDifficulty: string };
+  }>>({});
   // ✅ Ids des blocs déjà persistés (chargés au 1.3 ou écrits cette session) :
   // permet de ne poser created_at qu'une seule fois par document.
   const persistedBoulderIds = useRef<Set<string>>(new Set());
+  // ✅ Chantier écritures point 3 : dernière valeur réellement PERSISTÉE par
+  // bloc (pas la valeur affichée) — persistResult compare avant d'écrire et ne
+  // renvoie rien à Firestore si rien n'a changé depuis la dernière écriture
+  // (modale rouverte sans modification, resélection de la même valeur, reclic
+  // sur un bloc déjà marqué dans le même état).
+  const lastPersistedRef = useRef<Record<string, {
+    success: boolean; attempts: number; rating: number; proposedDifficulty: string;
+  }>>({});
 
   // ✅ Chargement unique des résultats du grimpeur par compétition (voir
   // SUIVI-quota-lectures-competition.md option A, puis
@@ -277,13 +298,18 @@ const ClientCompetitions: React.FC = () => {
       let lockedAtValue: string | null = null;
       snapshot.forEach(docSnap => {
         const data = docSnap.data();
-        results[data.boulder_id] = {
+        const loaded = {
           success: data.success || false,
           attempts: data.attempts || 1,
           rating: data.rating || 0,
           proposedDifficulty: data.proposed_difficulty || ''
         };
+        results[data.boulder_id] = loaded;
         persistedBoulderIds.current.add(data.boulder_id);
+        // ✅ Chantier écritures point 3 : ce qui vient d'être lu EST la dernière
+        // valeur persistée — évite une écriture inutile si la première
+        // interaction du grimpeur reproduit exactement l'état déjà en base.
+        lastPersistedRef.current[data.boulder_id] = loaded;
         if (data.submitted) {
           locked = true;
           lockedAtValue = data.submitted_at || null;
@@ -396,10 +422,22 @@ const ClientCompetitions: React.FC = () => {
   // ✅ 1.2 — Écrit chaque validation dans Firestore (merge: true), en plus de
   // l'état React local qui pilote l'affichage immédiat. Ne pose created_at que
   // sur la première écriture du document (voir persistedBoulderIds).
+  // ✅ Chantier écritures point 3 : rien à écrire si le résultat est identique
+  // à la dernière valeur réellement persistée (voir lastPersistedRef) — un
+  // reclic sur "Réussi" déjà actif, ou une resélection du même nombre
+  // d'essais, ne déclenche plus d'écriture Firestore.
   const persistResult = async (boulderId: string, result: {
     success: boolean; attempts: number; rating: number; proposedDifficulty: string;
   }) => {
     if (!user || !selectedCompetition) return;
+    const last = lastPersistedRef.current[boulderId];
+    if (last &&
+        last.success === result.success &&
+        last.attempts === result.attempts &&
+        last.rating === result.rating &&
+        last.proposedDifficulty === result.proposedDifficulty) {
+      return;
+    }
     const resultId = `${user.uid}_${boulderId}_${selectedCompetition.id}`;
     const isFirstWrite = !persistedBoulderIds.current.has(boulderId);
     try {
@@ -415,10 +453,44 @@ const ClientCompetitions: React.FC = () => {
         updated_at: new Date().toISOString()
       }, { merge: true });
       persistedBoulderIds.current.add(boulderId);
+      lastPersistedRef.current[boulderId] = result;
     } catch (err: unknown) {
       setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
+
+  // ✅ Chantier écritures point 4 : vide immédiatement les écritures en
+  // attente de debounce (sans attendre les 2500ms), appelé à la fermeture de
+  // la modale et sur "pagehide" — l'une des trois conditions impératives pour
+  // pouvoir allonger le debounce sans réintroduire la perte de données que le
+  // chantier 1 avait corrigée.
+  const flushPendingResults = () => {
+    Object.values(debounceEntries.current).forEach(({ timer, boulderId, result }) => {
+      clearTimeout(timer);
+      persistResult(boulderId, result);
+    });
+    debounceEntries.current = {};
+  };
+
+  // ✅ flushPendingResults ferme sur `persistResult`, qui ferme lui-même sur
+  // `user`/`selectedCompetition` — les deux sont redéfinis à chaque rendu. Un
+  // effet à dépendances vides n'enregistrerait le listener qu'une fois, figé
+  // sur la fermeture du tout premier rendu (user encore `null` avant que
+  // l'authentification ne se résolve) : la ref, tenue à jour à chaque rendu,
+  // garantit que "pagehide" appelle toujours la version la plus récente.
+  const flushPendingResultsRef = useRef(flushPendingResults);
+  useEffect(() => {
+    // Pas de tableau de dépendances : tenue à jour après CHAQUE rendu (mais
+    // en dehors du rendu lui-même, une mutation de ref pendant le rendu étant
+    // interdite).
+    flushPendingResultsRef.current = flushPendingResults;
+  });
+
+  useEffect(() => {
+    const handler = () => flushPendingResultsRef.current();
+    window.addEventListener('pagehide', handler);
+    return () => window.removeEventListener('pagehide', handler);
+  }, []);
 
   const handleValidateBoulder = (
     boulderId: string,
@@ -435,21 +507,22 @@ const ClientCompetitions: React.FC = () => {
     if (immediate) {
       // ✅ Réussi/Échoué : écriture immédiate, jamais de debounce — c'est
       // l'information qu'on ne veut jamais perdre.
-      if (debounceTimers.current[boulderId]) {
-        clearTimeout(debounceTimers.current[boulderId]);
-        delete debounceTimers.current[boulderId];
+      if (debounceEntries.current[boulderId]) {
+        clearTimeout(debounceEntries.current[boulderId].timer);
+        delete debounceEntries.current[boulderId];
       }
       persistResult(boulderId, result);
     } else {
-      // ✅ Essais / note / cotation proposée : debounce ~800ms pour éviter une
-      // écriture à chaque interaction avec un Select.
-      if (debounceTimers.current[boulderId]) {
-        clearTimeout(debounceTimers.current[boulderId]);
+      // ✅ Essais / note / cotation proposée : debounce (voir DEBOUNCE_MS) pour
+      // éviter une écriture à chaque interaction avec un Select.
+      if (debounceEntries.current[boulderId]) {
+        clearTimeout(debounceEntries.current[boulderId].timer);
       }
-      debounceTimers.current[boulderId] = setTimeout(() => {
+      const timer = setTimeout(() => {
         persistResult(boulderId, result);
-        delete debounceTimers.current[boulderId];
-      }, 800);
+        delete debounceEntries.current[boulderId];
+      }, DEBOUNCE_MS);
+      debounceEntries.current[boulderId] = { timer, boulderId, result };
     }
   };
 
@@ -622,7 +695,7 @@ const ClientCompetitions: React.FC = () => {
       {/* Modale 2: Validation des blocs de compétition — plein écran sur mobile */}
       <Dialog
         open={openValidationDialog}
-        onClose={() => setOpenValidationDialog(false)}
+        onClose={() => { flushPendingResults(); setOpenValidationDialog(false); }}
         maxWidth="lg"
         fullWidth
         fullScreen={isMobile}
@@ -771,7 +844,7 @@ const ClientCompetitions: React.FC = () => {
               </Box>
             </DialogContent>
             <DialogActions>
-              <Button onClick={() => setOpenValidationDialog(false)}>Fermer</Button>
+              <Button onClick={() => { flushPendingResults(); setOpenValidationDialog(false); }}>Fermer</Button>
               {!isLocked && (
                 <Button
                   variant="contained"

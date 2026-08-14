@@ -195,6 +195,55 @@ Mêmes précautions de flush qu'au point 4.
 
 ---
 
+## Addendum du 15/08/2026 — points 3, 4 et 5 traités
+
+Appliqués aux trois écrans (`ClientCompetitions.tsx`, `ClientCourseSession.tsx`,
+`ClientDaily.tsx`) :
+
+- **Point 3** : chaque écran garde désormais une ref de la dernière valeur réellement
+  persistée par document (`lastPersistedRef`/`lastPersistedExerciseRef`/
+  `lastPersistedBoulderRef`/`lastPersistedResultRef`), comparée avant d'écrire —
+  identique = rien envoyé à Firestore. Pour les deux écrans qui rechargent déjà l'état
+  existant au montage (compétition, cours), la ref est aussi peuplée à ce chargement,
+  pour qu'une première interaction reproduisant l'état déjà en base ne déclenche rien
+  non plus. `ClientDaily.tsx` ne charge pas l'état existant au montage (volontairement,
+  pour ne pas rouvrir le chantier lectures) : sa comparaison ne couvre que la session en
+  cours, plus faible mais toujours utile (reclic sur un bouton déjà actif, "Enregistrer"
+  sans changement).
+- **Point 4** : debounce porté de 800ms à 2500ms sur `ClientCompetitions.tsx` et
+  `ClientCourseSession.tsx` (essais/note/cotation/données saisies). Les trois conditions
+  du suivi sont tenues : flush synchrone à la fermeture de la modale/soumission
+  (`flushPendingResults`), flush sur l'évènement `pagehide`, clic Réussi/Échoué toujours
+  immédiat (inchangé).
+- **Point 5** : l'écriture `classement_profiles` dans `ClientDaily.tsx` est débranchée de
+  l'écriture immédiate du résultat — désormais debounced à 3000ms
+  (`flushClassementWrite`/`CLASSEMENT_DEBOUNCE_MS`), avec flush sur fermeture de la
+  modale de détail (Annuler/Enregistrer) et sur `pagehide`. Le résultat du bloc
+  (`client_boulder_results`) continue d'être écrit immédiatement, seul le résumé dérivé
+  est différé.
+
+**Bug de fermeture obsolète (stale closure) trouvé et corrigé en implémentant le flush
+"pagehide"** : dans `ClientCompetitions.tsx`, un `useEffect` à dépendances vides
+enregistrant directement la fonction de flush l'aurait figée sur le tout premier rendu
+(donc sur `user`/`selectedCompetition` encore à `null`, avant résolution de
+l'authentification) — le flush sur fermeture d'onglet n'aurait alors jamais rien écrit
+en pratique. Corrigé avec le pattern ref (`flushPendingResultsRef`, tenu à jour après
+chaque rendu via un effet sans dépendances, jamais pendant le rendu lui-même — ESLint
+`react-hooks/refs` interdit la mutation d'une ref pendant le rendu). `ClientCourseSession.tsx`
+n'avait pas ce problème : ses entrées de debounce stockent un callback de flush créé au
+moment du clic (donc déjà lié à un rendu où `user`/`session` sont réels), pas une
+référence à la fonction englobante.
+
+Vérifié : `build`/`lint`/`test`/`test:rules` verts (58 tests), et les trois flux
+Playwright complets rejoués sans régression : `e2e-competition-flow.mjs` 15/15,
+`e2e-course-flow.mjs` 11/11, `e2e-daily-flow.mjs` 7/7.
+
+Pas de nouvelle mesure chiffrée pour ces trois points (contrairement aux points 0 et 2) —
+le suivi lui-même prévenait que le gain est réel mais difficile à chiffrer d'avance, et
+dépend du comportement réel des grimpeurs (nombre de corrections, pauses entre clics).
+
+---
+
 ## Ce que je déconseille explicitement
 
 **Regrouper les 35 résultats d'un grimpeur dans un document unique.** Séduisant en
