@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '../../../services/firebaseConfig';
 import { collection, query, where, getDocs, addDoc, setDoc, doc, getDoc } from 'firebase/firestore';
@@ -100,6 +100,37 @@ const ClientDaily: React.FC = () => {
     const composed = [found.firstName, found.lastName].filter(Boolean).join(' ').trim();
     return composed || uid;
   };
+
+  // ✅ Cache en mémoire de l'historique des réussites du grimpeur (boulderId ->
+  // essais), chargé une seule fois au montage (voir SUIVI-quota-lectures-competition.md)
+  // au lieu d'être requêté à Firestore à chaque validation. Contrairement au cas
+  // compétition (borné à ~35 blocs), cet historique grossit sans limite avec
+  // l'ancienneté du grimpeur : le relire à chaque clic Réussi/Échoué/Enregistrer
+  // (jusqu'à 2 fois par bloc, 20-30 blocs/jour) était le poste de lectures le
+  // plus dangereux de l'app en usage quotidien normal, pas seulement en
+  // compétition. `initialResultsLoadedRef` permet à `updateClassementProfile`
+  // d'attendre ce chargement avant de muter le cache si un clic arrive trop tôt.
+  const successfulAttemptsRef = useRef<Map<string, number>>(new Map());
+  const initialResultsLoadedRef = useRef<Promise<void> | null>(null);
+
+  useEffect(() => {
+    if (!user || loadingAuth) return;
+    initialResultsLoadedRef.current = (async () => {
+      try {
+        const snapshot = await getDocs(
+          query(collection(db, 'client_boulder_results'), where('userId', '==', user.uid), where('success', '==', true))
+        );
+        const map = new Map<string, number>();
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          if (data.boulderId) map.set(data.boulderId, data.attempts || 1);
+        });
+        successfulAttemptsRef.current = map;
+      } catch (err) {
+        console.error("Erreur lors du chargement de l'historique des réussites:", err);
+      }
+    })();
+  }, [user, loadingAuth]);
 
   useEffect(() => {
     if (!user || loadingAuth) return;
@@ -233,16 +264,23 @@ const ClientDaily: React.FC = () => {
   // le classement se contente ensuite de lire ces résumés déjà calculés. Appelé même
   // en cas d'échec, pour que le score baisse correctement si "Réussi" est changé en
   // "Échoué" (recalcul complet, jamais un simple incrément).
-  const updateClassementProfile = async (uid: string) => {
+  const updateClassementProfile = async (uid: string, boulderId: string, success: boolean, resultAttempts: number) => {
     try {
-      const resultsSnapshot = await getDocs(
-        query(collection(db, 'client_boulder_results'), where('userId', '==', uid), where('success', '==', true))
-      );
+      // ✅ Attend le chargement initial (au montage) avant de muter le cache, au
+      // cas où un clic arrive avant que la première lecture soit terminée.
+      if (initialResultsLoadedRef.current) {
+        await initialResultsLoadedRef.current;
+      }
+      if (success) {
+        successfulAttemptsRef.current.set(boulderId, resultAttempts);
+      } else {
+        successfulAttemptsRef.current.delete(boulderId);
+      }
+
       const colorById = new Map(boulders.map((b) => [b.id, b.color || b.difficulty || 'Inconnu']));
-      const validatedResults = resultsSnapshot.docs
-        .map((d) => d.data())
-        .filter((r) => colorById.has(r.boulderId))
-        .map((r) => ({ color: colorById.get(r.boulderId) as string, attempts: r.attempts || 1 }));
+      const validatedResults = Array.from(successfulAttemptsRef.current.entries())
+        .filter(([bId]) => colorById.has(bId))
+        .map(([bId, resAttempts]) => ({ color: colorById.get(bId) as string, attempts: resAttempts }));
 
       const summary = summarizeValidatedResults(validatedResults);
       await setDoc(doc(db, 'classement_profiles', uid), {
@@ -273,7 +311,7 @@ const ClientDaily: React.FC = () => {
       setSuccessResults(prev => ({ ...prev, [boulderId]: success }));
       setSuccess('Réussite enregistrée!');
       setTimeout(() => setSuccess(null), 3000);
-      await updateClassementProfile(user.uid);
+      await updateClassementProfile(user.uid, boulderId, success, attempts[boulderId] || 1);
     } catch (err: unknown) {
       setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -302,7 +340,7 @@ const ClientDaily: React.FC = () => {
       // après le clic Réussi/Échoué initial est réellement sauvegardé (même doc,
       // ré-écrit ici) : il faut donc aussi rafraîchir le classement à ce moment,
       // sinon le score reste basé sur la valeur d'essais du tout premier clic.
-      await updateClassementProfile(user.uid);
+      await updateClassementProfile(user.uid, boulderId, successResults[boulderId] || false, attempts[boulderId] || 1);
     } catch (err: unknown) {
       setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
     }

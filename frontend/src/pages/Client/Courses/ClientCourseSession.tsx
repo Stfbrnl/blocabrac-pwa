@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '../../../services/firebaseConfig';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -91,6 +91,19 @@ const ClientCourseSession: React.FC = () => {
   const [validationResults, setValidationResults] = useState<Record<string, ValidationResult>>({});
   const [boulderResults, setBoulderResults] = useState<Record<string, BoulderValidationResult>>({});
   const navigate = useNavigate();
+
+  // ✅ Écriture au fil de l'eau (même principe que ClientCompetitions.tsx,
+  // chantier 1) : sans ça, toute la progression d'une séance restait en state
+  // React jusqu'au clic final "Enregistrer les résultats" — un onglet fermé ou
+  // un rechargement avant ce clic perdait tout. `debounceTimers` évite une
+  // écriture à chaque interaction avec un Select/TextField ; les clics
+  // Réussi/Échoué, eux, écrivent toujours immédiatement.
+  const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  // ✅ Ids déjà persistés (chargés au montage ou écrits cette session) : ne pose
+  // createdAt qu'une seule fois par document (lu par ClientStats.tsx comme date
+  // de validation).
+  const persistedExerciseIds = useRef<Set<string>>(new Set());
+  const persistedBoulderResultIds = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!user || !sessionId || loadingAuth) return;
@@ -213,12 +226,14 @@ const ClientCourseSession: React.FC = () => {
               success: data.success,
               attempts: data.attempts,
             };
+            persistedBoulderResultIds.current.add(data.boulderId);
           } else {
             results[data.exerciseId] = {
               success: data.success,
               attempts: data.attempts,
               data: data.data || {}
             };
+            persistedExerciseIds.current.add(data.exerciseId);
           }
         });
         setValidationResults(results);
@@ -234,72 +249,143 @@ const ClientCourseSession: React.FC = () => {
     fetchSession();
   }, [user, sessionId, loadingAuth]);
 
+  // ✅ Écrit un exercice dans Firestore (merge: true), en plus de l'état React
+  // local qui pilote l'affichage immédiat. Ne pose createdAt que sur la
+  // première écriture du document (voir persistedExerciseIds).
+  const persistExerciseResult = async (exerciseId: string, result: ValidationResult) => {
+    if (!user || !session) return;
+    const resultId = `${user.uid}_${exerciseId}_${session.id}`;
+    const isFirstWrite = !persistedExerciseIds.current.has(exerciseId);
+    const resultData: Record<string, unknown> = {
+      userId: user.uid,
+      courseId: session.id,
+      exerciseId,
+      ...(isFirstWrite ? { createdAt: new Date().toISOString() } : {}),
+      updatedAt: new Date().toISOString()
+    };
+    if (result.success !== undefined) resultData.success = result.success;
+    if (result.attempts !== undefined) resultData.attempts = result.attempts;
+    if (result.data !== undefined) resultData.data = result.data;
+    try {
+      await setDoc(doc(db, 'client_course_results', resultId), resultData, { merge: true });
+      persistedExerciseIds.current.add(exerciseId);
+    } catch (err: unknown) {
+      setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  // ✅ Blocs des mini-compétitions : la couleur est enregistrée telle qu'au
+  // moment de la validation (plutôt que relue en direct sur le bloc), pour que
+  // le classement ne bouge pas si le bloc est recoté plus tard.
+  const persistBoulderResult = async (
+    boulderId: string, miniCompetitionId: string, boulderColor: string, result: BoulderValidationResult
+  ) => {
+    if (!user || !session || result.success === undefined) return;
+    const resultId = `${user.uid}_mini_${boulderId}_${session.id}`;
+    const isFirstWrite = !persistedBoulderResultIds.current.has(boulderId);
+    try {
+      await setDoc(doc(db, 'client_course_results', resultId), {
+        userId: user.uid,
+        courseId: session.id,
+        miniCompetitionId,
+        boulderId,
+        boulderColor,
+        success: result.success,
+        attempts: result.attempts || 1,
+        ...(isFirstWrite ? { createdAt: new Date().toISOString() } : {}),
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+      persistedBoulderResultIds.current.add(boulderId);
+    } catch (err: unknown) {
+      setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
   const handleValidateExercise = (
     exerciseId: string,
     field: string,
-    value: boolean | number | Record<string, string | number>
+    value: boolean | number | Record<string, string | number>,
+    immediate: boolean = false
   ) => {
-    setValidationResults(prev => ({
-      ...prev,
-      [exerciseId]: {
-        ...prev[exerciseId],
-        [field]: value
+    const updated: ValidationResult = { ...validationResults[exerciseId], [field]: value };
+    setValidationResults(prev => ({ ...prev, [exerciseId]: updated }));
+
+    const timerKey = `ex_${exerciseId}`;
+    if (immediate) {
+      // ✅ Réussi/Échoué : écriture immédiate, jamais de debounce — c'est
+      // l'information qu'on ne veut jamais perdre.
+      if (debounceTimers.current[timerKey]) {
+        clearTimeout(debounceTimers.current[timerKey]);
+        delete debounceTimers.current[timerKey];
       }
-    }));
+      persistExerciseResult(exerciseId, updated);
+    } else {
+      // ✅ Essais / données saisies : debounce ~800ms pour éviter une écriture
+      // à chaque interaction avec un Select/TextField.
+      if (debounceTimers.current[timerKey]) {
+        clearTimeout(debounceTimers.current[timerKey]);
+      }
+      debounceTimers.current[timerKey] = setTimeout(() => {
+        persistExerciseResult(exerciseId, updated);
+        delete debounceTimers.current[timerKey];
+      }, 800);
+    }
   };
 
   const handleValidateBoulder = (
     boulderId: string,
+    miniCompetitionId: string,
+    boulderColor: string,
     field: 'success' | 'attempts',
-    value: boolean | number
+    value: boolean | number,
+    immediate: boolean = false
   ) => {
-    setBoulderResults(prev => ({
-      ...prev,
-      [boulderId]: {
-        ...prev[boulderId],
-        [field]: value
+    const updated: BoulderValidationResult = { ...boulderResults[boulderId], [field]: value };
+    setBoulderResults(prev => ({ ...prev, [boulderId]: updated }));
+
+    const timerKey = `mini_${boulderId}`;
+    if (immediate) {
+      if (debounceTimers.current[timerKey]) {
+        clearTimeout(debounceTimers.current[timerKey]);
+        delete debounceTimers.current[timerKey];
       }
-    }));
+      persistBoulderResult(boulderId, miniCompetitionId, boulderColor, updated);
+    } else {
+      if (debounceTimers.current[timerKey]) {
+        clearTimeout(debounceTimers.current[timerKey]);
+      }
+      debounceTimers.current[timerKey] = setTimeout(() => {
+        persistBoulderResult(boulderId, miniCompetitionId, boulderColor, updated);
+        delete debounceTimers.current[timerKey];
+      }, 800);
+    }
   };
 
   const handleSubmitResults = async () => {
     if (!user || !session) return;
     try {
-      for (const [exerciseId, result] of Object.entries(validationResults)) {
-        const resultId = `${user.uid}_${exerciseId}_${session.id}`;
-        const resultData: Record<string, unknown> = {
-          userId: user.uid,
-          courseId: session.id,
-          exerciseId,
-          createdAt: new Date().toISOString()
-        };
-        if (result.success !== undefined) resultData.success = result.success;
-        if (result.attempts !== undefined) resultData.attempts = result.attempts;
-        if (result.data !== undefined) resultData.data = result.data;
+      // ✅ Les résultats sont déjà écrits au fil de l'eau (persistExerciseResult
+      // / persistBoulderResult, voir plus haut) à chaque validation — "Enregistrer"
+      // ne fait plus qu'annuler les debounces en attente et réécrire l'état
+      // courant (idempotent), pour garantir qu'aucune saisie très récente
+      // (< 800ms) ne soit perdue avant la navigation.
+      Object.keys(debounceTimers.current).forEach((key) => {
+        clearTimeout(debounceTimers.current[key]);
+        delete debounceTimers.current[key];
+      });
 
-        await setDoc(doc(db, 'client_course_results', resultId), resultData);
-      }
-
-      // ✅ Blocs des mini-compétitions : la couleur est enregistrée telle qu'au
-      // moment de la validation (plutôt que relue en direct sur le bloc), pour
-      // que le classement ne bouge pas si le bloc est recoté plus tard.
-      for (const miniCompetition of session.miniCompetitions) {
-        for (const boulder of miniCompetition.boulders) {
-          const result = boulderResults[boulder.id];
-          if (!result || result.success === undefined) continue;
-          const resultId = `${user.uid}_mini_${boulder.id}_${session.id}`;
-          await setDoc(doc(db, 'client_course_results', resultId), {
-            userId: user.uid,
-            courseId: session.id,
-            miniCompetitionId: miniCompetition.id,
-            boulderId: boulder.id,
-            boulderColor: boulder.color || '',
-            success: result.success,
-            attempts: result.attempts || 1,
-            createdAt: new Date().toISOString()
-          });
-        }
-      }
+      await Promise.all([
+        ...Object.entries(validationResults).map(([exerciseId, result]) =>
+          persistExerciseResult(exerciseId, result)
+        ),
+        ...session.miniCompetitions.flatMap((miniCompetition) =>
+          miniCompetition.boulders
+            .filter((boulder) => boulderResults[boulder.id]?.success !== undefined)
+            .map((boulder) =>
+              persistBoulderResult(boulder.id, miniCompetition.id, boulder.color || '', boulderResults[boulder.id])
+            )
+        ),
+      ]);
 
       setSuccess("Résultats enregistrés avec succès !");
       setTimeout(() => {
@@ -460,7 +546,7 @@ const ClientCourseSession: React.FC = () => {
                                 variant={result.success ? "contained" : "outlined"}
                                 color="success"
                                 size="small"
-                                onClick={() => handleValidateExercise(exercise.id, 'success', true)}
+                                onClick={() => handleValidateExercise(exercise.id, 'success', true, true)}
                               >
                                 ✅ Réussi
                               </Button>
@@ -468,7 +554,7 @@ const ClientCourseSession: React.FC = () => {
                                 variant={!result.success ? "contained" : "outlined"}
                                 color="error"
                                 size="small"
-                                onClick={() => handleValidateExercise(exercise.id, 'success', false)}
+                                onClick={() => handleValidateExercise(exercise.id, 'success', false, true)}
                               >
                                 ❌ Échoué
                               </Button>
@@ -582,7 +668,7 @@ const ClientCourseSession: React.FC = () => {
                                 variant={result.success ? "contained" : "outlined"}
                                 color="success"
                                 size="small"
-                                onClick={() => handleValidateBoulder(boulder.id, 'success', true)}
+                                onClick={() => handleValidateBoulder(boulder.id, miniCompetition.id, boulder.color || '', 'success', true, true)}
                               >
                                 ✅ Réussi
                               </Button>
@@ -590,7 +676,7 @@ const ClientCourseSession: React.FC = () => {
                                 variant={result.success === false ? "contained" : "outlined"}
                                 color="error"
                                 size="small"
-                                onClick={() => handleValidateBoulder(boulder.id, 'success', false)}
+                                onClick={() => handleValidateBoulder(boulder.id, miniCompetition.id, boulder.color || '', 'success', false, true)}
                               >
                                 ❌ Échoué
                               </Button>
@@ -599,7 +685,7 @@ const ClientCourseSession: React.FC = () => {
                               <InputLabel>Nombre d'essais</InputLabel>
                               <Select
                                 value={result.attempts || 1}
-                                onChange={(e) => handleValidateBoulder(boulder.id, 'attempts', e.target.value as number)}
+                                onChange={(e) => handleValidateBoulder(boulder.id, miniCompetition.id, boulder.color || '', 'attempts', e.target.value as number)}
                                 label="Nombre d'essais"
                               >
                                 {Array.from({ length: 15 }, (_, i) => i + 1).map(num => (

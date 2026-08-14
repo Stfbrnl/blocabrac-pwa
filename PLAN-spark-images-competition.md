@@ -120,6 +120,58 @@ production) :**
   blocs une fois — largement sous le quota mensuel de 10 Gio, y compris avec plusieurs
   rechargements par grimpeur pendant la soirée.
 
+**Mesure du 14/08/2026 — lectures Firestore, écran compétition (script jetable
+`frontend/test/measure-competition-reads.mjs`, lancé sous `firebase-tools
+emulators:exec`, requêtes du vrai client SDK signé comme un grimpeur, comptage des
+documents réellement retournés) — voir `SUIVI-quota-lectures-competition.md` pour le
+diagnostic complet.**
+
+Deux scénarios mesurés, 35 blocs de compétition dans les deux cas :
+
+- **Scénario "vérification" (~10 ouvertures de la modale de validation)** : 406 lectures
+  pour 1 grimpeur → **36 540 lectures extrapolées à 90 participants**, soit 73% du
+  plafond quotidien (50 000) — sous la limite, mais avec une marge trop fine pour
+  absorber en plus l'usage quotidien de la salle le même jour, les rechargements
+  d'onglet iOS/Android, et les ouvertures supplémentaires (corrections, hésitations).
+- **Scénario "plancher" (35 ouvertures, une par bloc, hypothèse basse du suivi)** :
+  1 857 lectures pour 1 grimpeur → **167 130 lectures extrapolées à 90 participants**,
+  soit **×3,3 le plafond quotidien**. Confirme le diagnostic : le poste dominant est
+  `loadBoulders` (35 lectures à chaque ouverture, car rechargé intégralement à chaque
+  fois) plutôt que `loadExistingResults` seul comme le supposait le calcul initial du
+  suivi — les deux se cumulent.
+- Confirme aussi l'erreur du point 1.3 ci-dessus (chantier 1) : la persistance
+  IndexedDB (chantier 3, déjà en place au moment de la mesure) n'a rien changé à ces
+  chiffres, puisque `getDocs` en ligne interroge toujours le serveur.
+
+**À refaire après correctif (option A du suivi : `onSnapshot` unique + lecture de
+blocs/participants depuis le cache) : cible <20 000 lectures pour l'ensemble de la
+compétition à 90 participants**, pour garder de la marge sur l'usage quotidien du même
+jour.
+
+**Mesure du 14/08/2026 — après correctif (script `frontend/test/measure-competition-reads-after.mjs`,
+même protocole que la mesure "avant" ci-dessus, scénario "plancher" à 35 ouvertures) :**
+
+- `loadExistingResults` (`getDocs` à chaque ouverture) remplacé par `ensureResultsListener`
+  (`onSnapshot`, abonnement unique par compétition, gardé par une ref `compId`).
+- `loadBoulders` (deux `getDocs` à chaque ouverture) remplacé par `ensureBouldersListener`
+  (deux `onSnapshot` fusionnés, même garde par compétition).
+- `isAlreadyRegistered` mis en cache localement (`confirmedRegistrations`) une fois
+  l'inscription confirmée — plus reposé à Firestore à chaque clic.
+- **39 lectures pour 1 grimpeur** (vs 1 857 avant) → **3 510 lectures extrapolées à 90
+  participants** (vs 167 130 avant), soit **7% du plafond quotidien** au lieu de ×3,3 —
+  **facteur ×47,6**, largement sous la cible de 20 000.
+- Rejoué aussi sur le scénario "vérification" (~10 ouvertures, celui du protocole
+  ci-dessus) pour compléter la comparaison directe avec le 406/grimpeur mesuré "avant" :
+  **38 lectures pour 1 grimpeur → 3 420 extrapolées à 90 participants (7% du plafond,
+  contre 73% avant)**. Les deux scénarios "après" convergent vers ~3 500 lectures quel
+  que soit le nombre d'ouvertures de la modale — c'est attendu : la garde par
+  compétition rend le coût des ouvertures répétées nul, seul le premier montage de page
+  compte encore.
+- Vérifié sans régression : `npm run build`/`lint`/`test`/`test:rules` verts, et le flux
+  Playwright complet (`e2e-competition-flow.mjs`, 15 étapes dont la reprise après
+  rechargement, 1.3) rejoué à 15/15 après chacun des deux correctifs (résultats, puis
+  blocs/inscription).
+
 ---
 
 ## Chantier 1 — Résultats de compétition écrits au fil de l'eau
@@ -180,8 +232,14 @@ l'information qu'on ne veut jamais perdre.
 cette compétition (`where user_id == uid`, `where competition_id == compId`) et
 préremplir `validationResults`.
 
-C'est ce qui rend la perte de données impossible. Coût : ~35 lectures par ouverture,
-absorbées par le cache local une fois le chantier 3 fait.
+C'est ce qui rend la perte de données impossible. ~~Coût : ~35 lectures par ouverture,
+absorbées par le cache local une fois le chantier 3 fait.~~ **Faux — voir
+`SUIVI-quota-lectures-competition.md`.** La persistance IndexedDB (chantier 3) n'absorbe
+rien ici : un `getDocs` en ligne interroge toujours le serveur, le cache local ne sert
+que de repli hors ligne. Rechargé à chaque ouverture de la modale comme implémenté ici,
+ce point à lui seul dépasse le plafond quotidien de lectures Spark dès qu'on approche des
+90 participants d'une compétition. Corrigé par un `onSnapshot` unique par compétition
+(voir le suivi et la mesure "après correctif" plus haut : ×47,6 sur les lectures).
 
 **1.4 — Transformer la soumission en verrouillage**
 

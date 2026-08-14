@@ -103,6 +103,21 @@ async function main() {
     await client.waitForURL(/\/client\/courses\/session\//, { timeout: 10000 });
     await client.getByText('Grimpe équilibrée').waitFor({ timeout: 10000 });
     await client.getByRole('button', { name: '✅ Réussi' }).click();
+  });
+
+  await step('Le client recharge la page AVANT de cliquer "Enregistrer" et retrouve sa validation (résultats de séance écrits au fil de l\'eau)', async () => {
+    // ✅ Laisser le temps à l'écriture immédiate (persistExerciseResult) de partir
+    // avant de recharger, pour tester la résistance au rechargement sans dépendre
+    // du bouton "Enregistrer les résultats" — voir SUIVI-quota-lectures-competition.md.
+    await client.waitForTimeout(1000);
+    await client.reload();
+    await client.getByText('Grimpe équilibrée').waitFor({ timeout: 10000 });
+    await client.screenshot({ path: '/tmp/e2e-04b-client-reloaded-before-submit.png', fullPage: true });
+    const className = await client.getByRole('button', { name: '✅ Réussi' }).getAttribute('class');
+    assert(className && className.includes('contained'), 'La validation "Réussi" doit être retrouvée après rechargement, avant tout clic sur "Enregistrer" (état non perdu)');
+  });
+
+  await step('Le client clique "Enregistrer les résultats"', async () => {
     await client.getByRole('button', { name: 'Enregistrer les résultats' }).click();
     await client.getByText('Résultats enregistrés avec succès', { exact: false }).waitFor({ timeout: 5000 });
     await client.screenshot({ path: '/tmp/e2e-05-client-validated.png', fullPage: true });
