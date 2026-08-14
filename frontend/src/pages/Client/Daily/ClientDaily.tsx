@@ -3,6 +3,7 @@ import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '../../../services/firebaseConfig';
 import { collection, query, where, getDocs, addDoc, setDoc, doc, getDoc } from 'firebase/firestore';
 import { summarizeValidatedResults } from '../../../utils/classementScore';
+import { getDocsCacheFirst } from '../../../utils/firestoreCacheFirst';
 import {
   Container, Typography, Box, Button, CircularProgress, Alert,
   Dialog, DialogTitle, DialogContent, DialogActions,
@@ -110,27 +111,69 @@ const ClientDaily: React.FC = () => {
   // plus dangereux de l'app en usage quotidien normal, pas seulement en
   // compétition. `initialResultsLoadedRef` permet à `updateClassementProfile`
   // d'attendre ce chargement avant de muter le cache si un clic arrive trop tôt.
+  //
+  // ✅ Deux réserves connues sur ce cache (voir SUIVI-remontages-et-version.md
+  // point 2), traitées ici :
+  // - Non-borné : le nombre de documents lus au montage grossit avec
+  //   l'ancienneté du compte. Le borner par date casserait le classement (il
+  //   est cumulatif à vie, pas remis à zéro par saison — voir summarizeValidatedResults) ;
+  //   à la place, `getDocsCacheFirst` rend gratuit tout remontage de page sur le
+  //   même appareil une fois le cache local alimenté (même levier que le point 1
+  //   côté compétition). Le vrai chantier (compteur incrémental, qui
+  //   nécessiterait de recalculer `bestColorRank` sans relire tout l'historique)
+  //   reste ouvert — non trivial, `bestColorRank` n'est pas décomposable en delta.
+  // - Fraîcheur multi-onglets/appareils : après une absence prolongée (PWA
+  //   remise au premier plan), le cache mémoire peut être périmé si une
+  //   validation a été faite entretemps depuis un autre appareil/onglet. Un
+  //   listener `visibilitychange` plus bas force alors une relecture serveur
+  //   (pas cache-first, justement pour rattraper un écart cross-appareil).
   const successfulAttemptsRef = useRef<Map<string, number>>(new Map());
   const initialResultsLoadedRef = useRef<Promise<void> | null>(null);
 
+  const loadSuccessfulResults = React.useCallback(async (forceServer: boolean) => {
+    if (!user) return;
+    try {
+      const q = query(collection(db, 'client_boulder_results'), where('userId', '==', user.uid), where('success', '==', true));
+      const snapshot = forceServer ? await getDocs(q) : await getDocsCacheFirst(q);
+      const map = new Map<string, number>();
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (data.boulderId) map.set(data.boulderId, data.attempts || 1);
+      });
+      successfulAttemptsRef.current = map;
+    } catch (err) {
+      console.error("Erreur lors du chargement de l'historique des réussites:", err);
+    }
+  }, [user]);
+
   useEffect(() => {
     if (!user || loadingAuth) return;
-    initialResultsLoadedRef.current = (async () => {
-      try {
-        const snapshot = await getDocs(
-          query(collection(db, 'client_boulder_results'), where('userId', '==', user.uid), where('success', '==', true))
-        );
-        const map = new Map<string, number>();
-        snapshot.forEach((docSnap) => {
-          const data = docSnap.data();
-          if (data.boulderId) map.set(data.boulderId, data.attempts || 1);
-        });
-        successfulAttemptsRef.current = map;
-      } catch (err) {
-        console.error("Erreur lors du chargement de l'historique des réussites:", err);
+    initialResultsLoadedRef.current = loadSuccessfulResults(false);
+  }, [user, loadingAuth, loadSuccessfulResults]);
+
+  // ✅ Rafraîchit le cache depuis le serveur (pas depuis le cache local — voir
+  // ci-dessus) après une absence d'au moins 5 minutes, pour rattraper une
+  // validation faite entretemps sur un autre appareil/onglet.
+  useEffect(() => {
+    if (!user) return;
+    const STALE_AFTER_MS = 5 * 60 * 1000;
+    let hiddenAt: number | null = null;
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenAt = Date.now();
+        return;
       }
-    })();
-  }, [user, loadingAuth]);
+      if (document.visibilityState === 'visible' && hiddenAt !== null) {
+        const awayMs = Date.now() - hiddenAt;
+        hiddenAt = null;
+        if (awayMs >= STALE_AFTER_MS) {
+          initialResultsLoadedRef.current = loadSuccessfulResults(true);
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [user, loadSuccessfulResults]);
 
   useEffect(() => {
     if (!user || loadingAuth) return;

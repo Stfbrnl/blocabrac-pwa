@@ -3,8 +3,9 @@ import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '../../../services/firebaseConfig';
 import {
   collection, query, where, getDocs, addDoc, doc, updateDoc, getDoc, setDoc, increment,
-  writeBatch, onSnapshot
+  writeBatch
 } from 'firebase/firestore';
+import { getDocsCacheFirst } from '../../../utils/firestoreCacheFirst';
 import {
   Container, Typography, Box, Button, CircularProgress, Alert,
   Dialog, DialogTitle, DialogContent, DialogActions,
@@ -96,26 +97,22 @@ const ClientCompetitions: React.FC = () => {
   // permet de ne poser created_at qu'une seule fois par document.
   const persistedBoulderIds = useRef<Set<string>>(new Set());
 
-  // ✅ Listener temps réel unique sur les résultats du grimpeur (voir
-  // SUIVI-quota-lectures-competition.md, option A) : remplace le `getDocs` qui
-  // était refait à chaque ouverture de la modale (~1225 lectures/grimpeur en
-  // compétition à 90 participants, largement au-dessus du plafond Spark) par un
-  // abonnement unique par compétition — coût ≈ 35 lectures au snapshot initial
-  // puis uniquement les deltas. `compId` permet de ne pas se réabonner (donc ne
-  // pas refacturer le snapshot initial) tant que la même compétition reste
-  // ouverte.
-  const activeResultsListener = useRef<{ compId: string; unsubscribe: () => void } | null>(null);
+  // ✅ Chargement unique des résultats du grimpeur par compétition (voir
+  // SUIVI-quota-lectures-competition.md option A, puis
+  // SUIVI-remontages-et-version.md point 1) : un `getDocs` était d'abord refait
+  // à chaque ouverture de la modale, puis remplacé par un `onSnapshot` unique
+  // par compétition — mais un `onSnapshot` refacture son snapshot initial à
+  // chaque nouvel abonnement, donc à chaque REMONTAGE de page (rechargement
+  // d'onglet, retour d'arrière-plan iOS/Android déchargé), pas seulement à
+  // chaque ouverture de modale au sein d'un même montage. Remplacé par une
+  // lecture ponctuelle cache-first (`getDocsCacheFirst`, voir utils/) : gratuite
+  // dès que le cache local contient déjà la donnée, y compris après un
+  // remontage complet. `compId` évite de relire même le cache inutilement tant
+  // que la même compétition reste ouverte dans ce montage.
+  const loadedResultsCompId = useRef<string | null>(null);
 
-  // ✅ Même logique pour les blocs (jamais modifiés pendant l'épreuve) : un
-  // `getDocs` était refait à chaque clic sur "Valider mes blocs"/"Voir les
-  // détails" (~35 lectures à chaque fois). Deux listeners (blocs de
-  // compétition classiques + blocs quotidiens réutilisés) dont les résultats
-  // sont fusionnés dans `boulders`.
-  const activeBouldersListener = useRef<{
-    compId: string; unsubscribeClassic: () => void; unsubscribeReused: () => void;
-  } | null>(null);
-  const classicBouldersRef = useRef<Boulder[]>([]);
-  const reusedBouldersRef = useRef<Boulder[]>([]);
+  // ✅ Même logique pour les blocs (jamais modifiés pendant l'épreuve).
+  const loadedBouldersCompId = useRef<string | null>(null);
 
   // ✅ Une fois l'inscription du grimpeur à une compétition confirmée, elle ne
   // change plus pour la session : évite de reposer la question à Firestore à
@@ -196,79 +193,66 @@ const ClientCompetitions: React.FC = () => {
     color: docSnap.data().color as string | undefined
   });
 
-  const ensureBouldersListener = (competition: Competition) => {
+  const loadBoulders = async (competition: Competition) => {
     setSelectedCompetition(competition);
-    if (activeBouldersListener.current?.compId === competition.id) {
-      // Déjà abonné à cette compétition : rien à refaire, 0 lecture Firestore.
+    if (loadedBouldersCompId.current === competition.id) {
+      // Déjà chargés pour cette compétition dans ce montage : rien à refaire.
       return;
     }
-    activeBouldersListener.current?.unsubscribeClassic();
-    activeBouldersListener.current?.unsubscribeReused();
     setLoading(true);
-
-    const recompute = () => {
-      const merged = [...classicBouldersRef.current, ...reusedBouldersRef.current]
+    try {
+      // ✅ Deux requêtes fusionnées : les blocs créés pour l'épreuve (type:
+      // 'competition', comme avant, aucun changement rétrocompatible) et les
+      // blocs quotidiens réutilisés (type: 'daily' + competition_active: true)
+      // des compétitions "régulières" bâties sur des blocs déjà en place. Un
+      // simple `type in [...]` ferait réapparaître ici, à tort, les anciens
+      // blocs de compétition redevenus 'daily' après "Terminer la compétition"
+      // (ils gardent leur competition_id pour l'historique des résultats).
+      const [classicSnapshot, reusedSnapshot] = await Promise.all([
+        getDocsCacheFirst(query(
+          collection(db, 'boulders'),
+          where('competition_id', '==', competition.id),
+          where('is_active', '==', true),
+          where('type', '==', 'competition')
+        )),
+        getDocsCacheFirst(query(
+          collection(db, 'boulders'),
+          where('competition_id', '==', competition.id),
+          where('is_active', '==', true),
+          where('type', '==', 'daily'),
+          where('competition_active', '==', true)
+        )),
+      ]);
+      const merged = [...classicSnapshot.docs, ...reusedSnapshot.docs]
+        .map(mapBoulderDoc)
         .sort((a, b) => a.number - b.number);
       setBoulders(merged);
+      loadedBouldersCompId.current = competition.id;
+    } catch (err: unknown) {
+      setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
       setLoading(false);
-    };
-
-    // ✅ Deux listeners fusionnés : les blocs créés pour l'épreuve (type:
-    // 'competition', comme avant, aucun changement rétrocompatible) et les
-    // blocs quotidiens réutilisés (type: 'daily' + competition_active: true)
-    // des compétitions "régulières" bâties sur des blocs déjà en place. Un
-    // simple `type in [...]` ferait réapparaître ici, à tort, les anciens
-    // blocs de compétition redevenus 'daily' après "Terminer la compétition"
-    // (ils gardent leur competition_id pour l'historique des résultats).
-    const unsubscribeClassic = onSnapshot(query(
-      collection(db, 'boulders'),
-      where('competition_id', '==', competition.id),
-      where('is_active', '==', true),
-      where('type', '==', 'competition')
-    ), (snapshot) => {
-      classicBouldersRef.current = snapshot.docs.map(mapBoulderDoc);
-      recompute();
-    }, (err) => {
-      setError(`Erreur: ${err.message}`);
-      setLoading(false);
-    });
-
-    const unsubscribeReused = onSnapshot(query(
-      collection(db, 'boulders'),
-      where('competition_id', '==', competition.id),
-      where('is_active', '==', true),
-      where('type', '==', 'daily'),
-      where('competition_active', '==', true)
-    ), (snapshot) => {
-      reusedBouldersRef.current = snapshot.docs.map(mapBoulderDoc);
-      recompute();
-    }, (err) => {
-      setError(`Erreur: ${err.message}`);
-      setLoading(false);
-    });
-
-    activeBouldersListener.current = { compId: competition.id, unsubscribeClassic, unsubscribeReused };
+    }
   };
 
-  // ✅ 1.3 — Reprise après rechargement, désormais via listener temps réel (voir
-  // la ref `activeResultsListener` ci-dessus) : préremplit validationResults au
-  // snapshot initial, pour que la fermeture d'onglet/le rechargement/l'"Annuler"
-  // ne fasse toujours jamais perdre une validation déjà enregistrée côté
-  // serveur — mais sans refaire cette lecture à chaque ouverture de modale.
-  const ensureResultsListener = (competition: Competition) => {
+  // ✅ 1.3 — Reprise après rechargement : préremplit validationResults à partir
+  // des résultats déjà écrits par ce grimpeur pour cette compétition, pour que
+  // la fermeture d'onglet/le rechargement/l'"Annuler" ne fasse jamais perdre
+  // une validation déjà enregistrée côté serveur — sans refaire cette lecture
+  // à chaque ouverture de modale ni, grâce au cache-first, à chaque remontage
+  // de page.
+  const loadResults = async (competition: Competition) => {
     if (!user) return;
-    if (activeResultsListener.current?.compId === competition.id) {
-      // Déjà abonné à cette compétition : rien à refaire, 0 lecture Firestore.
+    if (loadedResultsCompId.current === competition.id) {
       return;
     }
-    activeResultsListener.current?.unsubscribe();
     persistedBoulderIds.current = new Set();
-    const q = query(
-      collection(db, 'competition_results'),
-      where('user_id', '==', user.uid),
-      where('competition_id', '==', competition.id)
-    );
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    try {
+      const snapshot = await getDocsCacheFirst(query(
+        collection(db, 'competition_results'),
+        where('user_id', '==', user.uid),
+        where('competition_id', '==', competition.id)
+      ));
       const results: typeof validationResults = {};
       let locked = false;
       let lockedAtValue: string | null = null;
@@ -289,23 +273,11 @@ const ClientCompetitions: React.FC = () => {
       setValidationResults(results);
       setIsLocked(locked);
       setLockedAt(lockedAtValue);
-    }, (err) => {
+      loadedResultsCompId.current = competition.id;
+    } catch (err: unknown) {
       setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
-    });
-    activeResultsListener.current = { compId: competition.id, unsubscribe };
+    }
   };
-
-  // ✅ Désabonnement au démontage de la page, pour ne pas laisser un listener
-  // Firestore actif (donc des lectures continues) après avoir quitté l'écran.
-  useEffect(() => {
-    return () => {
-      activeResultsListener.current?.unsubscribe();
-      activeResultsListener.current = null;
-      activeBouldersListener.current?.unsubscribeClassic();
-      activeBouldersListener.current?.unsubscribeReused();
-      activeBouldersListener.current = null;
-    };
-  }, []);
 
   const canUserRegister = (user: RegistrableUser, competition: Competition): boolean => {
     if (!user.inscritAuxCompetitions) {
@@ -556,8 +528,8 @@ const ClientCompetitions: React.FC = () => {
                         onClick={() => {
                           isAlreadyRegistered(competition.id).then(registered => {
                             if (registered) {
-                              ensureBouldersListener(competition);
-                              ensureResultsListener(competition);
+                              loadBoulders(competition);
+                              loadResults(competition);
                               setOpenValidationDialog(true);
                             } else {
                               if (canRegister) {
@@ -575,7 +547,7 @@ const ClientCompetitions: React.FC = () => {
                       </Button>
                       <Button
                         variant="outlined"
-                        onClick={() => ensureBouldersListener(competition)}
+                        onClick={() => loadBoulders(competition)}
                       >
                         Voir les détails
                       </Button>

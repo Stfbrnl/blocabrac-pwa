@@ -33,7 +33,7 @@ import AnnouncementBanner from '../../components/AnnouncementBanner';
 import WhatsNewPanel from '../../components/WhatsNewPanel';
 import { computeStreakDays, getStartOfWeek } from '../../utils/streak';
 import { colorGrades, logoPath, gymName } from '../../config/gymConfig';
-import { formattedAppVersion } from '../../config/appVersion';
+import { formattedAppVersion, buildDetail } from '../../config/appVersion';
 
 // Tableau de correspondance code-couleur/cotations (cohérent avec ClientProfile.tsx, AdminUsers.tsx...)
 const levelOptions: Record<string, string> = Object.fromEntries(
@@ -269,14 +269,18 @@ const ClientScreen: React.FC = () => {
           </Typography>
           {/* ✅ Repère de version : permet de vérifier d'un coup d'œil que la PWA a
               bien chargé le dernier déploiement plutôt qu'une version mise en cache
-              par le service worker (voir src/config/appVersion.ts). */}
-          <Typography
-            variant="caption"
-            color="text.secondary"
-            sx={{ display: 'block', textAlign: 'center', mt: -1, mb: 1 }}
-          >
-            {formattedAppVersion}
-          </Typography>
+              par le service worker (voir src/config/appVersion.ts). Info-bulle avec
+              le hash de commit + date de build : garde-fou automatique, toujours
+              exact même en cas d'oubli de bump du numéro de version. */}
+          <Tooltip title={buildDetail}>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ display: 'block', textAlign: 'center', mt: -1, mb: 1, cursor: 'help' }}
+            >
+              {formattedAppVersion}
+            </Typography>
+          </Tooltip>
           <Tooltip title="Comment ça marche ?">
             <IconButton
               aria-label="Aide"

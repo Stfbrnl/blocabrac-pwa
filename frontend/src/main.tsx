@@ -7,6 +7,12 @@ import { AuthProvider } from './context/AuthContext';
 // Composants partagés
 import Navbar from './components/Navbar';
 import AppRoutes from './AppRoutes';
+import { formattedAppVersion, buildDetail } from './config/appVersion';
+
+// ✅ Utile pour un diagnostic à distance (l'utilisateur peut faire une capture
+// d'écran de la console) sans avoir à ouvrir "Mon espace personnel" — voir
+// SUIVI-remontages-et-version.md point 3.
+console.log(`Blocabrac ${formattedAppVersion} — ${buildDetail}`);
 
 // ✅ Après un déploiement, un onglet resté ouvert (ou un index.html mis en cache) peut
 // encore référencer un chunk JS (ex: Admin-<hash>.js) qui n'existe plus sur le serveur :

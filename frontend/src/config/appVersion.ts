@@ -13,3 +13,10 @@ export const appVersion = __APP_VERSION__;
 // cette convention, n'apporte rien à l'affichage) ; "2.14.3" -> "V2.14.3" (un
 // vrai correctif de patch reste visible).
 export const formattedAppVersion = `V${appVersion.replace(/\.0$/, '')}`;
+
+// ✅ Garde-fou en plus du numéro ci-dessus (voir SUIVI-remontages-et-version.md
+// point 3) : le hash de commit + la date de build sont calculés automatiquement
+// à chaque build, donc toujours exacts — contrairement au numéro de version,
+// bumpé à la main et donc oubliable. Affichés en détail secondaire (info-bulle
+// sur ClientScreen.tsx), jamais à la place du numéro de version demandé.
+export const buildDetail = `Build ${__GIT_HASH__} — ${new Date(__BUILD_DATE__).toLocaleString('fr-FR')}`;
