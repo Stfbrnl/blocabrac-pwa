@@ -1,4 +1,4 @@
-# Handoff — Plan Spark (images + compétition) : état au 30/07/2026 (mis à jour)
+# Handoff — Plan Spark (images + compétition) : état au 30/07/2026 (mis à jour 14/08/2026)
 
 > Rédigé par Claude Code (CLI) à destination d'une session Claude Opus dans le
 > navigateur, pour reprendre le contexte sans avoir à relire toute la conversation
@@ -7,6 +7,45 @@
 > les critères d'acceptation cochés. Ce fichier-ci résume plutôt **les décisions prises
 > en cours de route** et **ce qui reste à faire**, en particulier ce qui nécessite un
 > vrai navigateur (que je n'ai pas dans ce Codespace).
+
+## Mise à jour du 14/08/2026 — réponse aux 3 points de `SUIVI-post-chantiers-spark.md`
+
+Une session Claude navigateur avait relu ce handoff une fois "tous chantiers clos" et
+relevé 3 points (fichier `SUIVI-post-chantiers-spark.md` à la racine, toujours présent
+pour le détail complet). Les trois sont **traités** en Codespace le 14/08/2026 :
+
+- **Point 1 (pas de backup images)** : `scripts/cleanup-orphan-boulder-images.js` a
+  maintenant un mode `--backup <dossier>` — télécharge les images actuellement
+  référencées, idempotent, écrit un manifeste `public_id → boulder_id → nom de fichier`.
+  Testé en conditions réelles sur les 25 blocs de prod (25 téléchargées, relance → 25
+  déjà présentes, 0 retéléchargée). **Décision utilisateur : usage manuel occasionnel**,
+  pas d'automatisation CI pour l'instant — où stocker l'archive durablement reste ouvert,
+  à trancher au passage multi-salles.
+- **Point 2 (garde-fou 20% mal calibré)** : contexte donné par l'utilisateur — la salle
+  compte 10 murs à 15 blocs, donc 150 blocs à pleine capacité (25 aujourd'hui, montée en
+  charge). Le garde-fou est passé à un seuil **hybride** : il ne se déclenche que si la
+  chute dépasse **20% ET 20 références absolues** (`DROP_GUARD_ABSOLUTE_MIN_DROP` dans le
+  script), plus un drapeau `--force`/`--accept-drop` pour contourner explicitement sans
+  éditer `cleanup-state/state.json` à la main. Testé : une chute de 15 (retrait d'un mur)
+  passe sans intervention, une chute de 75 s'arrête et exige `--force`. Le cas "pas de
+  `state.json`" (premier run/fichier perdu) est maintenant signalé explicitement au lieu
+  de passer silencieusement — c'était un vrai défaut, confirmé dans le code avant
+  correction.
+- **Point 3 (remesurer le gain)** : refait via un script (`firestore-migration/measure-boulder-images-v2.js`,
+  ponctuel, pas commité comme le reste de `firestore-migration/`) plutôt qu'un vrai
+  onglet Réseau navigateur (toujours indisponible en Codespace). Résultat consigné en
+  tête de `PLAN-spark-images-competition.md` : **gain de ×2,9 au premier chargement**
+  (30,2 Ko/bloc doc+thumb contre 88 Ko en base64 le 30/07), **pas** le facteur 5-10
+  espéré — celui-ci se vérifie au **rechargement** grâce au cache HTTP Cloudinary
+  (`Cache-Control max-age=2592000`, 30 jours), confirmé mais pas chronométré précisément
+  (toujours le point non mesuré du Chantier 3 ci-dessous, si tu as l'occasion). `f_auto`
+  sert bien du WebP (24/25 images) — mais seulement vérifié en simulant un en-tête
+  `Accept` de navigateur moderne : un `fetch()` Node nu ne déclare pas ce support et
+  reçoit du JPEG par défaut, piège à connaître si tu relances une mesure similaire.
+  Dimensionnement compétition 90/35 sur cette base : ≈95 Mo, largement sous le quota.
+
+Commit `778aea2` (rebasé en `3ff046a` après un commit automatique de la GitHub Action
+entre-temps) sur `main`, poussé.
 
 ## Où on en est
 
