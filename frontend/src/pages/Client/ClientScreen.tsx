@@ -33,6 +33,7 @@ import AnnouncementBanner from '../../components/AnnouncementBanner';
 import WhatsNewPanel from '../../components/WhatsNewPanel';
 import { computeStreakDays, getStartOfWeek } from '../../utils/streak';
 import { colorGrades, logoPath, gymName } from '../../config/gymConfig';
+import { formattedAppVersion } from '../../config/appVersion';
 
 // Tableau de correspondance code-couleur/cotations (cohérent avec ClientProfile.tsx, AdminUsers.tsx...)
 const levelOptions: Record<string, string> = Object.fromEntries(
@@ -265,6 +266,16 @@ const ClientScreen: React.FC = () => {
         <Box sx={{ position: 'relative' }}>
           <Typography variant="h4" gutterBottom sx={{ textAlign: 'center' }}>
             Mon espace personnel
+          </Typography>
+          {/* ✅ Repère de version : permet de vérifier d'un coup d'œil que la PWA a
+              bien chargé le dernier déploiement plutôt qu'une version mise en cache
+              par le service worker (voir src/config/appVersion.ts). */}
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ display: 'block', textAlign: 'center', mt: -1, mb: 1 }}
+          >
+            {formattedAppVersion}
           </Typography>
           <Tooltip title="Comment ça marche ?">
             <IconButton

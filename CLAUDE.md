@@ -84,6 +84,10 @@ Firestore rules only let a client read their own `users` doc — clients cannot 
 
 `utils/climbingPoints.ts` (`calculatePoints`, `basePoints`, `deductions`) is the single shared scoring function for daily classement (`utils/classementScore.ts`), official competition classement, and mini-compétition classement. It scores by color string (`jaune` through `rose`), degressive by attempt count. Real "grosse compétition" boulders never use `jaune` in practice (beginner-only) even though the picker still lists it — that's intentional gym policy, not a bug.
 
+### App version display
+
+`frontend/package.json`'s `version` field is the single source of truth for the version number shown to users (a small `V2.XX` caption under the title on "Mon espace personnel", `Client/ClientScreen.tsx`) — `vite.config.ts` reads it at build time and injects it as the `__APP_VERSION__` global (declared in `src/vite-env.d.ts`, formatted in `src/config/appVersion.ts`). This exists so a user can tell whether their PWA actually loaded the latest deploy or is still serving a stale service-worker-cached build — bump `package.json`'s `version` to match whatever version number is used in the commit message (the pre-existing "Application Sociale Blocabrac V2.XX" convention in git history) whenever asked to tag a release; it takes effect on the next build/deploy, no other step needed.
+
 ### Testing
 
 - `npm test` (fast, no external deps) covers pure utility functions (`utils/*.test.ts`) — this is what CI-equivalent checks should always run.

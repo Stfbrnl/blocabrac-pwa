@@ -70,6 +70,9 @@ async function main() {
   await step('Moniteur : atteint "Potes de grimpe" en cliquant depuis "Mon espace" (comme les autres boutons du rôle)', async () => {
     await moniteurP.goto(`${BASE_URL}/client`);
     await moniteurP.getByRole('heading', { name: 'Mon espace personnel' }).waitFor({ timeout: 10000 });
+    // ✅ Repère de version (src/config/appVersion.ts) : affiché sous le titre,
+    // permet de vérifier que la PWA a bien chargé le dernier déploiement.
+    await moniteurP.getByText(/^V\d+\.\d+/).waitFor({ timeout: 5000 });
     await moniteurP.getByRole('button', { name: 'Potes de grimpe' }).click();
     await moniteurP.getByRole('heading', { name: 'Potes de grimpe', exact: true }).waitFor({ timeout: 10000 });
   });

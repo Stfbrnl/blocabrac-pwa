@@ -1,6 +1,18 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+
+// ✅ Numéro de version affiché dans "Mon espace personnel" (ClientScreen.tsx),
+// pour que l'utilisateur puisse voir en un coup d'œil si la PWA a bien chargé
+// le dernier déploiement plutôt qu'une version mise en cache par le service
+// worker. Source unique de vérité : le champ "version" de package.json, à
+// faire suivre le numéro donné en commit (convention "Application Sociale
+// Blocabrac V2.XX" déjà utilisée dans l'historique git).
+const pkgVersion = JSON.parse(
+  readFileSync(fileURLToPath(new URL('./package.json', import.meta.url)), 'utf-8')
+).version as string;
 
 // Le manifest PWA est généré côté Node avant que l'app ne tourne dans le
 // navigateur : on lit donc les mêmes variables VITE_* via loadEnv plutôt que
@@ -9,6 +21,9 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
 
   return {
+    define: {
+      __APP_VERSION__: JSON.stringify(pkgVersion),
+    },
     server: {
       host: true,
       port: 5173,
