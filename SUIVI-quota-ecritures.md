@@ -244,6 +244,26 @@ dépend du comportement réel des grimpeurs (nombre de corrections, pauses entre
 
 ---
 
+## Addendum #2 du 15/08/2026 — correction du coût en lectures du point 2 (relevé par
+Claude navigateur)
+
+Le chiffre "7% du plafond" de lectures (tête de ce document, et
+`PLAN-spark-images-competition.md`) est **périmé depuis le déploiement du point 2**.
+`isParticipationSubmitted()` (le `get()`/`exists()` qui vérifie le verrou) est évalué à
+**chaque écriture** sur `competition_results`, pas une fois par bloc validé comme
+l'estimation initiale du point 2 le supposait ("≈1 `get()`/validation, ~3000
+lectures") — 80 écritures réelles par grimpeur (35 Réussi + 35 essais + 10
+corrections), pas 35.
+
+Recalcul : 80 × 90 = 7 200 lectures induites par cette seule règle, portant le total
+(avec les ~3 510 lectures déjà mesurées côté chantier lectures) à **≈10 700-11 000
+lectures, soit 21-22% du plafond de 50 000** — toujours confortable, loin de la cible
+de 20 000, donc aucun correctif de code nécessaire dans l'immédiat. Détail complet dans
+`PLAN-spark-images-competition.md`. Migration déplacée entretemps vers
+`scripts/rekey-competition-participants.js` (voir plus bas).
+
+---
+
 ## Ce que je déconseille explicitement
 
 **Regrouper les 35 résultats d'un grimpeur dans un document unique.** Séduisant en

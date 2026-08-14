@@ -142,8 +142,10 @@ déterministe `${uid}_${competitionId}`, comme pour `competition_results`.
 - `ClientCompetitions.tsx` (inscription, vérification, verrouillage, lecture)
   et `AdminCompetitionRegistration.tsx` (inscription manuelle) réécrits.
 - **Migration de production exécutée** :
-  `firestore-migration/rekey-competition-participants.js` (dry-run par
-  défaut, `--execute` pour appliquer, gitignored comme tout ce dossier). 3
+  `scripts/rekey-competition-participants.js` (dry-run par
+  défaut, `--execute` pour appliquer ; déplacé le 15/08/2026 depuis
+  `firestore-migration/` — entièrement gitignoré, donc perdu à chaque
+  recréation du Codespace, relevé par Claude navigateur). 3
   participations réelles ré-écrites. Au passage : 1 document de test résiduel
   trouvé (`user_id` littéralement la chaîne `"null"`, compétition
   `comp_test_20260521`, `email: testcomp@test.com`) — explicitement exclu de
@@ -232,10 +234,15 @@ entre clics), comme ton document le prévenait déjà.
   `AdminCompetitionRegistration.tsx`, `competition-results-lock.test.ts`,
   `measure-competition-writes.mjs` + `-after.mjs` (nouveaux),
   `PLAN-spark-images-competition.md`, `SUIVI-quota-ecritures.md`. Migration
-  `firestore-migration/rekey-competition-participants.js` (gitignored, pas
-  commitée, exécutée manuellement sur la prod).
+  `scripts/rekey-competition-participants.js`, exécutée manuellement sur la
+  prod (initialement écrite dans `firestore-migration/`, gitignoré, puis
+  déplacée le 15/08/2026 — voir section 7 ci-dessous).
 - `e5d7822` (V2.28) : `ClientCompetitions.tsx`, `ClientCourseSession.tsx`,
   `ClientDaily.tsx`, `SUIVI-quota-ecritures.md`.
+- `240049d` : suppression du document de test résiduel (voir section 3).
+- Non commités séparément dans ce commit-ci : `scripts/rekey-competition-participants.js`
+  (déplacement) et corrections de `PLAN-spark-images-competition.md`/
+  `SUIVI-quota-ecritures.md` (chiffre de lectures périmé) — voir section 7.
 
 Déploiements : `--only hosting` pour V2.25/V2.26/V2.28 ;
 `--only hosting,firestore:rules` pour V2.27 (seul commit touchant
@@ -268,3 +275,55 @@ Déploiements : `--only hosting` pour V2.25/V2.26/V2.28 ;
 Rien de nouveau n'a été ouvert par ces quatre commits au-delà de ce qui est
 listé ci-dessus — tout ce qui a été trouvé en creusant tes trois documents a
 été corrigé et vérifié le même jour.
+
+---
+
+## 7. Suite du 15/08/2026 — ton retour sur ce handoff, 3 points traités
+
+Trois observations justes, traitées dans la foulée (pas de nouveau commit
+numéroté V2.29, ce sont des corrections de documentation + un déplacement de
+script, aucun changement de comportement de l'app) :
+
+### 7a. Le chiffre "7% de lectures" était périmé
+
+Tu avais raison : `isParticipationSubmitted()` est évalué à **chaque
+écriture** sur `competition_results` (80/grimpeur : 35 Réussi + 35 essais +
+10 corrections), pas une fois par bloc validé (35) comme l'estimation
+initiale du point 2 le supposait. Recalcul : 80 × 90 = 7 200 lectures
+induites par cette seule règle, portant le total à **≈10 700-11 000 lectures
+(21-22% du plafond)** au lieu des 7% affichés. Toujours confortable (loin de
+la cible de 20 000), donc aucun correctif de code — seule la documentation
+était fausse. Corrigé dans `PLAN-spark-images-competition.md` (nouvelle
+section "Correction du 15/08/2026") et `SUIVI-quota-ecritures.md`
+("Addendum #2"). Pas de remesure empirique : contrairement à la reprise d'un
+`onSnapshot` (comportement non documenté par Google), le coût d'un
+`get()`/`exists()` par écriture est déterministe — recalculer suffisait.
+
+### 7b. La règle d'écriture était déjà protégée (vérifié, rien à changer)
+
+Fausse alerte, mais légitime à vérifier : `isParticipationSubmitted()` a
+**déjà** le garde `exists(partPath) && get(partPath)...` (même fonction,
+appelée aussi bien depuis la règle `read` de `competition_participants` que
+depuis les règles `create`/`update` de `competition_results`) — ajouté lors
+du débogage initial de V2.27, avant même ton retour. Le test que tu demandais
+existe déjà et passe : `competition-results-lock.test.ts`, *"un client sans
+document de participation peut quand même écrire (repli sûr : exists() avant
+get(), pas de crash de règle)"*. Confirmé en relisant `firestore.rules` et en
+relançant `test:rules` (58/58). Rien à modifier ici.
+
+### 7c. Script de migration déplacé
+
+Fait : `firestore-migration/rekey-competition-participants.js` →
+`scripts/rekey-competition-participants.js`, avec le même pattern de
+credentials que `cleanup-orphan-boulder-images.js` (variable d'environnement
+`FIREBASE_SERVICE_ACCOUNT_JSON` en priorité, repli sur le fichier local
+`firestore-migration/serviceAccountKey.json`, jamais commité). Revérifié
+fonctionnel depuis le nouveau chemin (dry-run contre la prod : 3
+participations déjà migrées, rien à faire).
+
+### Document de test résiduel — supprimé entretemps
+
+Signalé comme encore ouvert dans ce handoff (section 3/6), mais supprimé sur
+demande explicite de l'utilisateur juste après (doc
+`competition_participants/Ue6AHXLFriXlufC4Bfn4`) — voir section 3, déjà mis à
+jour ci-dessus.

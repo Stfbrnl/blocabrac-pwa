@@ -185,7 +185,7 @@ verrouillage) :**
   `competition_participants` (1 document) : nécessite un ID déterministe
   (`${uid}_${competitionId}`) pour que `firestore.rules` puisse vérifier le verrou par
   un `get()` au lieu d'une requête (non supportée dans les règles) — migration
-  `firestore-migration/rekey-competition-participants.js` pour les participations déjà
+  `scripts/rekey-competition-participants.js` pour les participations déjà
   en base, repli sur l'ancien champ `submitted` de `competition_results` conservé pour
   les compétitions déjà verrouillées avant ce chantier.
 - **Après : 83 écritures/grimpeur → 7 470 extrapolées à 90 participants (37,4% du
@@ -199,8 +199,37 @@ verrouillage) :**
   l'évaluation (`resource == null` sur une lecture non trouvée) — corrigé avec un garde
   `resource == null ||` en tête de la règle `read`. Les deux auraient bloqué la
   totalité des inscriptions/verrouillages en production sans ces tests.
-- Points 3-5 du suivi (ne pas écrire de valeur inchangée, allonger le debounce avec
-  flush `pagehide`, debounce sur `classement_profiles`) : pas encore traités.
+- Points 3-5 du suivi traités en V2.28 (ne pas écrire de valeur inchangée, debounce
+  allongé avec flush `pagehide`, `classement_profiles` débranché) — voir
+  `SUIVI-quota-ecritures.md`.
+
+### ⚠️ Correction du 15/08/2026 (Claude navigateur) — le chiffre de lectures « 7% » est
+périmé depuis le point 2
+
+`isParticipationSubmitted()` (voir Point 2 ci-dessus) est un `get()`/`exists()` évalué
+à **chaque écriture** sur `competition_results`, pas une fois par bloc validé — la note
+initiale du point 2 ("≈1 `get()`/validation, ~3000 lectures") comptait par blocs (35),
+pas par écritures réelles (80 : 35 Réussi + 35 essais + 10 corrections). Recalcul :
+
+- 80 écritures `competition_results`/grimpeur × 90 participants = **7 200 lectures**
+  induites par cette seule règle (au lieu des ~3 000 estimés).
+- Ajoutées aux ~3 510 lectures mesurées après le chantier lectures (V2.26, avant le
+  chantier écritures) : **≈10 700-11 000 lectures au total, soit 21-22% du plafond de
+  50 000** — au lieu des 7% affichés plus haut, qui ne reflètent plus le code déployé
+  depuis V2.27.
+- **Toujours confortable** (loin sous la cible de 20 000), donc pas de correctif de
+  code nécessaire dans l'immédiat — seule la documentation était fausse. Pas de
+  remesure empirique faite : contrairement à la reprise d'un `onSnapshot` (comportement
+  non documenté par Google, qui avait justifié une mesure), le coût d'un `get()`/
+  `exists()` par écriture est déterministe et directement dérivable du texte des
+  règles + du nombre d'écritures déjà mesuré — recalculer suffit, pas besoin de
+  ré-instrumenter.
+- Si ce poste devient un jour gênant (montée en charge, salle supplémentaire) : le
+  réduire demanderait de sortir `isParticipationSubmitted` du chemin d'écriture par
+  bloc — par exemple en le limitant à la création du tout premier résultat par
+  compétition plutôt qu'à chaque écriture, ou en acceptant un verrou vérifié
+  uniquement côté client jusqu'au verrouillage final. Pas fait : prématuré tant que la
+  marge reste confortable.
 
 ---
 
