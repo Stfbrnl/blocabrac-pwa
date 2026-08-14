@@ -33,6 +33,30 @@ service cloud.firestore {
              !(course.optedOut is list && course.optedOut.hasAny([request.auth.uid]));
     }
 
+    // ✅ Chantier écritures (SUIVI-quota-ecritures.md point 2) : le verrouillage
+    // d'une participation à une compétition vit sur competition_participants
+    // (1 document), plus sur chacun des ~35 competition_results (facturé par
+    // document en écriture). L'ID de ce document est déterministe
+    // ("${uid}_${competitionId}", voir ClientCompetitions.tsx) précisément pour
+    // permettre ce get() bon marché — sans ça, il faudrait une requête, non
+    // supportée dans les règles. Suppose la migration
+    // firestore-migration/rekey-competition-participants.js déjà passée : tout
+    // competition_participants existant doit être sous ce nouvel ID avant que
+    // cette fonction ne soit fiable pour les compétitions déjà en cours.
+    // ✅ exists() avant get() : un get() sur un chemin inexistant fait échouer
+    // l'évaluation de la règle entière (pas juste renvoyer "non trouvé"), ce qui
+    // refuserait à tort la validation d'un grimpeur dont la participation n'a
+    // pas encore été migrée (ou, en test, jamais seedée). Les deux appels
+    // portent sur le même chemin : Firestore ne facture qu'une seule lecture
+    // par document réellement accédé au sein d'une même évaluation de règle.
+    // `.get('submitted', false)` plutôt qu'un accès direct : une participation
+    // fraîchement enregistrée n'a pas encore ce champ, et y accéder directement
+    // ferait échouer l'évaluation (voir la même remarque sur la règle update).
+    function isParticipationSubmitted(competitionId) {
+      let partPath = /databases/$(database)/documents/competition_participants/$(request.auth.uid + '_' + competitionId);
+      return exists(partPath) && get(partPath).data.get('submitted', false) == true;
+    }
+
     // ========== 1. Utilisateurs ==========
     match /users/{userId} {
       allow read: if request.auth != null &&
@@ -284,17 +308,40 @@ service cloud.firestore {
     }
 
     match /competition_participants/{docId} {
+      // ✅ resource == null en premier : depuis le chantier écritures point 2,
+      // isAlreadyRegistered (ClientCompetitions.tsx) fait un getDoc() direct par
+      // ID déterministe plutôt qu'une requête — et interroger un document qui
+      // n'existe pas (pas encore inscrit) évalue resource à null, faisant
+      // planter resource.data.user_id sans ce garde-fou. Aucune fuite de
+      // donnée : un document inexistant n'a rien à renvoyer.
       allow read: if request.auth != null &&
-                    (resource.data.user_id == request.auth.uid ||
+                    (resource == null ||
+                     resource.data.user_id == request.auth.uid ||
                      isUserRole("admin") ||
                      isUserRole("ouvreur"));
       allow create: if request.auth != null &&
                       (request.resource.data.user_id == request.auth.uid ||
                        isUserRole("admin") ||
                        isUserRole("ouvreur"));
-      allow update, delete: if request.auth != null &&
-                              (isUserRole("admin") ||
-                               isUserRole("ouvreur"));
+      // ✅ Chantier écritures point 2 : le grimpeur peut désormais verrouiller
+      // SA PROPRE participation (poser submitted:true + submitted_at), mais
+      // rien d'autre — jamais déverrouiller, jamais toucher un autre champ.
+      // admin/ouvreur gardent leur accès libre (statu quo, cf. competition_results).
+      // ✅ resource.data.get('submitted', false) plutôt que resource.data.submitted :
+      // un document de participation fraîchement créé (handleRegister) n'a pas
+      // encore ce champ, et un accès direct à une clé absente d'une map fait
+      // échouer l'évaluation de la règle entière — .get(clé, défaut) est l'idiome
+      // sûr pour une clé potentiellement absente.
+      allow update: if request.auth != null &&
+                      ((resource.data.user_id == request.auth.uid &&
+                        resource.data.get('submitted', false) != true &&
+                        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['submitted', 'submitted_at']) &&
+                        request.resource.data.submitted == true) ||
+                       isUserRole("admin") ||
+                       isUserRole("ouvreur"));
+      allow delete: if request.auth != null &&
+                      (isUserRole("admin") ||
+                       isUserRole("ouvreur"));
     }
 
     match /competition_results/{docId} {
@@ -303,18 +350,24 @@ service cloud.firestore {
                      isUserRole("admin") ||
                      isUserRole("ouvreur"));
       // ✅ Un grimpeur ne peut pas créer directement un résultat déjà verrouillé
-      // (submitted: true) — seul handleLockResults, via update, peut le poser.
+      // (submitted: true, champ conservé en repli pour les compétitions verrouillées
+      // avant le chantier écritures point 2 — voir isParticipationSubmitted) — seul
+      // handleLockResults pouvait le poser, et ne le fait plus pour les nouvelles
+      // compétitions (verrouillage déplacé sur competition_participants).
       allow create: if request.auth != null &&
                       ((request.resource.data.user_id == request.auth.uid &&
-                        request.resource.data.submitted != true) ||
+                        request.resource.data.submitted != true &&
+                        !isParticipationSubmitted(request.resource.data.competition_id)) ||
                        isUserRole("admin") ||
                        isUserRole("ouvreur"));
-      // ✅ Une fois submitted: true, le propriétaire ne peut plus modifier son
+      // ✅ Une fois submitted: true (sur ce document OU sur la participation —
+      // voir isParticipationSubmitted), le propriétaire ne peut plus modifier son
       // résultat (verrouillage serveur) ; admin/ouvreur gardent leur droit de
       // correction sans restriction (statu quo assumé, cf. PLAN-spark-images-competition.md).
       allow update: if request.auth != null &&
                       ((resource.data.user_id == request.auth.uid &&
-                        resource.data.submitted != true) ||
+                        resource.data.submitted != true &&
+                        !isParticipationSubmitted(resource.data.competition_id)) ||
                        isUserRole("admin") ||
                        isUserRole("ouvreur"));
       allow delete: if request.auth != null &&

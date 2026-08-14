@@ -6,7 +6,7 @@ import {
   Switch, Chip, Card, CardContent, CardActions, useTheme, useMediaQuery
 } from '@mui/material';
 import { db } from '../services/firebaseConfig';
-import { collection, getDocs, doc, addDoc, deleteDoc, query, where, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, deleteDoc, query, where, updateDoc } from 'firebase/firestore';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { type Level, canUserRegister } from '../utils/competitionEligibility';
 import { getSeasonAge } from '../utils/ageCategory';
@@ -243,7 +243,12 @@ const AdminCompetitionRegistration: React.FC = () => {
         return;
       }
 
-      await addDoc(collection(db, 'competition_participants'), {
+      // ✅ Chantier écritures (SUIVI-quota-ecritures.md point 2) : ID
+      // déterministe ("${uid}_${competitionId}"), comme côté client
+      // (ClientCompetitions.tsx) — c'est le chemin attendu par
+      // firestore.rules (isParticipationSubmitted) pour vérifier le
+      // verrouillage sans requête.
+      await setDoc(doc(db, 'competition_participants', `${user.uid}_${selectedCompetition.id}`), {
         user_id: user.uid,
         competition_id: selectedCompetition.id,
         email: user.email,

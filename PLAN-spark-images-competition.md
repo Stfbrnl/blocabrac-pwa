@@ -172,6 +172,36 @@ même protocole que la mesure "avant" ci-dessus, scénario "plancher" à 35 ouve
   rechargement, 1.3) rejoué à 15/15 après chacun des deux correctifs (résultats, puis
   blocs/inscription).
 
+**Mesure des ÉCRITURES du 15/08/2026 (`SUIVI-quota-ecritures.md`, jamais mesurées
+jusqu'ici) — scripts `frontend/test/measure-competition-writes.mjs` (avant) et
+`measure-competition-writes-after.mjs` (après), même protocole : émulateur, vrai client
+SDK, parcours 1 grimpeur (inscription, 35 validations Réussi+essais, 10 corrections,
+verrouillage) :**
+
+- **Avant : 117 écritures/grimpeur → 10 530 extrapolées à 90 participants (52,6% du
+  plafond de 20 000)**, cohérent avec l'estimation du suivi (8 000-12 000).
+- **Point 2 appliqué** — le verrouillage (`handleLockResults`) déplacé de
+  `competition_results` (35 documents, `writeBatch`, facturé par document) vers
+  `competition_participants` (1 document) : nécessite un ID déterministe
+  (`${uid}_${competitionId}`) pour que `firestore.rules` puisse vérifier le verrou par
+  un `get()` au lieu d'une requête (non supportée dans les règles) — migration
+  `firestore-migration/rekey-competition-participants.js` pour les participations déjà
+  en base, repli sur l'ancien champ `submitted` de `competition_results` conservé pour
+  les compétitions déjà verrouillées avant ce chantier.
+- **Après : 83 écritures/grimpeur → 7 470 extrapolées à 90 participants (37,4% du
+  plafond)** — gain de 34 écritures/grimpeur (≈3 060 pour 90), conforme à l'estimation
+  du suivi (~3 000, un tiers du total).
+- Deux bugs de règles trouvés et corrigés en vérifiant (`npm run test:rules` puis
+  `e2e-competition-flow.mjs`, pas seulement en écrivant les règles) : un accès direct à
+  une clé de map absente (`resource.data.submitted`) fait échouer l'évaluation de la
+  règle entière plutôt que de simplement s'évaluer à `false` — corrigé avec
+  `.get('submitted', false)` ; un `get()` sur un document inexistant fait aussi échouer
+  l'évaluation (`resource == null` sur une lecture non trouvée) — corrigé avec un garde
+  `resource == null ||` en tête de la règle `read`. Les deux auraient bloqué la
+  totalité des inscriptions/verrouillages en production sans ces tests.
+- Points 3-5 du suivi (ne pas écrire de valeur inchangée, allonger le debounce avec
+  flush `pagehide`, debounce sur `classement_profiles`) : pas encore traités.
+
 ---
 
 ## Chantier 1 — Résultats de compétition écrits au fil de l'eau

@@ -2,8 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '../../../services/firebaseConfig';
 import {
-  collection, query, where, getDocs, addDoc, doc, updateDoc, getDoc, setDoc, increment,
-  writeBatch
+  collection, query, where, getDocs, doc, updateDoc, getDoc, setDoc, increment
 } from 'firebase/firestore';
 import { getDocsCacheFirst } from '../../../utils/firestoreCacheFirst';
 import {
@@ -235,6 +234,14 @@ const ClientCompetitions: React.FC = () => {
     }
   };
 
+  // ✅ Chantier écritures point 2 : ID déterministe de la participation, pour
+  // que firestore.rules puisse la vérifier par un get() bon marché (voir
+  // isParticipationSubmitted dans firestore.rules) au lieu d'une requête —
+  // non supportée dans les règles. Suppose la migration
+  // firestore-migration/rekey-competition-participants.js déjà passée.
+  const participationDocRef = (competitionId: string) =>
+    doc(db, 'competition_participants', `${user!.uid}_${competitionId}`);
+
   // ✅ 1.3 — Reprise après rechargement : préremplit validationResults à partir
   // des résultats déjà écrits par ce grimpeur pour cette compétition, pour que
   // la fermeture d'onglet/le rechargement/l'"Annuler" ne fasse jamais perdre
@@ -248,12 +255,24 @@ const ClientCompetitions: React.FC = () => {
     }
     persistedBoulderIds.current = new Set();
     try {
-      const snapshot = await getDocsCacheFirst(query(
-        collection(db, 'competition_results'),
-        where('user_id', '==', user.uid),
-        where('competition_id', '==', competition.id)
-      ));
+      const [snapshot, participationSnap] = await Promise.all([
+        getDocsCacheFirst(query(
+          collection(db, 'competition_results'),
+          where('user_id', '==', user.uid),
+          where('competition_id', '==', competition.id)
+        )),
+        // ✅ Chantier écritures point 2 : source du verrou désormais ici (1
+        // lecture) plutôt que dispersée sur chacun des documents de résultats.
+        // getDocCacheFirst n'est pas utilisé volontairement : le statut de
+        // verrouillage doit rester à jour même après un remontage, un client ne
+        // devant jamais voir "non soumis" en cache alors qu'il l'a verrouillé
+        // depuis un autre appareil entretemps.
+        getDoc(participationDocRef(competition.id)),
+      ]);
       const results: typeof validationResults = {};
+      // ✅ Repli sur l'ancien champ (compétitions verrouillées avant ce
+      // chantier, dont les 35 documents de résultats portent encore
+      // submitted:true individuellement) — voir firestore.rules isParticipationSubmitted.
       let locked = false;
       let lockedAtValue: string | null = null;
       snapshot.forEach(docSnap => {
@@ -270,6 +289,10 @@ const ClientCompetitions: React.FC = () => {
           lockedAtValue = data.submitted_at || null;
         }
       });
+      if (participationSnap.exists() && participationSnap.data().submitted) {
+        locked = true;
+        lockedAtValue = participationSnap.data().submitted_at || lockedAtValue;
+      }
       setValidationResults(results);
       setIsLocked(locked);
       setLockedAt(lockedAtValue);
@@ -329,18 +352,17 @@ const ClientCompetitions: React.FC = () => {
         }
       }
 
-      const q = query(
-        collection(db, 'competition_participants'),
-        where('competition_id', '==', competition.id),
-        where('user_id', '==', user.uid)
-      );
-      const snapshot = await getDocs(q);
-      if (!snapshot.empty) {
+      // ✅ Chantier écritures point 2 : ID déterministe (voir participationDocRef)
+      // plutôt qu'une requête + addDoc — vérifie la double inscription et écrit
+      // sous le même chemin que celui attendu par firestore.rules.
+      const participationRef = participationDocRef(competition.id);
+      const existing = await getDoc(participationRef);
+      if (existing.exists()) {
         setError("Vous êtes déjà inscrit à cette compétition.");
         return;
       }
 
-      await addDoc(collection(db, 'competition_participants'), {
+      await setDoc(participationRef, {
         user_id: user.uid,
         competition_id: competition.id,
         email: user.email || '',
@@ -431,10 +453,12 @@ const ClientCompetitions: React.FC = () => {
     }
   };
 
-  // ✅ 1.4 — "Soumettre" devient un verrouillage : un seul writeBatch pose
-  // submitted: true sur tous les résultats du grimpeur pour cette compétition
-  // (atomique, un aller-retour), et les règles refusent ensuite toute
-  // modification par le propriétaire (voir firestore.rules).
+  // ✅ 1.4 — "Soumettre" devient un verrouillage. Chantier écritures point 2 :
+  // une seule écriture sur la participation (au lieu d'un writeBatch sur les
+  // ~35 documents de résultats, facturé par document — ~3000 écritures en
+  // moins sur la compétition à 90 participants), et firestore.rules refuse
+  // ensuite toute modification des résultats par le propriétaire via
+  // isParticipationSubmitted.
   const handleLockResults = async () => {
     if (!user || !selectedCompetition) return;
     const confirmed = window.confirm(
@@ -443,16 +467,10 @@ const ClientCompetitions: React.FC = () => {
     if (!confirmed) return;
     try {
       const now = new Date().toISOString();
-      const batch = writeBatch(db);
-      Object.keys(validationResults).forEach((boulderId) => {
-        const resultId = `${user.uid}_${boulderId}_${selectedCompetition.id}`;
-        batch.set(doc(db, 'competition_results', resultId), {
-          submitted: true,
-          submitted_at: now,
-          updated_at: now
-        }, { merge: true });
-      });
-      await batch.commit();
+      await setDoc(participationDocRef(selectedCompetition.id), {
+        submitted: true,
+        submitted_at: now
+      }, { merge: true });
       setIsLocked(true);
       setLockedAt(now);
       setSuccess("Résultats verrouillés avec succès !");
@@ -467,13 +485,11 @@ const ClientCompetitions: React.FC = () => {
     // ✅ Une fois l'inscription confirmée, plus besoin de reposer la question à
     // chaque clic sur "Valider mes blocs" — voir `confirmedRegistrations`.
     if (confirmedRegistrations.current.has(competitionId)) return true;
-    const q = query(
-      collection(db, 'competition_participants'),
-      where('competition_id', '==', competitionId),
-      where('user_id', '==', user.uid)
-    );
-    const snapshot = await getDocs(q);
-    if (!snapshot.empty) {
+    // ✅ Chantier écritures point 2 : getDoc par ID déterministe plutôt qu'une
+    // requête — même coût en lecture, plus simple, et cohérent avec le chemin
+    // attendu par firestore.rules.
+    const snapshot = await getDoc(participationDocRef(competitionId));
+    if (snapshot.exists()) {
       confirmedRegistrations.current.add(competitionId);
       return true;
     }
