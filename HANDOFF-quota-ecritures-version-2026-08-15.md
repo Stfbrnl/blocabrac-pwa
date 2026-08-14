@@ -147,8 +147,9 @@ déterministe `${uid}_${competitionId}`, comme pour `competition_results`.
   participations réelles ré-écrites. Au passage : 1 document de test résiduel
   trouvé (`user_id` littéralement la chaîne `"null"`, compétition
   `comp_test_20260521`, `email: testcomp@test.com`) — explicitement exclu de
-  la migration plutôt que migré à l'aveugle. Toujours en base, pas nettoyé
-  (demande-le à l'utilisateur si tu veux le faire).
+  la migration plutôt que migré à l'aveugle. **Supprimé le 15/08/2026 sur
+  demande explicite de l'utilisateur** (doc `Ue6AHXLFriXlufC4Bfn4`,
+  vérification de contenu juste avant suppression, confirmée après).
 - Repli conservé sur l'ancien champ `submitted` de `competition_results` pour
   les compétitions déjà verrouillées avant ce chantier.
 
@@ -255,8 +256,8 @@ Déploiements : `--only hosting` pour V2.25/V2.26/V2.28 ;
 - **`ClientDaily` : lecture non bornée au premier montage** — seul poste qui
   se dégrade avec le simple passage du temps (voir V2.26 point 2b). Le vrai
   chantier (compteur incrémental) reste à faire, pas trivial.
-- **Document de test résiduel dans `competition_participants`** (voir section
-  3 ci-dessus) — détecté, exclu de la migration, jamais nettoyé.
+- ~~Document de test résiduel dans `competition_participants`~~ — **supprimé
+  le 15/08/2026**, voir section 3 ci-dessus.
 - **Correction admin des résultats après verrouillage** — les règles
   l'autorisent (`isUserRole("admin")` garde un accès libre), aucune interface
   ne l'exerce. Si une interface est construite un jour, la lecture
