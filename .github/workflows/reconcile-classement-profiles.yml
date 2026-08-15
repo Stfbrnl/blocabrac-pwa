@@ -1,0 +1,41 @@
+name: Réconciliation classement_profiles
+
+# Chantier "compteur incrémental" (CONCEPTION-selecteur-marge-compteur-incremental.md
+# §3) : classement_profiles/{uid}.colorCounts est maintenu par petites variations
+# (ClientDaily.tsx), pas recalculé depuis l'historique complet à chaque validation —
+# un compteur incrémental qui dérive un jour (écriture perdue, bug transitoire,
+# correction manuelle en base) sans mécanisme de correction dérive silencieusement et
+# définitivement. Ce workflow relance mensuellement scripts/reconcile-classement-profiles.js
+# en --fix (voir CLAUDE.md, section `classement_profiles` pour le détail du calcul).
+on:
+  schedule:
+    - cron: '30 3 1 * *' # 03h30 UTC le 1er de chaque mois (après le nettoyage d'images à 03h00)
+  workflow_dispatch: {} # déclenchement manuel possible depuis l'onglet Actions
+
+permissions:
+  contents: write # nécessaire pour committer cleanup-state/ après l'exécution
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+
+      - run: npm ci
+
+      - name: Réconciliation des profils de classement
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+        run: node scripts/reconcile-classement-profiles.js --fix
+
+      - name: Committer le journal des écarts corrigés (s'il y en a)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add cleanup-state/
+          git diff --staged --quiet || git commit -m "chore: réconciliation classement_profiles (écarts corrigés)"
+          git push
