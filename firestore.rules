@@ -132,8 +132,15 @@ service cloud.firestore {
 
     // ========== 3. Résultats des blocs (Client) ==========
     match /client_boulder_results/{docId} {
+      // ✅ "resource == null ||" en tête (CONCEPTION-selecteur-marge-compteur-incremental.md
+      // §3) : ClientDaily.tsx lit désormais l'ancien état d'UN SEUL bloc par un getDoc()
+      // direct sur son ID déterministe ("${uid}_${boulderId}") avant d'écrire le nouveau —
+      // pour un bloc jamais validé, ce document n'existe pas encore, et "resource.data.userId"
+      // planterait sans ce garde-fou (même correctif déjà appliqué à competition_participants,
+      // voir plus bas). Aucune fuite : un document inexistant n'a rien à renvoyer.
       allow read: if request.auth != null &&
-                     (resource.data.userId == request.auth.uid ||
+                     (resource == null ||
+                      resource.data.userId == request.auth.uid ||
                       isUserRole("admin") ||
                       isUserRole("moniteur") ||
                       isUserRole("ouvreur"));

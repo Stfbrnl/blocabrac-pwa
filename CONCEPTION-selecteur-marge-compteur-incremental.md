@@ -9,9 +9,9 @@
 >
 > | § | Chantier | Effort | Quand |
 > |---|---|---|---|
-> | §1 | Sélecteur live → paramètre d'URL | ~1 h | Avant la compétition |
-> | §2 | Ligne de base de lectures quotidiennes | 0 (relevé) | Sur plusieurs jours, dès maintenant |
-> | §3 | Compteur incrémental `ClientDaily` | Chantier | Pas d'urgence, **ne pas faire dans la précipitation** |
+> | §1 | Sélecteur live → paramètre d'URL | ~1 h | Avant la compétition — **FAIT 16/08/2026** |
+> | §2 | Ligne de base de lectures quotidiennes | 0 (relevé) | Sur plusieurs jours, dès maintenant — **toujours ouvert, relevé manuel** |
+> | §3 | Compteur incrémental `ClientDaily` | Chantier | Pas d'urgence en soi — **FAIT 16/08/2026 sur décision explicite de l'utilisateur**, malgré la recommandation de ne pas précipiter |
 >
 > Rien ici ne remet en cause le go de l'écran live : le chiffrage de 28 010 lectures
 > (56 % du plafond) est solide et sous le critère de sortie.
@@ -138,16 +138,57 @@ facultative**, c'est la seule chose qui indiquera où on en est pendant l'épreu
 
 ---
 
-## §3 — `ClientDaily` : le compteur incrémental
+## §3 — `ClientDaily` : le compteur incrémental (FAIT — 16/08/2026)
+
+✅ **Fait le 16/08/2026 par Claude Code (Codespace), sur demande explicite de
+l'utilisateur** ("je pense qu'il faut le faire malgré tout" — décision assumée de ne
+pas attendre malgré la recommandation "pas d'urgence" ci-dessous, toujours valable
+pour justifier le choix mais plus pour le calendrier).
+
+**Écart au plan proposé, à noter** : l'ordre de réalisation en 5 étapes ci-dessous
+(double écriture parallèle → script de réconciliation en simulation → migration →
+bascule de lecture → retrait de la double écriture) a été **condensé** plutôt que suivi
+à la lettre — l'échelle réelle du projet (une salle, 12 comptes, 1 avec des
+validations) rendait une bascule directe raisonnable à vérifier plutôt qu'un
+déploiement en plusieurs phases espacées dans le temps. Fait à la place :
+`utils/classementScore.ts` gagne `summaryFromColorCounts`/`scoreDeltaForValidation`
+(testés isolément, 15 tests dont 4 rejouent des séquences ajout/modification/retrait
+comparées au recalcul complet — voir `classementScore.test.ts`) ;
+`ClientDaily.tsx` bascule directement sur le nouveau chemin (plus d'ancien mode de
+calcul en parallèle) ; `scripts/reconcile-classement-profiles.js` sert à la fois de
+migration ET de garde-fou de réconciliation permanent (même script, deux usages —
+voir CLAUDE.md, section `classement_profiles`).
+
+**Découverte en testant le script contre la prod, sans rapport avec ce chantier** :
+`classement_profiles` était **entièrement vide** (0 document pour 12 comptes), y
+compris pour le seul compte ayant de vraies validations (7 blocs,
+`client_boulder_results` remonte à juin 2026). Tous les comptes existants ont été
+créés avant l'introduction de ce document mirroir et jamais rétro-remplis depuis.
+Le script (`--fix`, lancé une fois sur ce constat, confirmé par l'utilisateur) a
+créé le document manquant pour ce compte (score=1230, 7 blocs, bestColorRank=4) ;
+relancé en simulation ensuite, 0 écart. Les 11 autres comptes n'ont aucune
+validation à refléter — rien à corriger pour eux, `classementOptIn` reste de toute
+façon leur propre responsabilité (Register.tsx/ClientProfile.tsx/AdminUsers.tsx),
+ce script n'y touche jamais.
+
+**Ce qui n'a volontairement PAS été fait** : le badge system de `ClientStats.tsx`
+n'a pas été branché sur `colorCounts` (mentionné dans la conception comme bénéfice
+annexe, pas comme partie de ce chantier) — reste une piste ouverte si son propre
+calcul s'avère coûteux un jour.
+
+Vérifié : `npm run build`/`lint`/`test` (81 tests, dont 15 dans
+`classementScore.test.ts`) / `npm run test:rules` (74 tests, dont 3 nouveaux sur le
+garde-fou de lecture ajouté à `client_boulder_results`).
+
+### Le fond du problème (contexte d'origine, toujours valable)
 
 **Le seul poste de tout le projet qui se dégrade par le simple passage du temps.**
 
-Pas d'urgence — rien ne l'exige avant la compétition, et c'est un chantier avec migration
-et réconciliation. Ne pas le faire dans la précipitation.
+Pas d'urgence en soi — rien ne l'exigeait avant la compétition, et c'était un chantier
+avec migration et réconciliation, la recommandation ci-dessous restait de ne pas le
+précipiter. Fait quand même sur décision explicite de l'utilisateur (voir plus haut).
 
-### Le fond du problème
-
-`classement_profiles` est **recalculé** depuis l'historique complet à chaque mise à jour,
+`classement_profiles` était **recalculé** depuis l'historique complet à chaque mise à jour,
 alors qu'il pourrait être **maintenu**.
 
 Une validation est un événement ponctuel : elle devrait modifier le résumé, pas déclencher

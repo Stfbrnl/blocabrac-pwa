@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '../../../services/firebaseConfig';
-import { collection, query, where, getDocs, addDoc, setDoc, doc, getDoc } from 'firebase/firestore';
-import { summarizeValidatedResults } from '../../../utils/classementScore';
-import { getDocsCacheFirst } from '../../../utils/firestoreCacheFirst';
+import { collection, query, where, getDocs, addDoc, setDoc, doc, getDoc, runTransaction } from 'firebase/firestore';
+import { summaryFromColorCounts, scoreDeltaForValidation, type ColorCounts } from '../../../utils/classementScore';
 import {
   Container, Typography, Box, Button, CircularProgress, Alert,
   Dialog, DialogTitle, DialogContent, DialogActions,
@@ -102,44 +101,31 @@ const ClientDaily: React.FC = () => {
     return composed || uid;
   };
 
-  // ✅ Cache en mémoire de l'historique des réussites du grimpeur (boulderId ->
-  // essais), chargé une seule fois au montage (voir SUIVI-quota-lectures-competition.md)
-  // au lieu d'être requêté à Firestore à chaque validation. Contrairement au cas
-  // compétition (borné à ~35 blocs), cet historique grossit sans limite avec
-  // l'ancienneté du grimpeur : le relire à chaque clic Réussi/Échoué/Enregistrer
-  // (jusqu'à 2 fois par bloc, 20-30 blocs/jour) était le poste de lectures le
-  // plus dangereux de l'app en usage quotidien normal, pas seulement en
-  // compétition. `initialResultsLoadedRef` permet à `updateClassementProfile`
-  // d'attendre ce chargement avant de muter le cache si un clic arrive trop tôt.
+  // ✅ Compteur incrémental (CONCEPTION-selecteur-marge-compteur-incremental.md §3) :
+  // remplace l'ancien cache en mémoire préchargé au montage (historique complet des
+  // réussites, un `getDocs` non borné qui grossissait avec l'ancienneté du compte —
+  // voir git blame pour l'ancienne version). Une validation ne lit plus désormais que
+  // SON PROPRE bloc, à la demande, par un `getDoc` sur l'ID déterministe du résultat
+  // ("${uid}_${boulderId}") — coût constant, jamais proportionnel à l'historique.
   //
-  // ✅ Deux réserves connues sur ce cache (voir SUIVI-remontages-et-version.md
-  // point 2), traitées ici :
-  // - Non-borné : le nombre de documents lus au montage grossit avec
-  //   l'ancienneté du compte. Le borner par date casserait le classement (il
-  //   est cumulatif à vie, pas remis à zéro par saison — voir summarizeValidatedResults) ;
-  //   à la place, `getDocsCacheFirst` rend gratuit tout remontage de page sur le
-  //   même appareil une fois le cache local alimenté (même levier que le point 1
-  //   côté compétition). Le vrai chantier (compteur incrémental, qui
-  //   nécessiterait de recalculer `bestColorRank` sans relire tout l'historique)
-  //   reste ouvert — non trivial, `bestColorRank` n'est pas décomposable en delta.
-  // - Fraîcheur multi-onglets/appareils : après une absence prolongée (PWA
-  //   remise au premier plan), le cache mémoire peut être périmé si une
-  //   validation a été faite entretemps depuis un autre appareil/onglet. Un
-  //   listener `visibilitychange` plus bas force alors une relecture serveur
-  //   (pas cache-first, justement pour rattraper un écart cross-appareil).
-  const successfulAttemptsRef = useRef<Map<string, number>>(new Map());
-  const initialResultsLoadedRef = useRef<Promise<void> | null>(null);
+  // `previousStateCacheRef` évite de relire Firestore deux fois pour le même bloc dans
+  // la même session (ex. Réussi puis "Enregistrer" avec un nombre d'essais modifié) :
+  // après une transition, on y stocke le nouvel état, qui devient la référence pour la
+  // transition suivante. `undefined` = jamais consulté cette session (à lire) ;
+  // `null` = confirmé absent de Firestore (jamais validé avant cette session).
+  const previousStateCacheRef = useRef<Map<string, { attempts: number } | null>>(new Map());
 
-  // ✅ Chantier écritures point 5 : classement_profiles est un résumé dérivé
-  // (pas la donnée source), recalculé après chaque validation — pas besoin
-  // d'être exact à la seconde près. Debounce quelques secondes pour coalescer
-  // plusieurs validations rapprochées en une seule écriture, avec flush sur
-  // fermeture de la modale de détail et sur "pagehide" (mêmes précautions que
-  // le point 4 côté compétition/cours) — le résultat du bloc lui-même
-  // (client_boulder_results), lui, continue d'être écrit immédiatement.
+  // ✅ Chantier écritures point 5 (repris ici) : classement_profiles est un résumé
+  // dérivé, pas la donnée source — pas besoin d'être exact à la seconde près. Les
+  // deltas de score/couleur sont accumulés en mémoire et appliqués en une seule
+  // transaction Firestore après un debounce, avec flush sur fermeture de la modale de
+  // détail et sur "pagehide" (mêmes précautions que le point 4 côté compétition/cours)
+  // — le résultat du bloc lui-même (client_boulder_results) continue d'être écrit
+  // immédiatement.
   const CLASSEMENT_DEBOUNCE_MS = 3000;
   const classementWriteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const classementWritePending = useRef(false);
+  const pendingScoreDeltaRef = useRef(0);
+  const pendingColorDeltaRef = useRef<Map<string, number>>(new Map());
 
   // ✅ Chantier écritures point 3 : dernière valeur réellement PERSISTÉE (pas
   // affichée) par bloc pour client_boulder_results — évite une écriture si un
@@ -150,51 +136,6 @@ const ClientDaily: React.FC = () => {
   const lastPersistedResultRef = useRef<Record<string, {
     success: boolean; rating: number; comment: string; attempts: number; proposedDifficulty: string | null;
   }>>({});
-
-  const loadSuccessfulResults = React.useCallback(async (forceServer: boolean) => {
-    if (!user) return;
-    try {
-      const q = query(collection(db, 'client_boulder_results'), where('userId', '==', user.uid), where('success', '==', true));
-      const snapshot = forceServer ? await getDocs(q) : await getDocsCacheFirst(q);
-      const map = new Map<string, number>();
-      snapshot.forEach((docSnap) => {
-        const data = docSnap.data();
-        if (data.boulderId) map.set(data.boulderId, data.attempts || 1);
-      });
-      successfulAttemptsRef.current = map;
-    } catch (err) {
-      console.error("Erreur lors du chargement de l'historique des réussites:", err);
-    }
-  }, [user]);
-
-  useEffect(() => {
-    if (!user || loadingAuth) return;
-    initialResultsLoadedRef.current = loadSuccessfulResults(false);
-  }, [user, loadingAuth, loadSuccessfulResults]);
-
-  // ✅ Rafraîchit le cache depuis le serveur (pas depuis le cache local — voir
-  // ci-dessus) après une absence d'au moins 5 minutes, pour rattraper une
-  // validation faite entretemps sur un autre appareil/onglet.
-  useEffect(() => {
-    if (!user) return;
-    const STALE_AFTER_MS = 5 * 60 * 1000;
-    let hiddenAt: number | null = null;
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        hiddenAt = Date.now();
-        return;
-      }
-      if (document.visibilityState === 'visible' && hiddenAt !== null) {
-        const awayMs = Date.now() - hiddenAt;
-        hiddenAt = null;
-        if (awayMs >= STALE_AFTER_MS) {
-          initialResultsLoadedRef.current = loadSuccessfulResults(true);
-        }
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [user, loadSuccessfulResults]);
 
   useEffect(() => {
     if (!user || loadingAuth) return;
@@ -322,40 +263,72 @@ const ClientDaily: React.FC = () => {
     </Grid>
   );
 
+  // ✅ Couleur courante de chaque bloc actif — utilisée à la fois pour calculer le
+  // delta de points d'une validation et, si un jour un bloc est recoloré, pour que
+  // c'est SA prochaine validation (pas une relecture globale) qui applique le nouveau
+  // barème. Un bloc désactivé entre-temps (is_active devenu false) sort de `boulders`,
+  // donc de cette carte — comme avant ce chantier (l'ancien filtre `colorById.has(bId)`
+  // avait le même effet) : sa contribution au classement reste celle du dernier calcul
+  // avant désactivation, elle n'est plus mise à jour tant qu'il ne redevient pas actif.
+  // Cas marginal, inchangé par ce chantier — voir handleValidateSuccess/handleRate,
+  // qui n'appliquent un delta que si `colorById.get(boulderId)` résout une couleur.
+  const colorById = useMemo(
+    () => new Map(boulders.map((b) => [b.id, b.color || b.difficulty || 'Inconnu'])),
+    [boulders]
+  );
+
   // ✅ Classement en continu (ClientClassement.tsx) : un client ne peut pas lire les
-  // résultats des AUTRES clients (règles Firestore), donc chaque client recalcule et
-  // stocke SON PROPRE résumé sur sa fiche "classement_profiles" à chaque validation —
-  // le classement se contente ensuite de lire ces résumés déjà calculés. Appelé même
-  // en cas d'échec, pour que le score baisse correctement si "Réussi" est changé en
-  // "Échoué" (recalcul complet, jamais un simple incrément).
+  // résultats des AUTRES clients (règles Firestore), donc chaque client tient à jour
+  // SON PROPRE résumé sur sa fiche "classement_profiles" à chaque validation — le
+  // classement se contente ensuite de lire ces résumés déjà calculés.
   //
-  // ✅ Chantier écritures point 5 : l'écriture Firestore elle-même est
-  // débounced (voir CLASSEMENT_DEBOUNCE_MS) — la mutation du cache en mémoire
-  // (successfulAttemptsRef), elle, reste immédiate, donc l'état local
-  // (classement affiché ailleurs dans la session) n'est jamais en retard.
+  // ✅ Compteur incrémental (CONCEPTION-selecteur-marge-compteur-incremental.md §3,
+  // remplace l'ancien recalcul complet depuis successfulAttemptsRef) : cette fonction
+  // applique les deltas accumulés (pendingScoreDeltaRef/pendingColorDeltaRef) dans une
+  // transaction Firestore — jamais de lecture de l'historique complet. bouldersValidated
+  // et bestColorRank sont dérivés de colorCounts APRÈS application des deltas (jamais
+  // incrémentés indépendamment), pour n'avoir qu'une seule source de vérité.
   const flushClassementWrite = React.useCallback(async () => {
     if (classementWriteTimer.current) {
       clearTimeout(classementWriteTimer.current);
       classementWriteTimer.current = null;
     }
-    if (!classementWritePending.current || !user) return;
-    classementWritePending.current = false;
+    if (!user) return;
+    const scoreDelta = pendingScoreDeltaRef.current;
+    const colorDeltas = pendingColorDeltaRef.current;
+    if (scoreDelta === 0 && colorDeltas.size === 0) return;
+    // ✅ Capturé puis remis à zéro AVANT l'écriture (pas après) : un delta qui arrive
+    // pendant la transaction doit s'accumuler dans un nouveau cycle, pas se perdre s'il
+    // arrivait pendant l'await ci-dessous.
+    pendingScoreDeltaRef.current = 0;
+    pendingColorDeltaRef.current = new Map();
     try {
-      const colorById = new Map(boulders.map((b) => [b.id, b.color || b.difficulty || 'Inconnu']));
-      const validatedResults = Array.from(successfulAttemptsRef.current.entries())
-        .filter(([bId]) => colorById.has(bId))
-        .map(([bId, resAttempts]) => ({ color: colorById.get(bId) as string, attempts: resAttempts }));
-
-      const summary = summarizeValidatedResults(validatedResults);
-      await setDoc(doc(db, 'classement_profiles', user.uid), {
-        score: summary.score,
-        bouldersValidated: summary.bouldersValidated,
-        bestColorRank: summary.bestColorRank,
-      }, { merge: true });
+      const ref = doc(db, 'classement_profiles', user.uid);
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(ref);
+        const data = snap.exists() ? snap.data() : {};
+        const colorCounts: ColorCounts = { ...(data.colorCounts as ColorCounts | undefined) };
+        colorDeltas.forEach((delta, color) => {
+          colorCounts[color as keyof ColorCounts] = ((colorCounts[color as keyof ColorCounts] as number) || 0) + delta;
+        });
+        const { bouldersValidated, bestColorRank } = summaryFromColorCounts(colorCounts);
+        tx.set(ref, {
+          score: (data.score || 0) + scoreDelta,
+          bouldersValidated,
+          bestColorRank,
+          colorCounts,
+        }, { merge: true });
+      });
     } catch (err) {
       console.error('Erreur lors de la mise à jour du classement:', err);
+      // ✅ L'écriture a échoué : remettre les deltas en attente plutôt que les perdre
+      // silencieusement (ils seront réappliqués au prochain flush réussi).
+      pendingScoreDeltaRef.current += scoreDelta;
+      colorDeltas.forEach((delta, color) => {
+        pendingColorDeltaRef.current.set(color, (pendingColorDeltaRef.current.get(color) || 0) + delta);
+      });
     }
-  }, [user, boulders]);
+  }, [user]);
 
   // ✅ Flush sur "pagehide" (mêmes précautions que le point 4 côté compétition
   // / cours) : sans ça, une validation juste avant fermeture de l'onglet
@@ -366,22 +339,49 @@ const ClientDaily: React.FC = () => {
     return () => window.removeEventListener('pagehide', flushClassementWrite);
   }, [flushClassementWrite]);
 
-  const updateClassementProfile = async (uid: string, boulderId: string, success: boolean, resultAttempts: number) => {
-    // ✅ Attend le chargement initial (au montage) avant de muter le cache, au
-    // cas où un clic arrive avant que la première lecture soit terminée.
-    if (initialResultsLoadedRef.current) {
-      await initialResultsLoadedRef.current;
+  // ✅ Phase 1/2 (lecture pure, aucune mutation) : résout l'ancien état de CE bloc,
+  // lu une seule fois par session (pas l'historique entier) via un getDoc() ciblé sur
+  // l'ID déterministe du résultat. Appelée AVANT l'écrasement de client_boulder_results
+  // par l'appelant, pour lire l'état encore en base. Séparée de applyClassementDelta
+  // ci-dessous pour que rien ne soit muté si le setDoc qui suit échoue ensuite — sans
+  // quoi classement_profiles pourrait dériver d'un résultat jamais réellement écrit.
+  const resolvePreviousClassementState = async (uid: string, boulderId: string): Promise<{ attempts: number } | null> => {
+    const cached = previousStateCacheRef.current.get(boulderId);
+    if (cached !== undefined) return cached;
+    try {
+      const snap = await getDoc(doc(db, 'client_boulder_results', `${uid}_${boulderId}`));
+      return snap.exists() && snap.data().success ? { attempts: snap.data().attempts || 1 } : null;
+    } catch (err) {
+      console.error("Erreur lors de la lecture de l'ancien résultat:", err);
+      return null; // ✅ Traité comme "pas de validation antérieure" — le script de réconciliation corrigera un éventuel écart.
     }
-    if (success) {
-      successfulAttemptsRef.current.set(boulderId, resultAttempts);
-    } else {
-      successfulAttemptsRef.current.delete(boulderId);
-    }
+  };
 
-    classementWritePending.current = true;
+  // ✅ Phase 2/2 (mutation) : appelée seulement après le succès du setDoc de
+  // l'appelant. Accumule le delta dans les refs "pending" et planifie le flush débounced.
+  const applyClassementDelta = (
+    boulderId: string,
+    color: string,
+    previous: { attempts: number } | null,
+    success: boolean,
+    resultAttempts: number
+  ) => {
+    const newState = success ? { attempts: resultAttempts } : null;
+    pendingScoreDeltaRef.current += scoreDeltaForValidation(
+      color,
+      previous?.attempts ?? null,
+      newState?.attempts ?? null
+    );
+    const colorCountDelta = (newState ? 1 : 0) - (previous ? 1 : 0);
+    if (colorCountDelta !== 0) {
+      pendingColorDeltaRef.current.set(color, (pendingColorDeltaRef.current.get(color) || 0) + colorCountDelta);
+    }
+    previousStateCacheRef.current.set(boulderId, newState);
+
     if (classementWriteTimer.current) clearTimeout(classementWriteTimer.current);
     classementWriteTimer.current = setTimeout(() => { flushClassementWrite(); }, CLASSEMENT_DEBOUNCE_MS);
   };
+
 
   const handleValidateSuccess = async (boulderId: string, success: boolean) => {
     if (!user) return;
@@ -403,6 +403,12 @@ const ClientDaily: React.FC = () => {
       // (reclic sur "Réussi" déjà actif) — rien à écrire.
       return;
     }
+    // ✅ Lu AVANT l'écrasement du document (pure lecture, aucune mutation) : c'est le
+    // seul moment où l'ancien état de ce bloc est encore en base.
+    const classementColor = colorById.get(boulderId);
+    const previousClassementState = classementColor
+      ? await resolvePreviousClassementState(user.uid, boulderId)
+      : null;
     try {
       const resultId = `${user.uid}_${boulderId}`;
       await setDoc(doc(db, 'client_boulder_results', resultId), {
@@ -416,7 +422,11 @@ const ClientDaily: React.FC = () => {
       setSuccessResults(prev => ({ ...prev, [boulderId]: success }));
       setSuccess('Réussite enregistrée!');
       setTimeout(() => setSuccess(null), 3000);
-      await updateClassementProfile(user.uid, boulderId, success, candidate.attempts);
+      // ✅ Appliqué seulement maintenant que l'écriture a réussi : si le setDoc
+      // ci-dessus avait échoué, aucune mutation du classement n'aurait eu lieu.
+      if (classementColor) {
+        applyClassementDelta(boulderId, classementColor, previousClassementState, success, candidate.attempts);
+      }
     } catch (err: unknown) {
       setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -440,6 +450,15 @@ const ClientDaily: React.FC = () => {
         last.proposedDifficulty === candidate.proposedDifficulty) {
       return;
     }
+    // ✅ "Enregistrer" est le seul endroit où un changement du nombre d'essais fait
+    // après le clic Réussi/Échoué initial est réellement sauvegardé (même doc,
+    // ré-écrit ici) : il faut donc aussi rafraîchir le classement à ce moment, sinon
+    // le score reste basé sur la valeur d'essais du tout premier clic. Lu AVANT
+    // l'écrasement du document, même raison que dans handleValidateSuccess.
+    const classementColor = colorById.get(boulderId);
+    const previousClassementState = classementColor
+      ? await resolvePreviousClassementState(user.uid, boulderId)
+      : null;
     try {
       const resultId = `${user.uid}_${boulderId}`;
       await setDoc(doc(db, 'client_boulder_results', resultId), {
@@ -450,15 +469,13 @@ const ClientDaily: React.FC = () => {
         updatedAt: new Date().toISOString()
       });
       lastPersistedResultRef.current[boulderId] = candidate;
+      if (classementColor) {
+        applyClassementDelta(boulderId, classementColor, previousClassementState, candidate.success, candidate.attempts);
+      }
       setRatings(prev => ({ ...prev, [boulderId]: rating }));
       setComments(prev => ({ ...prev, [boulderId]: comment }));
       setSuccess('Note enregistrée!');
       setTimeout(() => setSuccess(null), 3000);
-      // ✅ "Enregistrer" est le seul endroit où un changement du nombre d'essais fait
-      // après le clic Réussi/Échoué initial est réellement sauvegardé (même doc,
-      // ré-écrit ici) : il faut donc aussi rafraîchir le classement à ce moment,
-      // sinon le score reste basé sur la valeur d'essais du tout premier clic.
-      await updateClassementProfile(user.uid, boulderId, candidate.success, candidate.attempts);
     } catch (err: unknown) {
       setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
     }
