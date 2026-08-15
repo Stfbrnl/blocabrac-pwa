@@ -7,8 +7,14 @@ import {
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '../../../services/firebaseConfig';
-import { calculatePoints } from '../../../utils/climbingPoints';
 import { getSeasonAge, getFfmeCategory, OPEN_CATEGORY } from '../../../utils/ageCategory';
+// ✅ Extrait dans competitionClassement.ts (CONCEPTION-ecran-live-competition.md §1) :
+// ce calcul existait en double avec AdminCompetitionStats.tsx.
+import {
+  getClassementByCategory as computeClassementByCategory,
+  type ScoreEntry,
+  type CategoryGroup,
+} from '../../../utils/competitionClassement';
 
 interface Competition {
   id: string;
@@ -46,24 +52,6 @@ interface Participant {
   gender?: string;
   level?: string;
 }
-
-interface ScoreEntry {
-  participant: Participant;
-  score: number;
-  boulders: number;
-}
-
-interface CategoryGroup {
-  category: string;
-  participants: ScoreEntry[];
-}
-
-// ✅ Signatures surchargées : le type de retour dépend de la valeur littérale passée
-// ("global" -> liste plate, "age"/"gender" -> groupes), pour éviter un cast à chaque appel.
-type GetClassementByCategory = {
-  (category: 'global'): ScoreEntry[];
-  (category: 'age' | 'gender'): CategoryGroup[];
-};
 
 interface User {
   uid: string;
@@ -210,69 +198,16 @@ const CompetitionStats: React.FC = () => {
     fetchData();
   }, [selectedCompetition, users]);
 
-  const getParticipantScores = (): ScoreEntry[] => {
-    const scores: Record<string, { score: number; boulders: number }> = {};
-
-    results.forEach(result => {
-      const participant = participants.find(p => p.user_id === result.user_id);
-      if (!participant) return;
-
-      const boulder = boulders.find(b => b.id === result.boulder_id);
-      if (!boulder) return;
-
-      const points = calculatePoints(boulder.color || boulder.difficulty, result.attempts, result.success);
-      const key = participant.user_id;
-
-      if (!scores[key]) {
-        scores[key] = { score: 0, boulders: 0 };
-      }
-      scores[key].score += points;
-      scores[key].boulders += result.success ? 1 : 0;
-    });
-
-    return Object.entries(scores).map(([userId, data]) => {
-      const participant = participants.find(p => p.user_id === userId)!;
-      return {
-        participant,
-        score: data.score,
-        boulders: data.boulders
-      };
-    }).sort((a, b) => b.score - a.score);
-  };
-
-  const getClassementByCategory = ((category: 'global' | 'age' | 'gender') => {
-    const scores = getParticipantScores();
-
+  function getClassementByCategory(category: 'global'): ScoreEntry<Participant>[];
+  function getClassementByCategory(category: 'age' | 'gender'): CategoryGroup<Participant>[];
+  function getClassementByCategory(
+    category: 'global' | 'age' | 'gender'
+  ): ScoreEntry<Participant>[] | CategoryGroup<Participant>[] {
     if (category === 'global') {
-      return scores;
-    } else if (category === 'age') {
-      const byAge: Record<string, ScoreEntry[]> = {};
-      scores.forEach(score => {
-        const ageCategory = getFfmeCategory(getSeasonAge(score.participant.dateOfBirth, score.participant.age));
-        if (!byAge[ageCategory]) {
-          byAge[ageCategory] = [];
-        }
-        byAge[ageCategory].push(score);
-      });
-      return Object.entries(byAge).map(([age, scores]) => ({
-        category: age,
-        participants: scores
-      }));
-    } else {
-      const byGender: Record<string, ScoreEntry[]> = {};
-      scores.forEach(score => {
-        const gender = score.participant.gender || 'Inconnu';
-        if (!byGender[gender]) {
-          byGender[gender] = [];
-        }
-        byGender[gender].push(score);
-      });
-      return Object.entries(byGender).map(([gender, scores]) => ({
-        category: gender,
-        participants: scores
-      }));
+      return computeClassementByCategory(results, participants, boulders, category);
     }
-  }) as GetClassementByCategory;
+    return computeClassementByCategory(results, participants, boulders, category);
+  }
 
   return (
     <Box sx={{ p: { xs: 1.5, sm: 3 } }}>
@@ -356,7 +291,7 @@ const CompetitionStats: React.FC = () => {
                         </TableRow>
                       </TableHead>
                       <TableBody>
-                        {category.participants.map((item: ScoreEntry, index: number) => (
+                        {category.participants.map((item: ScoreEntry<Participant>, index: number) => (
                           <TableRow key={index}>
                             <TableCell>{index + 1}</TableCell>
                             <TableCell>{item.participant.first_name} {item.participant.last_name}</TableCell>
@@ -389,7 +324,7 @@ const CompetitionStats: React.FC = () => {
                         </TableRow>
                       </TableHead>
                       <TableBody>
-                        {gender.participants.map((item: ScoreEntry, index: number) => (
+                        {gender.participants.map((item: ScoreEntry<Participant>, index: number) => (
                           <TableRow key={index}>
                             <TableCell>{index + 1}</TableCell>
                             <TableCell>{item.participant.first_name} {item.participant.last_name}</TableCell>
