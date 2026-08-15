@@ -180,6 +180,18 @@ Vérifié : `npm run build`/`lint`/`test` (81 tests, dont 15 dans
 `classementScore.test.ts`) / `npm run test:rules` (74 tests, dont 3 nouveaux sur le
 garde-fou de lecture ajouté à `client_boulder_results`).
 
+**Suite V2.36 (même jour) — automatisation, testée en conditions réelles** :
+`.github/workflows/reconcile-classement-profiles.yml` (cron mensuel + `workflow_dispatch`,
+même patron que `cleanup-orphan-boulder-images.yml`), `--fix` appliqué sans intervention
+sur décision explicite de l'utilisateur (une dérive de compteur incrémental est
+corrective par construction, contrairement à une suppression d'image potentiellement
+destructive — pas de garde-fou anti-chute équivalent nécessaire). Réutilise le secret
+`FIREBASE_SERVICE_ACCOUNT_JSON` déjà configuré, aucun nouveau secret. Déclenché
+manuellement par l'utilisateur depuis l'onglet Actions le 16/08/2026 : **passé
+entièrement au vert**, aucun commit du bot (attendu — le seul écart réel avait déjà été
+corrigé manuellement juste avant, rien à trouver sur ce run). Confirme que le workflow
+est opérationnel de bout en bout, pas seulement écrit.
+
 ### Le fond du problème (contexte d'origine, toujours valable)
 
 **Le seul poste de tout le projet qui se dégrade par le simple passage du temps.**
