@@ -7,11 +7,11 @@
 > hypothèses de l'époque ne sont plus valables — les écarts sont signalés explicitement,
 > parce que le handoff V2.25→V2.28 en reprend au moins un qui est faux (voir §2).
 >
-> **Statut : tous les prérequis sont levés (§1, §2, §3, §7 faits).** Le blocage de fond
-> (validations en état React, rien à afficher avant soumission) a été corrigé au
-> chantier 1. §1 (extraction, V2.29), §3 (chiffrage, mesuré empiriquement le 15/08,
-> critère de sortie respecté avec de la marge) et §7 (drapeau `liveDisplayEnabled`,
-> V2.30) sont faits. Reste uniquement à écrire l'écran lui-même (§4 à §6, §8 étape 5+).
+> **Statut : implémentation logicielle complète (§1 à §7 faits, V2.29-V2.32).**
+> Il ne reste que l'étape 8 du §8 — la répétition matérielle à froid (PC + HDMI + TV,
+> mode étendu, overscan, veille désactivée) — qui est hors périmètre d'un agent et
+> reste à faire par l'utilisateur avant le jour J, ainsi que la vérification manuelle
+> de l'ouverture en fenêtre séparée (pas de suite Playwright pour ce parcours).
 
 ---
 
@@ -327,10 +327,18 @@ Sans conséquence ici (le seul lecteur est l'admin lui-même), mais à ne pas co
    compétition (status == 'en cours' && liveDisplayEnabled == true), repère de version.
    Reste à vérifier manuellement l'ouverture en fenêtre séparée / mode étendu (pas
    automatisable, pas de suite Playwright — voir §9).
-6. Listeners + recalcul groupé. **← prochaine étape**
-7. Mise en page grand écran + rotation par catégorie.
+6. ✅ Listeners + recalcul groupé. FAIT, V2.32 (commit `449ce1b`) : deux `onSnapshot`
+   (`competition_results`, `competition_participants`) montés une fois par compétition
+   sélectionnée (remontage via `key={competition.id}`), blocs lus une seule fois
+   (`getDocs`), recalcul débounce à 1,5s via `competitionClassement.ts`. Aucun changement
+   de `firestore.rules` nécessaire (admin a déjà un accès en lecture complet).
+7. ✅ Mise en page grand écran + rotation par catégorie. FAIT, V2.32 (même commit) :
+   rotation toutes les 18s (Top 10 général fixe puis chaque catégorie FFME non vide),
+   grande typographie, marge anti-overscan, marqueur "provisoire", horodatage discret,
+   prénom + initiale (mineurs FFME).
 8. **Répétition matérielle à froid** : PC + câble HDMI + TV, mode étendu, overscan, veille
-   désactivée. Une fois, avant le jour J — pas le soir même.
+   désactivée. Une fois, avant le jour J — pas le soir même. **Hors périmètre d'un agent**
+   (matériel physique) : reste à faire par l'utilisateur.
 
 ---
 
