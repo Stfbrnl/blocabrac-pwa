@@ -56,6 +56,7 @@ const AdminCompetitionList = lazy(() => import('./pages/AdminCompetitionList'));
 const AdminCompetitionRegistration = lazy(() => import('./pages/AdminCompetitionRegistration'));
 const AdminCompetitionStats = lazy(() => import('./pages/AdminCompetitionStats'));
 const AdminCompetitionLiveDisplay = lazy(() => import('./pages/AdminCompetitionLiveDisplay'));
+const CompetitionJudgeEntry = lazy(() => import('./pages/CompetitionJudgeEntry'));
 const AdminAnnouncements = lazy(() => import('./pages/AdminAnnouncements'));
 
 export default function AppRoutes() {
@@ -129,6 +130,10 @@ export default function AppRoutes() {
             §1, 16/08/2026) : plus de sélecteur interne à l'écran, l'admin choisit
             depuis AdminCompetitionManagement.tsx. */}
         <Route path="/admin/competitions/live-display/:competitionId" element={<ProtectedRoute role="admin"><AdminCompetitionLiveDisplay /></ProtectedRoute>} />
+        {/* ✅ Écran juge (ADDENDUM-mode-ffme-finale-annee.md §3) : admin OU ouvreur,
+            accessible depuis les deux espaces (boutons dans AdminCompetitionManagement.tsx
+            et Ouvreur/CompetitionBoulders/CompetitionBouldersList.tsx). */}
+        <Route path="/competitions/judge-entry/:competitionId" element={<ProtectedRoute allowedRoles={['admin', 'ouvreur']}><CompetitionJudgeEntry /></ProtectedRoute>} />
         <Route path="/admin/announcements" element={<ProtectedRoute role="admin"><AdminAnnouncements /></ProtectedRoute>} />
       </Routes>
     </Suspense>

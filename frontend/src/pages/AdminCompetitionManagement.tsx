@@ -395,6 +395,21 @@ const AdminCompetitionManagement: React.FC = () => {
                         Ouvrir l'affichage TV
                       </Button>
                     )}
+                    {/* ✅ Écran juge (ADDENDUM-mode-ffme-finale-annee.md §3) : n'apparaît
+                        que pour les compétitions en mode de comptage "Officiel" — seul
+                        mode où ces 4 champs par bloc (top/essais/zone/essais-zone) ont un
+                        sens. Même écran accessible depuis l'espace Ouvreur (voir
+                        CompetitionBouldersList.tsx). */}
+                    {competition.scoring_mode === 'officiel' && (
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        sx={{ ml: 1 }}
+                        onClick={() => navigate(`/competitions/judge-entry/${competition.id}`)}
+                      >
+                        Saisie juge
+                      </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

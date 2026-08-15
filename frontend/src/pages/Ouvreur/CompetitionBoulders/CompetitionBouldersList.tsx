@@ -22,7 +22,7 @@ interface Competition {
   date: string;
   status: string;
   walls: string[];
-  scoring_mode?: 'blocabrac' | 'blocs_valides' | 'personnalise'; // ✅ Nouveau
+  scoring_mode?: 'blocabrac' | 'blocs_valides' | 'personnalise' | 'officiel'; // ✅ Nouveau
 }
 
 interface Boulder {
@@ -383,6 +383,17 @@ export default function CompetitionBouldersList(): JSX.Element {
               >
                 Réorganiser les numéros
               </Button>
+              {/* ✅ Écran juge (ADDENDUM-mode-ffme-finale-annee.md §3) : même écran que
+                  celui accessible depuis AdminCompetitionManagement.tsx, uniquement pour
+                  les compétitions en mode de comptage "Officiel". */}
+              {competitions.find(c => c.id === selectedCompetition)?.scoring_mode === 'officiel' && (
+                <Button
+                  variant="outlined"
+                  onClick={() => navigate(`/competitions/judge-entry/${selectedCompetition}`)}
+                >
+                  Saisie juge
+                </Button>
+              )}
               {boulders.length > 0 && (
                 <Button
                   variant="outlined"

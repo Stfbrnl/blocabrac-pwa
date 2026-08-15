@@ -249,3 +249,108 @@ describe('rankOfficialEntries (§B.4 : égalités massives sur l\'écran live)',
     expect(rankOfficialEntries(totals)).toEqual([1, 1, 3]);
   });
 });
+
+// ✅ ADDENDUM-mode-ffme-finale-annee.md §2, "Vérifiabilité à la main — à exploiter" :
+// jeu de test correspondant à une finale plausible (10 grimpeurs, 5 blocs), classement
+// attendu calculé À LA MAIN puis figé ici — la meilleure garantie disponible à cette
+// échelle contre un bug de comparateur, et bon marché puisque le classement complet se
+// vérifie au crayon. Inclut délibérément un ex æquo parfait au sommet (Alice/Bob) :
+// c'est l'issue probable à cette échelle (§2), pas un cas exceptionnel.
+describe('Finale de l\'année — jeu de test calculé à la main (10 grimpeurs / 5 blocs)', () => {
+  const finalists: TestParticipant[] = [
+    { user_id: 'alice', first_name: 'Alice' },
+    { user_id: 'bob', first_name: 'Bob' },
+    { user_id: 'carol', first_name: 'Carol' },
+    { user_id: 'dave', first_name: 'Dave' },
+    { user_id: 'eve', first_name: 'Eve' },
+    { user_id: 'frank', first_name: 'Frank' },
+    { user_id: 'grace', first_name: 'Grace' },
+    { user_id: 'heidi', first_name: 'Heidi' },
+    { user_id: 'ivan', first_name: 'Ivan' },
+    { user_id: 'judy', first_name: 'Judy' },
+  ];
+
+  // Chaque ligne : [user_id, boulder_id, success, attempts, zone, attempts_to_zone].
+  // Calcul à la main par grimpeur (tops, zones, essais-top cumulés, essais-zone cumulés) :
+  //   Alice (5,5,6,6)  Bob   (5,5,6,6) <- ex æquo parfait, volontaire
+  //   Carol (4,5,7,11) Dave  (3,4,4,7)
+  //   Eve   (3,3,6,6)  Frank (2,3,2,4)
+  //   Grace (1,2,2,7)  Heidi (0,2,0,7)
+  //   Ivan  (0,1,0,5)  Judy  (0,0,0,0) <- a tenté un bloc, sans zone ni top
+  const finaleResults = [
+    // Alice : top des 5 blocs, essais 1,1,2,1,1 -> tops=5 zones=5 top=6 zone=6
+    { user_id: 'alice', boulder_id: 'b1', success: true, attempts: 1, zone: true, attempts_to_zone: 1 },
+    { user_id: 'alice', boulder_id: 'b2', success: true, attempts: 1, zone: true, attempts_to_zone: 1 },
+    { user_id: 'alice', boulder_id: 'b3', success: true, attempts: 2, zone: true, attempts_to_zone: 2 },
+    { user_id: 'alice', boulder_id: 'b4', success: true, attempts: 1, zone: true, attempts_to_zone: 1 },
+    { user_id: 'alice', boulder_id: 'b5', success: true, attempts: 1, zone: true, attempts_to_zone: 1 },
+    // Bob : top des 5 blocs, essais 1,1,1,1,2 -> tops=5 zones=5 top=6 zone=6 (ex æquo Alice)
+    { user_id: 'bob', boulder_id: 'b1', success: true, attempts: 1, zone: true, attempts_to_zone: 1 },
+    { user_id: 'bob', boulder_id: 'b2', success: true, attempts: 1, zone: true, attempts_to_zone: 1 },
+    { user_id: 'bob', boulder_id: 'b3', success: true, attempts: 1, zone: true, attempts_to_zone: 1 },
+    { user_id: 'bob', boulder_id: 'b4', success: true, attempts: 1, zone: true, attempts_to_zone: 1 },
+    { user_id: 'bob', boulder_id: 'b5', success: true, attempts: 2, zone: true, attempts_to_zone: 2 },
+    // Carol : top de 4 blocs (1,2,1,3) + zone seule sur b5 (essai 4) -> tops=4 zones=5 top=7 zone=11
+    { user_id: 'carol', boulder_id: 'b1', success: true, attempts: 1, zone: true, attempts_to_zone: 1 },
+    { user_id: 'carol', boulder_id: 'b2', success: true, attempts: 2, zone: true, attempts_to_zone: 2 },
+    { user_id: 'carol', boulder_id: 'b3', success: true, attempts: 1, zone: true, attempts_to_zone: 1 },
+    { user_id: 'carol', boulder_id: 'b4', success: true, attempts: 3, zone: true, attempts_to_zone: 3 },
+    { user_id: 'carol', boulder_id: 'b5', success: false, attempts: 5, zone: true, attempts_to_zone: 4 },
+    // Dave : top de 3 blocs (1,2,1) + zone seule sur b4 (essai 3), b5 jamais tenté -> tops=3 zones=4 top=4 zone=7
+    { user_id: 'dave', boulder_id: 'b1', success: true, attempts: 1, zone: true, attempts_to_zone: 1 },
+    { user_id: 'dave', boulder_id: 'b2', success: true, attempts: 2, zone: true, attempts_to_zone: 2 },
+    { user_id: 'dave', boulder_id: 'b3', success: true, attempts: 1, zone: true, attempts_to_zone: 1 },
+    { user_id: 'dave', boulder_id: 'b4', success: false, attempts: 3, zone: true, attempts_to_zone: 3 },
+    // Eve : top de 3 blocs, essais 3,1,2, aucune zone supplémentaire -> tops=3 zones=3 top=6 zone=6
+    { user_id: 'eve', boulder_id: 'b1', success: true, attempts: 3, zone: true, attempts_to_zone: 3 },
+    { user_id: 'eve', boulder_id: 'b2', success: true, attempts: 1, zone: true, attempts_to_zone: 1 },
+    { user_id: 'eve', boulder_id: 'b3', success: true, attempts: 2, zone: true, attempts_to_zone: 2 },
+    // Frank : top de 2 blocs (1,1) + zone seule sur b3 (essai 2) -> tops=2 zones=3 top=2 zone=4
+    { user_id: 'frank', boulder_id: 'b1', success: true, attempts: 1, zone: true, attempts_to_zone: 1 },
+    { user_id: 'frank', boulder_id: 'b2', success: true, attempts: 1, zone: true, attempts_to_zone: 1 },
+    { user_id: 'frank', boulder_id: 'b3', success: false, attempts: 2, zone: true, attempts_to_zone: 2 },
+    // Grace : top de b1 (essai 2) + zone seule sur b2 (essai 5) -> tops=1 zones=2 top=2 zone=7
+    { user_id: 'grace', boulder_id: 'b1', success: true, attempts: 2, zone: true, attempts_to_zone: 2 },
+    { user_id: 'grace', boulder_id: 'b2', success: false, attempts: 5, zone: true, attempts_to_zone: 5 },
+    // Heidi : zone seule sur b1 (essai 3) et b2 (essai 4), aucun top -> tops=0 zones=2 top=0 zone=7
+    { user_id: 'heidi', boulder_id: 'b1', success: false, attempts: 3, zone: true, attempts_to_zone: 3 },
+    { user_id: 'heidi', boulder_id: 'b2', success: false, attempts: 4, zone: true, attempts_to_zone: 4 },
+    // Ivan : zone seule sur b1 (essai 5) -> tops=0 zones=1 top=0 zone=5
+    { user_id: 'ivan', boulder_id: 'b1', success: false, attempts: 5, zone: true, attempts_to_zone: 5 },
+    // Judy : a tenté b1 (3 essais) sans jamais atteindre la zone ni le top -> (0,0,0,0)
+    { user_id: 'judy', boulder_id: 'b1', success: false, attempts: 3, zone: false },
+  ];
+
+  it('reproduit le classement calculé à la main, ex æquo parfait au sommet inclus', () => {
+    const totals = getOfficialParticipantTotals(finaleResults, finalists);
+    const byId = Object.fromEntries(totals.map(t => [t.participant.user_id, t.totals]));
+
+    expect(byId.alice).toEqual({ tops: 5, zones: 5, attemptsToTop: 6, attemptsToZone: 6 });
+    expect(byId.bob).toEqual({ tops: 5, zones: 5, attemptsToTop: 6, attemptsToZone: 6 });
+    expect(byId.carol).toEqual({ tops: 4, zones: 5, attemptsToTop: 7, attemptsToZone: 11 });
+    expect(byId.dave).toEqual({ tops: 3, zones: 4, attemptsToTop: 4, attemptsToZone: 7 });
+    expect(byId.eve).toEqual({ tops: 3, zones: 3, attemptsToTop: 6, attemptsToZone: 6 });
+    expect(byId.frank).toEqual({ tops: 2, zones: 3, attemptsToTop: 2, attemptsToZone: 4 });
+    expect(byId.grace).toEqual({ tops: 1, zones: 2, attemptsToTop: 2, attemptsToZone: 7 });
+    expect(byId.heidi).toEqual({ tops: 0, zones: 2, attemptsToTop: 0, attemptsToZone: 7 });
+    expect(byId.ivan).toEqual({ tops: 0, zones: 1, attemptsToTop: 0, attemptsToZone: 5 });
+    expect(byId.judy).toEqual({ tops: 0, zones: 0, attemptsToTop: 0, attemptsToZone: 0 });
+
+    const orderedIds = totals.map(t => t.participant.user_id);
+    const ranks = rankOfficialEntries(totals);
+    const rankById = Object.fromEntries(orderedIds.map((id, i) => [id, ranks[i]]));
+
+    // Alice et Bob partagent le rang 1 (ex æquo parfait) ; le suivant (Carol) saute
+    // au rang 3, pas 2 — rang de compétition, pas un index séquentiel.
+    expect(rankById.alice).toBe(1);
+    expect(rankById.bob).toBe(1);
+    expect(rankById.carol).toBe(3);
+    expect(rankById.dave).toBe(4);
+    expect(rankById.eve).toBe(5);
+    expect(rankById.frank).toBe(6);
+    expect(rankById.grace).toBe(7);
+    expect(rankById.heidi).toBe(8);
+    expect(rankById.ivan).toBe(9);
+    expect(rankById.judy).toBe(10);
+  });
+});

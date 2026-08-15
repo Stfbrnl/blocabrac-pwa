@@ -25,6 +25,7 @@ import { resolve } from 'path';
 const CLIENT_UID = 'client-1';
 const OTHER_CLIENT_UID = 'client-2';
 const ADMIN_UID = 'admin-1';
+const OUVREUR_UID = 'ouvreur-1';
 const COMPETITION_ID = 'comp-1';
 const BOULDER_ID = 'boulder-1';
 const RESULT_ID = `${CLIENT_UID}_${BOULDER_ID}_${COMPETITION_ID}`;
@@ -55,6 +56,7 @@ beforeEach(async () => {
     await setDoc(doc(db, 'users', CLIENT_UID), { roles: ['client'] });
     await setDoc(doc(db, 'users', OTHER_CLIENT_UID), { roles: ['client'] });
     await setDoc(doc(db, 'users', ADMIN_UID), { roles: ['admin'] });
+    await setDoc(doc(db, 'users', OUVREUR_UID), { roles: ['ouvreur'] });
   });
 });
 
@@ -156,6 +158,21 @@ describe('competition_results : verrouillage à la soumission', () => {
   it('un client ne peut pas écrire le résultat d\'un autre client', async () => {
     const db = testEnv.authenticatedContext(OTHER_CLIENT_UID).firestore();
     await assertFails(setDoc(doc(db, 'competition_results', RESULT_ID), baseResultData()));
+  });
+
+  // ✅ Écran juge (ADDENDUM-mode-ffme-finale-annee.md §3) : un admin/ouvreur saisit les
+  // résultats DE TOUS LES GRIMPEURS, pas seulement les siens — donc une CRÉATION (pas
+  // une simple mise à jour, voir le test "peut modifier" plus haut) avec un user_id qui
+  // n'est pas le sien. Confirmé par les règles telles qu'écrites (accès admin/ouvreur
+  // déjà inconditionnel), vérifié ici comme demandé par la note.
+  it('un admin peut créer le résultat d\'un autre utilisateur (écran juge)', async () => {
+    const db = testEnv.authenticatedContext(ADMIN_UID).firestore();
+    await assertSucceeds(setDoc(doc(db, 'competition_results', RESULT_ID), baseResultData()));
+  });
+
+  it('un ouvreur peut créer le résultat d\'un autre utilisateur (écran juge)', async () => {
+    const db = testEnv.authenticatedContext(OUVREUR_UID).firestore();
+    await assertSucceeds(setDoc(doc(db, 'competition_results', RESULT_ID), baseResultData()));
   });
 });
 

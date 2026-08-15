@@ -52,16 +52,12 @@ interface LiveParticipant extends ParticipantBase {
   submitted: boolean;
 }
 
-// ✅ Mode "Officiel FFME/coupe du monde" : entrées de forme différente (totals, pas
-// score) — union discriminée par "totals" au rendu (voir renderEntryValue plus bas).
+// ✅ N'alimente plus que le mode à points (blocabrac/blocs_valides/personnalise) — le
+// mode "Officiel" a son propre rendu séparé (officialGenderGroups), sans rotation.
 interface LivePage {
   title: string;
-  entries: (ScoreEntry<LiveParticipant> | OfficialScoreEntry<LiveParticipant>)[];
+  entries: ScoreEntry<LiveParticipant>[];
 }
-
-const isOfficialEntry = (
-  entry: ScoreEntry<LiveParticipant> | OfficialScoreEntry<LiveParticipant>
-): entry is OfficialScoreEntry<LiveParticipant> => 'totals' in entry;
 
 // ✅ Prénom + initiale (§7, "Format d'affichage") : les catégories FFME impliquent des
 // mineurs, le nom complet n'est pas affiché sur un écran public.
@@ -138,8 +134,14 @@ const LiveCompetitionView: React.FC<{ competition: Competition }> = ({ competiti
   // type union sur globalClassement/byAgeClassement : plus simple à peupler depuis
   // scheduleRecompute, au prix de deux paires d'états dont une seule est jamais
   // utilisée pour une compétition donnée.
-  const [officialGlobalClassement, setOfficialGlobalClassement] = useState<OfficialScoreEntry<LiveParticipant>[]>([]);
-  const [officialByAgeClassement, setOfficialByAgeClassement] = useState<CategoryGroup<OfficialScoreEntry<LiveParticipant>>[]>([]);
+  //
+  // ✅ ADDENDUM-mode-ffme-finale-annee.md §1/§2 (16/08/2026) : le mode "Officiel" cible
+  // en réalité le format "Finale de l'année" (10 grimpeurs, 5 blocs) — pas la
+  // compétition à 90/35 pour laquelle la rotation par catégorie d'âge avait été conçue.
+  // Groupé par genre, pas par âge (une seule catégorie "open" à cette échelle) — voir plus bas,
+  // affiché côte à côte SANS rotation (deux classements de 5 lignes tiennent ensemble
+  // sur un seul écran).
+  const [officialByGenderClassement, setOfficialByGenderClassement] = useState<CategoryGroup<OfficialScoreEntry<LiveParticipant>>[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [pageIndex, setPageIndex] = useState(0);
 
@@ -187,11 +189,8 @@ const LiveCompetitionView: React.FC<{ competition: Competition }> = ({ competiti
       recomputeTimer = setTimeout(() => {
         recomputeTimer = null;
         if (isOfficialMode) {
-          setOfficialGlobalClassement(
-            getOfficialClassementByCategory(resultsRef.current, participantsRef.current, 'global')
-          );
-          setOfficialByAgeClassement(
-            getOfficialClassementByCategory(resultsRef.current, participantsRef.current, 'age')
+          setOfficialByGenderClassement(
+            getOfficialClassementByCategory(resultsRef.current, participantsRef.current, 'gender')
           );
         } else {
           setGlobalClassement(
@@ -248,30 +247,17 @@ const LiveCompetitionView: React.FC<{ competition: Competition }> = ({ competiti
   // ✅ "ne pas afficher 90 lignes" (§5) : rotation par catégorie FFME plutôt qu'un
   // classement général complet (8 pages de 90 lignes = ~90s par tour, un grimpeur
   // attendrait 40s en moyenne). Top 10 général fixe en première page.
+  // ✅ Mode "Officiel" exclu de cette logique depuis l'addendum : voir le rendu séparé
+  // plus bas (officialGenderGroups), sans rotation.
   const pages = useMemo<LivePage[]>(() => {
-    if (isOfficialMode) {
-      // ✅ Retour de ClaudeNav (§B.4) : à l'ouverture d'une épreuve, la quasi-totalité
-      // des participants sont à 0 top/0 zone — les afficher noierait le classement
-      // réel sous des lignes qui ne disent rien. On ne montre que ceux qui ont
-      // commencé à progresser (au moins un top ou une zone) ; "en attente" (déjà géré
-      // plus bas par !currentPage) s'affiche tant qu'il n'y en a aucun.
-      const hasProgress = (e: OfficialScoreEntry<LiveParticipant>) => e.totals.tops > 0 || e.totals.zones > 0;
-      const globalWithProgress = officialGlobalClassement.filter(hasProgress);
-      if (globalWithProgress.length === 0) return [];
-      const result: LivePage[] = [{ title: 'Top 10 — Classement général', entries: globalWithProgress.slice(0, 10) }];
-      officialByAgeClassement.forEach(group => {
-        const withProgress = group.participants.filter(hasProgress);
-        if (withProgress.length > 0) result.push({ title: group.category, entries: withProgress });
-      });
-      return result;
-    }
+    if (isOfficialMode) return [];
     if (globalClassement.length === 0) return [];
     const result: LivePage[] = [{ title: 'Top 10 — Classement général', entries: globalClassement.slice(0, 10) }];
     byAgeClassement.forEach(group => {
       if (group.participants.length > 0) result.push({ title: group.category, entries: group.participants });
     });
     return result;
-  }, [isOfficialMode, globalClassement, byAgeClassement, officialGlobalClassement, officialByAgeClassement]);
+  }, [isOfficialMode, globalClassement, byAgeClassement]);
 
   useEffect(() => {
     if (pages.length <= 1) return;
@@ -282,22 +268,83 @@ const LiveCompetitionView: React.FC<{ competition: Competition }> = ({ competiti
   }, [pages.length]);
 
   const currentPage = pages[pageIndex % pages.length] || null;
-  // ✅ Rang à égalités (1, 1, 3...) pour le mode "Officiel" uniquement — voir
-  // rankOfficialEntries. Une page ne mélange jamais les deux formes d'entrée
-  // (isOfficialMode est stable pour toute la vie de ce composant, voir plus haut).
   const currentPageRanks = useMemo(() => {
     if (!currentPage) return [];
-    if (!isOfficialMode) return currentPage.entries.map((_, i) => i + 1);
-    return rankOfficialEntries(currentPage.entries as OfficialScoreEntry<LiveParticipant>[]);
-  }, [currentPage, isOfficialMode]);
+    return currentPage.entries.map((_, i) => i + 1);
+  }, [currentPage]);
+
+  // ✅ Mode "Officiel" (ADDENDUM-mode-ffme-finale-annee.md §1/§2) : pas de rotation, les
+  // deux groupes (Hommes/Femmes — ou tout autre découpage de "gender") tiennent côte à
+  // côte sur un seul écran à cette échelle (5 lignes max chacun). Filtre "au moins un
+  // top ou une zone" conservé (§B.4 du document précédent, toujours valable) : au tout
+  // début de la finale, personne n'a encore progressé.
+  const officialGenderGroups = useMemo(() => {
+    const hasProgress = (e: OfficialScoreEntry<LiveParticipant>) => e.totals.tops > 0 || e.totals.zones > 0;
+    return officialByGenderClassement
+      .map(group => ({ category: group.category, participants: group.participants.filter(hasProgress) }))
+      .filter(group => group.participants.length > 0);
+  }, [officialByGenderClassement]);
 
   return (
-    <Box sx={{ width: '100%', maxWidth: 1100, display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <Box sx={{ width: '100%', maxWidth: isOfficialMode ? 1400 : 1100, display: 'flex', flexDirection: 'column', height: '100%' }}>
       <Typography variant="h3" sx={{ fontWeight: 700, mb: 1 }}>
         {competition.name}
       </Typography>
 
-      {!currentPage ? (
+      {isOfficialMode ? (
+        // ✅ Mode "Officiel" — ADDENDUM-mode-ffme-finale-annee.md §1/§2 : pas de
+        // rotation (deux classements de 5 lignes tiennent ensemble sur un seul écran),
+        // groupé par genre (pas par âge : une seule catégorie "open" à cette échelle).
+        officialGenderGroups.length === 0 ? (
+          <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Typography variant="h5" sx={{ opacity: 0.7 }}>
+              En attente des premières validations…
+            </Typography>
+          </Box>
+        ) : (
+          <Box sx={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'flex-start', justifyContent: 'center' }}>
+            {officialGenderGroups.map(group => {
+              const ranks = rankOfficialEntries(group.participants);
+              return (
+                <Box key={group.category} sx={{ minWidth: 420, flex: '1 1 420px' }}>
+                  <Typography variant="h4" sx={{ mb: 2, opacity: 0.9 }}>{group.category}</Typography>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    {group.participants.map((entry, index) => (
+                      <Box
+                        key={entry.participant.user_id}
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 2,
+                          py: 1,
+                          px: 2,
+                          borderRadius: 1,
+                          bgcolor: index % 2 === 0 ? 'rgba(255,255,255,0.06)' : 'transparent',
+                        }}
+                      >
+                        <Typography variant="h5" sx={{ width: '3ch', fontWeight: 700, opacity: 0.7 }}>
+                          {ranks[index]}
+                        </Typography>
+                        <Typography variant="h5" sx={{ flex: 1, textAlign: 'left', fontWeight: 600 }}>
+                          {displayName(entry.participant)}
+                        </Typography>
+                        {!entry.participant.submitted && (
+                          <Typography variant="body2" sx={{ opacity: 0.5, fontStyle: 'italic' }}>
+                            provisoire
+                          </Typography>
+                        )}
+                        <Typography variant="h5" sx={{ width: '13ch', textAlign: 'right', fontWeight: 700 }}>
+                          {entry.totals.tops}T · {entry.totals.zones}Z
+                        </Typography>
+                      </Box>
+                    ))}
+                  </Box>
+                </Box>
+              );
+            })}
+          </Box>
+        )
+      ) : !currentPage ? (
         <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Typography variant="h5" sx={{ opacity: 0.7 }}>
             En attente des premières validations…
@@ -337,17 +384,9 @@ const LiveCompetitionView: React.FC<{ competition: Competition }> = ({ competiti
                     provisoire
                   </Typography>
                 )}
-                {/* ✅ Mode "Officiel" : pas de points, tops/zones à la place — voir
-                    isOfficialEntry (union discriminée sur "totals"). */}
-                {isOfficialEntry(entry) ? (
-                  <Typography variant="h5" sx={{ width: '16ch', textAlign: 'right', fontWeight: 700 }}>
-                    {entry.totals.tops}T · {entry.totals.zones}Z
-                  </Typography>
-                ) : (
-                  <Typography variant="h5" sx={{ width: '8ch', textAlign: 'right', fontWeight: 700 }}>
-                    {entry.score} pts
-                  </Typography>
-                )}
+                <Typography variant="h5" sx={{ width: '8ch', textAlign: 'right', fontWeight: 700 }}>
+                  {entry.score} pts
+                </Typography>
               </Box>
             ))}
           </Box>
