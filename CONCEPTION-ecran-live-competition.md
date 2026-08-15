@@ -7,10 +7,11 @@
 > hypothèses de l'époque ne sont plus valables — les écarts sont signalés explicitement,
 > parce que le handoff V2.25→V2.28 en reprend au moins un qui est faux (voir §2).
 >
-> **Statut : faisable, prérequis levé.** Le blocage de fond (validations en état React,
-> rien à afficher avant soumission) a été corrigé au chantier 1. La question du
-> consentement a été tranchée le 15/08 (§7). Restent deux conditions techniques avant
-> d'écrire l'écran lui-même : §1 (extraction) et §3 (chiffrage).
+> **Statut : faisable, les deux prérequis techniques sont levés.** Le blocage de fond
+> (validations en état React, rien à afficher avant soumission) a été corrigé au
+> chantier 1. La question du consentement a été tranchée le 15/08 (§7). §1 (extraction,
+> V2.29) et §3 (chiffrage, mesuré empiriquement le 15/08) sont faits — le critère de
+> sortie du §3 est respecté avec de la marge. Reste à écrire l'écran lui-même (§4 à §8).
 
 ---
 
@@ -31,9 +32,15 @@ compétition. Le mode étendu est impératif, et l'ergonomie doit le rendre natu
 
 ---
 
-## §1 — Prérequis n°1 : extraire `getParticipantScores()` (à faire AVANT)
+## §1 — Prérequis n°1 : extraire `getParticipantScores()` (FAIT — V2.29)
 
-`getParticipantScores()` existe aujourd'hui **en double** :
+✅ **Fait le 15/08/2026 (commit `33df75d`).** Extrait dans
+`frontend/src/utils/competitionClassement.ts` (générique sur le type participant, modèle
+`classementScore.ts`), avec 9 tests dédiés. `AdminCompetitionStats.tsx` et
+`Ouvreur/CompetitionBoulders/CompetitionStats.tsx` délèguent maintenant à l'utilitaire ;
+comportement inchangé, vérifié (`npm run build`/`lint`/`test`).
+
+`getParticipantScores()` existait **en double** :
 
 - `AdminCompetitionStats.tsx`
 - `Ouvreur/CompetitionBoulders/CompetitionStats.tsx`
@@ -68,47 +75,51 @@ sur `competition_participants`, pas une lecture des résultats.
 
 ---
 
-## §3 — Prérequis n°2 : chiffrer le coût en lectures (à faire AVANT)
+## §3 — Prérequis n°2 : chiffrer le coût en lectures (FAIT — mesuré le 15/08/2026)
 
-**Personne n'a jamais chiffré ce poste, et c'est le plus lourd de la soirée** — l'écran
-live est le seul client qui lit *tous* les résultats, là où chaque grimpeur ne lit que les
-siens.
+✅ **Mesuré empiriquement**, pas juste estimé : `frontend/test/measure-live-screen-reads.mjs`
+(nouveau, même protocole émulateur que `measure-competition-writes.mjs` — client SDK signé
+admin, deux requêtes simulant les deux `onSnapshot`, comptage des documents reçus). Scénario
+délibérément pessimiste (upper bound de dimensionnement, pas une moyenne) : la grille de
+résultats est **déjà pleine** (90 × 35) au moment du premier montage, comme si l'admin
+ouvrait l'écran tard dans la soirée, **ET** la totalité d'une soirée d'écritures (mesurée
+séparément par `measure-competition-writes-after.mjs` : 82 écritures `competition_results` +
+1 verrouillage `competition_participants` par grimpeur) est rejouée en delta par-dessus,
+comme si l'écran avait aussi été ouvert dès le début. Les deux pires cas cumulés.
 
-### Estimation à confirmer
+### Résultat mesuré
 
-| Poste | Lectures |
+| Poste | Lectures mesurées |
 |---|---|
-| Snapshot initial `competition_results` (90 × 35) | ~3 150 |
-| Deltas sur la soirée (1 par écriture de n'importe qui) | ~7 200 |
-| Snapshot initial `competition_participants` | ~90 |
-| **Total écran live** | **~10 500** |
+| Snapshot initial `competition_results` (90 × 35) | 3 150 |
+| Snapshot initial `competition_participants` (90) | 90 |
+| Deltas `competition_results` (90 grimpeurs × 82 écritures) | 7 200 |
+| Deltas `competition_participants` (90 verrouillages) | 90 |
+| **Sous-total, 1 montage** | **10 530** |
+| + 2 remontages (repaient le snapshot initial : 3 240 × 2) | 6 480 |
+| **Total écran live, scénario à 3 remontages** | **17 010** |
 
-À rapprocher de l'existant mesuré : ~11 000 lectures pour les 90 grimpeurs réunis (dont
-~7 200 induites par la règle `isParticipationSubmitted()`).
+L'estimation initiale du 15/08 (~10 500 pour 1 montage) était quasiment exacte — confirmée
+à 30 écritures près (10 530).
 
-**Total soirée : ~21 500 lectures, soit ~43 % du plafond de 50 000** — contre 22 %
-aujourd'hui. Confortable, mais la marge est divisée par deux d'un coup.
+À rapprocher de l'existant mesuré séparément : ~11 000 lectures pour les 90 grimpeurs
+réunis (`HANDOFF-quota-ecritures-version-2026-08-15.md`, dont ~7 200 induites par la règle
+`isParticipationSubmitted()`).
 
-### Le vrai risque : les remontages
+**Total soirée (grimpeurs + écran live, 3 remontages) : 28 010 lectures, soit 56,0 % du
+plafond de 50 000.** Sous le critère de sortie de 30 000 — confortable mais serré : un
+quatrième remontage ajoute encore ~3 240 lectures et franchirait le seuil.
 
-**Chaque remontage de la page live repaie les ~3 150 documents du snapshot initial.**
-Rechargement accidentel, mise à jour du service worker en pleine soirée, veille du PC,
-plantage du navigateur : cinq remontages ajoutent ~15 000 lectures et portent le total
-au-delà de 70 % du plafond.
+### Le vrai risque reste les remontages
 
-C'est le même problème que celui corrigé côté client à V2.26, mais **bien plus coûteux par
-occurrence**.
+**Chaque remontage de la page live repaie les 3 240 documents du snapshot initial**
+(confirmé par la mesure ci-dessus). Rechargement accidentel, mise à jour du service worker
+en pleine soirée, veille du PC, plantage du navigateur : c'est le poste le plus sensible,
+et la marge du critère de sortie ne tolère qu'un remontage de plus que le scénario testé.
+Les parades sans développement ci-dessous restent donc impératives, pas optionnelles.
 
-### Ce qu'il faut faire
-
-Adapter `measure-competition-writes.mjs` (ou le script de lectures) pour simuler l'écran
-live : un client authentifié en admin, deux `onSnapshot`, N écritures de grimpeurs
-simulées, comptage des documents reçus. Relever le coût du snapshot initial et le coût par
-delta.
-
-**Critère de sortie : total soirée (grimpeurs + écran live) sous 30 000 lectures** dans un
-scénario à 3 remontages de la page live, pour garder de la marge à l'usage quotidien de la
-salle le même jour.
+**Critère de sortie du §3 : atteint** (28 010 < 30 000 lectures pour la soirée, scénario à
+3 remontages). Aucun besoin de revoir l'approche avant d'écrire l'écran.
 
 ### Parades sans développement (à documenter pour le jour J)
 
@@ -144,11 +155,14 @@ Deux `onSnapshot`, montés une fois :
 par une nouvelle requête. C'est la règle absolue : un refetch à chaque delta ferait
 exploser le quota (c'était l'erreur identifiée dès la première conception).
 
-⚠️ **Attention à la requête sur `competition_results`** : la collection ne portait pas de
-`competition_id` à l'origine, les stats passaient par les identifiants de blocs avec un
-découpage en lots de 10 (limite des clauses `in`). **Vérifier l'état actuel du schéma.** Si
-`competition_id` n'est toujours pas présent, le dénormaliser est le préalable — sinon
-l'écran live demande plusieurs listeners à orchestrer, pour rien.
+✅ **Vérifié le 15/08/2026 : `competition_id` est bien présent sur `competition_results`.**
+Les quatre écrans qui lisent cette collection (`AdminCompetitionStats.tsx`,
+`Ouvreur/CompetitionBoulders/CompetitionStats.tsx`, `ClientCompetitionStats.tsx`,
+`Ouvreur/ReportsAndStats/CompetitionBoulderStats.tsx`) interrogent déjà tous
+`where('competition_id', '==', ...)` directement, sans passer par un découpage en lots de
+10 sur les identifiants de blocs. L'inquiétude de la conception initiale (§4 d'origine)
+était obsolète — le schéma actuel ne demande qu'un seul listener par collection pour
+l'écran live, pas d'orchestration supplémentaire.
 
 ### Recalcul groupé
 
@@ -293,16 +307,16 @@ Sans conséquence ici (le seul lecteur est l'admin lui-même), mais à ne pas co
 
 ## §8 — Ordre de réalisation proposé
 
-1. **§1** — extraire `getParticipantScores()` + tests. Bénéfice immédiat même sans écran
-   live, et prérequis à tout le reste.
-2. Vérifier le schéma : `competition_id` présent sur `competition_results` ? Dénormaliser
-   si besoin.
+1. ✅ **§1** — extraire `getParticipantScores()` + tests. FAIT, V2.29 (commit `33df75d`).
+2. ✅ Vérifier le schéma : `competition_id` présent sur `competition_results` ? FAIT,
+   vérifié le 15/08/2026 — déjà présent, aucune migration nécessaire.
 3. **§7** — drapeau `liveDisplayEnabled` : schéma, interrupteur sur l'écran de création,
    verrouillage au déclenchement (règles + test), mention à l'inscription client,
    avertissement sur `AdminCompetitionRegistration.tsx`. Indépendant de l'écran lui-même,
-   peut être livré séparément.
-4. **§3** — chiffrer le coût du listener. Si le résultat dépasse le critère de sortie,
-   revoir l'approche avant d'aller plus loin.
+   peut être livré séparément. **← prochaine étape**
+4. ✅ **§3** — chiffrer le coût du listener. FAIT, mesuré le 15/08/2026
+   (`measure-live-screen-reads.mjs`) : 28 010 lectures/soirée (56,0 % du plafond) à 3
+   remontages, sous le critère de sortie de 30 000. Pas besoin de revoir l'approche.
 5. Route + layout nu + Wake Lock (coquille vide, vérifie l'ouverture en fenêtre séparée).
 6. Listeners + recalcul groupé.
 7. Mise en page grand écran + rotation par catégorie.
