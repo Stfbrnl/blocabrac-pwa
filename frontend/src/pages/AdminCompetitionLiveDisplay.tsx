@@ -7,6 +7,7 @@ import { formattedAppVersion } from '../config/appVersion';
 import {
   getClassementByCategory,
   getOfficialClassementByCategory,
+  rankOfficialEntries,
   type BoulderInput,
   type CompetitionResultInput,
   type ParticipantBase,
@@ -249,10 +250,18 @@ const LiveCompetitionView: React.FC<{ competition: Competition }> = ({ competiti
   // attendrait 40s en moyenne). Top 10 général fixe en première page.
   const pages = useMemo<LivePage[]>(() => {
     if (isOfficialMode) {
-      if (officialGlobalClassement.length === 0) return [];
-      const result: LivePage[] = [{ title: 'Top 10 — Classement général', entries: officialGlobalClassement.slice(0, 10) }];
+      // ✅ Retour de ClaudeNav (§B.4) : à l'ouverture d'une épreuve, la quasi-totalité
+      // des participants sont à 0 top/0 zone — les afficher noierait le classement
+      // réel sous des lignes qui ne disent rien. On ne montre que ceux qui ont
+      // commencé à progresser (au moins un top ou une zone) ; "en attente" (déjà géré
+      // plus bas par !currentPage) s'affiche tant qu'il n'y en a aucun.
+      const hasProgress = (e: OfficialScoreEntry<LiveParticipant>) => e.totals.tops > 0 || e.totals.zones > 0;
+      const globalWithProgress = officialGlobalClassement.filter(hasProgress);
+      if (globalWithProgress.length === 0) return [];
+      const result: LivePage[] = [{ title: 'Top 10 — Classement général', entries: globalWithProgress.slice(0, 10) }];
       officialByAgeClassement.forEach(group => {
-        if (group.participants.length > 0) result.push({ title: group.category, entries: group.participants });
+        const withProgress = group.participants.filter(hasProgress);
+        if (withProgress.length > 0) result.push({ title: group.category, entries: withProgress });
       });
       return result;
     }
@@ -273,6 +282,14 @@ const LiveCompetitionView: React.FC<{ competition: Competition }> = ({ competiti
   }, [pages.length]);
 
   const currentPage = pages[pageIndex % pages.length] || null;
+  // ✅ Rang à égalités (1, 1, 3...) pour le mode "Officiel" uniquement — voir
+  // rankOfficialEntries. Une page ne mélange jamais les deux formes d'entrée
+  // (isOfficialMode est stable pour toute la vie de ce composant, voir plus haut).
+  const currentPageRanks = useMemo(() => {
+    if (!currentPage) return [];
+    if (!isOfficialMode) return currentPage.entries.map((_, i) => i + 1);
+    return rankOfficialEntries(currentPage.entries as OfficialScoreEntry<LiveParticipant>[]);
+  }, [currentPage, isOfficialMode]);
 
   return (
     <Box sx={{ width: '100%', maxWidth: 1100, display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -307,7 +324,7 @@ const LiveCompetitionView: React.FC<{ competition: Competition }> = ({ competiti
                 }}
               >
                 <Typography variant="h5" sx={{ width: '3ch', fontWeight: 700, opacity: 0.7 }}>
-                  {index + 1}
+                  {currentPageRanks[index]}
                 </Typography>
                 <Typography variant="h5" sx={{ flex: 1, textAlign: 'left', fontWeight: 600 }}>
                   {displayName(entry.participant)}

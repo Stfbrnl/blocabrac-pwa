@@ -171,11 +171,36 @@ export interface OfficialScoreEntry<P extends ParticipantBase = ParticipantBase>
 
 // Ordre de départage officiel : le plus de tops, puis le plus de zones, puis le
 // moins d'essais pour les tops, puis le moins d'essais pour les zones.
+// ⚠️ Ordre issu de ma connaissance générale du format IFSC/coupe du monde, PAS d'une
+// lecture du règlement FFME en vigueur — à vérifier avant une compétition officielle
+// qui s'appuierait dessus pour départager un classement final (retour de ClaudeNav,
+// CONCEPTION-mode-ffme-et-garde-fou-reconciliation.md §B, 16/08/2026).
 const compareOfficialTotals = (a: OfficialTotals, b: OfficialTotals): number => {
   if (b.tops !== a.tops) return b.tops - a.tops;
   if (b.zones !== a.zones) return b.zones - a.zones;
   if (a.attemptsToTop !== b.attemptsToTop) return a.attemptsToTop - b.attemptsToTop;
   return a.attemptsToZone - b.attemptsToZone;
+};
+
+const officialTotalsEqual = (a: OfficialTotals, b: OfficialTotals): boolean =>
+  a.tops === b.tops && a.zones === b.zones && a.attemptsToTop === b.attemptsToTop && a.attemptsToZone === b.attemptsToZone;
+
+// ✅ Retour de ClaudeNav (§B.4) : à l'ouverture d'une épreuve, la quasi-totalité des
+// participants sont à 0 top/0 zone — un classement 1..N séquentiel les afficherait
+// comme réellement départagés alors qu'ils sont strictement ex æquo. Rang de
+// compétition standard (1, 1, 3, 4, 4, 6...) : deux totaux identiques partagent le
+// même rang, le suivant saute les positions occupées. `entries` doit déjà être triée
+// (sortie de getOfficialParticipantTotals/getOfficialClassementByCategory).
+export const rankOfficialEntries = <P extends ParticipantBase>(entries: OfficialScoreEntry<P>[]): number[] => {
+  const ranks: number[] = [];
+  entries.forEach((entry, index) => {
+    if (index === 0 || !officialTotalsEqual(entries[index - 1].totals, entry.totals)) {
+      ranks.push(index + 1);
+    } else {
+      ranks.push(ranks[index - 1]);
+    }
+  });
+  return ranks;
 };
 
 export const getOfficialParticipantTotals = <P extends ParticipantBase>(

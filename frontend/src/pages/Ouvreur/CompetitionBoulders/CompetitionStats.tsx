@@ -13,6 +13,7 @@ import { getSeasonAge, getFfmeCategory, OPEN_CATEGORY } from '../../../utils/age
 import {
   getClassementByCategory as computeClassementByCategory,
   getOfficialClassementByCategory as computeOfficialClassementByCategory,
+  rankOfficialEntries,
   type ScoreEntry,
   type OfficialScoreEntry,
   type CategoryGroup,
@@ -237,6 +238,11 @@ const CompetitionStats: React.FC = () => {
     return computeOfficialClassementByCategory(results, participants, category);
   }
 
+  // ✅ Rang à égalités (1, 1, 3...) plutôt que 1, 2, 3 séquentiel — même retour de
+  // ClaudeNav qu'à l'écran live (§B.4).
+  const officialGlobalEntries = isOfficialMode ? getOfficialClassementByCategory('global') : [];
+  const officialGlobalRanks = rankOfficialEntries(officialGlobalEntries);
+
   return (
     <Box sx={{ p: { xs: 1.5, sm: 3 } }}>
       <Typography variant="h4" gutterBottom>
@@ -291,9 +297,9 @@ const CompetitionStats: React.FC = () => {
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {getOfficialClassementByCategory('global').map((item, index) => (
+                      {officialGlobalEntries.map((item, index) => (
                         <TableRow key={index}>
-                          <TableCell>{index + 1}</TableCell>
+                          <TableCell>{officialGlobalRanks[index]}</TableCell>
                           <TableCell>{item.participant.first_name} {item.participant.last_name}</TableCell>
                           <TableCell>{item.totals.tops}</TableCell>
                           <TableCell>{item.totals.zones}</TableCell>
@@ -310,8 +316,9 @@ const CompetitionStats: React.FC = () => {
 
               <Paper sx={{ p: { xs: 1.5, sm: 2 }, mb: 3 }}>
                 <Typography variant="h6">Classement par Catégorie d'Âge</Typography>
-                {getOfficialClassementByCategory('age').map((category) => (
-                  category.participants.length > 0 && (
+                {getOfficialClassementByCategory('age').map((category) => {
+                  const ranks = rankOfficialEntries(category.participants);
+                  return category.participants.length > 0 && (
                     <Box key={category.category} sx={{ mb: 3 }}>
                       <Typography variant="subtitle1">{category.category}</Typography>
                       <TableContainer sx={{ overflowX: 'auto' }}>
@@ -329,7 +336,7 @@ const CompetitionStats: React.FC = () => {
                           <TableBody>
                             {category.participants.map((item, index) => (
                               <TableRow key={index}>
-                                <TableCell>{index + 1}</TableCell>
+                                <TableCell>{ranks[index]}</TableCell>
                                 <TableCell>{item.participant.first_name} {item.participant.last_name}</TableCell>
                                 <TableCell>{item.totals.tops}</TableCell>
                                 <TableCell>{item.totals.zones}</TableCell>
@@ -341,14 +348,15 @@ const CompetitionStats: React.FC = () => {
                         </Table>
                       </TableContainer>
                     </Box>
-                  )
-                ))}
+                  );
+                })}
               </Paper>
 
               <Paper sx={{ p: { xs: 1.5, sm: 2 } }}>
                 <Typography variant="h6">Classement par Genre</Typography>
-                {getOfficialClassementByCategory('gender').map((gender) => (
-                  gender.participants.length > 0 && (
+                {getOfficialClassementByCategory('gender').map((gender) => {
+                  const ranks = rankOfficialEntries(gender.participants);
+                  return gender.participants.length > 0 && (
                     <Box key={gender.category} sx={{ mb: 3 }}>
                       <Typography variant="subtitle1">{gender.category}</Typography>
                       <TableContainer sx={{ overflowX: 'auto' }}>
@@ -366,7 +374,7 @@ const CompetitionStats: React.FC = () => {
                           <TableBody>
                             {gender.participants.map((item, index) => (
                               <TableRow key={index}>
-                                <TableCell>{index + 1}</TableCell>
+                                <TableCell>{ranks[index]}</TableCell>
                                 <TableCell>{item.participant.first_name} {item.participant.last_name}</TableCell>
                                 <TableCell>{item.totals.tops}</TableCell>
                                 <TableCell>{item.totals.zones}</TableCell>
@@ -378,8 +386,8 @@ const CompetitionStats: React.FC = () => {
                         </Table>
                       </TableContainer>
                     </Box>
-                  )
-                ))}
+                  );
+                })}
               </Paper>
             </>
           ) : (

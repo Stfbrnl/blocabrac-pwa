@@ -14,6 +14,7 @@ import {
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import { calculateCompetitionPoints, type ScoringMode, type CustomScoringTable } from '../../../utils/climbingPoints';
+import { applyCompetitionValidationUpdate } from '../../../utils/competitionValidation';
 import { logoPath } from '../../../config/gymConfig';
 import { getBoulderImageUrl } from '../../../services/imageStorage';
 
@@ -531,15 +532,10 @@ const ClientCompetitions: React.FC = () => {
   ) => {
     if (isLocked) return;
     const current = validationResults[boulderId] || defaultValidationResult;
-    const result: ValidationResult = { ...current, ...updates };
-    // ✅ Un top implique la zone (elle est franchie en chemin, voir
-    // getOfficialParticipantTotals côté classement) : cocher "Réussi" coche donc
-    // aussi "Zone" si elle ne l'était pas déjà, jamais l'inverse ("Échoué" ne
-    // décoche pas une zone déjà atteinte indépendamment).
-    if (updates.success === true && !result.zone) {
-      result.zone = true;
-      if (result.attemptsToZone > result.attempts) result.attemptsToZone = result.attempts;
-    }
+    // ✅ Invariants du mode "Officiel" (top implique zone, essais-zone <= essais-top,
+    // pré-remplissage à la transition) imposés à LA SAISIE — extrait en fonction pure
+    // testable, voir utils/competitionValidation.ts (retour de ClaudeNav, §B.2).
+    const result = applyCompetitionValidationUpdate(current, updates);
     setValidationResults(prev => ({ ...prev, [boulderId]: result }));
 
     if (immediate) {
@@ -844,7 +840,11 @@ const ClientCompetitions: React.FC = () => {
                               onChange={(e) => handleValidateBoulder(boulder.id, { attemptsToZone: e.target.value as number })}
                               label="Nombre d'essais (zone)"
                             >
-                              {Array.from({ length: 15 }, (_, i) => i + 1).map(num => (
+                              {/* ✅ Contrainte à la saisie (retour de ClaudeNav, §B.2) : la zone est
+                                  nécessairement franchie avant ou au moment du top, donc jamais plus
+                                  d'essais que "result.attempts" — appliqué ici en amont (options
+                                  proposées), pas seulement recalé après coup par applyCompetitionValidationUpdate. */}
+                              {Array.from({ length: result.attempts }, (_, i) => i + 1).map(num => (
                                 <MenuItem key={num} value={num}>{num} essai{num > 1 ? 's' : ''}</MenuItem>
                               ))}
                             </Select>

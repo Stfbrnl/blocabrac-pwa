@@ -21,16 +21,26 @@
 //                                                            défaut, n'écrit jamais rien),
 //                                                            journalise chaque écart
 //   node reconcile-classement-profiles.js --fix           → corrige les profils en écart
-//   node reconcile-classement-profiles.js --uid <uid>      → un seul profil (débogage)
+//   node reconcile-classement-profiles.js --uid <uid>      → un seul profil (débogage,
+//                                                            ignore le garde-fou ci-dessous)
+//   node reconcile-classement-profiles.js --fix --force    → applique --fix même si le
+//                                                            garde-fou se déclenche
 //
-// Traite les comptes par lots avec reprise après interruption (pagination sur
-// l'identifiant de document) — recomputer tous les profils lit l'intégralité de
-// client_boulder_results, à surveiller quand le volume grandira (même remarque que
-// cleanup-orphan-boulder-images.js sur son propre coût de lecture).
-//
-// ✅ Vit dans scripts/ (suivi par git), pas dans firestore-migration/ (entièrement
-// ignoré) : un Codespace est éphémère, voir cleanup-orphan-boulder-images.js pour la
-// même raison. Les identifiants, eux, restent dans firestore-migration/ (jamais commités).
+// ✅ Garde-fou anti-dérive massive (retour de ClaudeNav, 16/08/2026,
+// CONCEPTION-mode-ffme-et-garde-fou-reconciliation.md §A) : "une dérive de compteur
+// incrémental est corrective par construction" n'est vrai QUE pour une dérive de
+// données — pas pour un bug du SCRIPT lui-même (dans son propre recalcul, ou après une
+// évolution du barème). Sans garde-fou, un tel bug serait propagé sans contrôle par le
+// cron mensuel à --fix à TOUS les profils, écrasant au passage les valeurs justes —
+// exactement le scénario destructif contre lequel cleanup-orphan-boulder-images.js est
+// déjà protégé (7 jours, chute > 20%). Repris ici : le calcul se fait TOUJOURS en
+// simulation d'abord (aucune écriture avant d'avoir vérifié l'ampleur de l'écart) ;
+// --fix n'écrit que si la proportion de profils en écart reste sous le seuil. Seuil
+// hybride (pourcentage ET nombre absolu) — même leçon que le garde-fou de nettoyage :
+// à 12 comptes, UN SEUL écart fait déjà 8%, un pur seuil en % se déclencherait à tort.
+const DRIFT_GUARD_RATIO = 0.3; // s'interrompt si plus de 30% des profils sont en écart...
+const DRIFT_GUARD_ABSOLUTE_MIN = 3; // ...ET qu'au moins 3 profils sont concernés
+
 const path = require('path');
 const fs = require('fs');
 const { initializeApp, cert } = require('firebase-admin/app');
@@ -53,6 +63,7 @@ const app = initializeApp({ credential: cert(readServiceAccount()) });
 const db = getFirestore(app);
 
 const FIX = process.argv.includes('--fix');
+const FORCE = process.argv.includes('--force');
 const uidArgIndex = process.argv.indexOf('--uid');
 const SINGLE_UID = uidArgIndex !== -1 ? process.argv[uidArgIndex + 1] : null;
 const BATCH_SIZE = 200;
@@ -131,7 +142,10 @@ function colorCountsEqual(a, b) {
   return true;
 }
 
-async function reconcileOne(uid, storedData, log, colorById) {
+// ✅ Calcul PUR (aucune écriture) : compare stocké vs attendu, renvoie l'écart le cas
+// échéant. Séparé de l'écriture pour que le garde-fou puisse évaluer l'ampleur de la
+// dérive AVANT que quoi que ce soit ne soit modifié — voir main().
+async function diffOne(uid, storedData, colorById) {
   const expected = await computeExpectedProfile(uid, colorById);
   const stored = {
     score: storedData.score || 0,
@@ -153,26 +167,21 @@ async function reconcileOne(uid, storedData, log, colorById) {
   }
 
   if (Object.keys(drift).length === 0) return { uid, drifted: false };
-
-  log.push({ uid, drift, fixedAt: FIX ? new Date().toISOString() : null });
-  if (FIX) {
-    await db.collection('classement_profiles').doc(uid).set({
-      score: expected.score,
-      bouldersValidated: expected.bouldersValidated,
-      bestColorRank: expected.bestColorRank,
-      colorCounts: expected.colorCounts,
-    }, { merge: true });
-  }
-  return { uid, drifted: true };
+  return { uid, drifted: true, drift, expected };
 }
 
-async function main() {
-  console.log(FIX ? 'Mode correction (--fix) : les écarts seront écrits.' : 'Mode simulation : aucune écriture.');
-  const colorById = await loadActiveColorById();
-  console.log(`${colorById.size} bloc(s) quotidien(s) actif(s) chargé(s).`);
-  const log = [];
-  let checked = 0;
-  let driftedCount = 0;
+async function fetchAllDiffs(colorById) {
+  const results = [];
+
+  if (SINGLE_UID) {
+    const userSnap = await db.collection('users').doc(SINGLE_UID).get();
+    if (!userSnap.exists) {
+      throw new Error(`Utilisateur introuvable : ${SINGLE_UID}`);
+    }
+    const profileSnap = await db.collection('classement_profiles').doc(SINGLE_UID).get();
+    results.push(await diffOne(SINGLE_UID, profileSnap.exists ? profileSnap.data() : {}, colorById));
+    return results;
+  }
 
   // ✅ Parcourt "users" (TOUT compte porte "client", invariant vérifié séparément —
   // voir CLAUDE.md), PAS "classement_profiles" : un compte créé avant l'introduction
@@ -180,51 +189,83 @@ async function main() {
   // jamais eu, même s'il a des validations réelles dans client_boulder_results. Partir
   // de "classement_profiles" manquerait ces comptes entièrement — c'est justement le
   // cas constaté en prod à l'écriture de ce script (12 comptes, 0 classement_profiles).
-  // Les champs d'identité (first_name, classementOptIn, ...) restent la responsabilité
-  // de Register.tsx/ClientProfile.tsx/AdminUsers.tsx : ce script ne touche jamais qu'aux
-  // 4 champs dérivés des validations (score/bouldersValidated/bestColorRank/colorCounts).
-  if (SINGLE_UID) {
-    const userSnap = await db.collection('users').doc(SINGLE_UID).get();
-    if (!userSnap.exists) {
-      console.error(`Utilisateur introuvable : ${SINGLE_UID}`);
-      process.exitCode = 1;
-      return;
-    }
-    const profileSnap = await db.collection('classement_profiles').doc(SINGLE_UID).get();
-    const result = await reconcileOne(SINGLE_UID, profileSnap.exists ? profileSnap.data() : {}, log, colorById);
-    checked = 1;
-    driftedCount = result.drifted ? 1 : 0;
-  } else {
-    // ✅ Pagination sur l'ID de document (pas d'offset) : reprise possible après
-    // interruption en relançant simplement le script — chaque lot déjà traité et non
-    // en écart n'a de toute façon rien écrit à annuler.
-    let lastDoc = null;
-    for (;;) {
-      let q = db.collection('users').orderBy('__name__').limit(BATCH_SIZE);
-      if (lastDoc) q = q.startAfter(lastDoc);
-      const snapshot = await q.get();
-      if (snapshot.empty) break;
+  let lastDoc = null;
+  for (;;) {
+    let q = db.collection('users').orderBy('__name__').limit(BATCH_SIZE);
+    if (lastDoc) q = q.startAfter(lastDoc);
+    const snapshot = await q.get();
+    if (snapshot.empty) break;
 
-      for (const userDoc of snapshot.docs) {
-        const profileSnap = await db.collection('classement_profiles').doc(userDoc.id).get();
-        const result = await reconcileOne(userDoc.id, profileSnap.exists ? profileSnap.data() : {}, log, colorById);
-        checked += 1;
-        if (result.drifted) driftedCount += 1;
-      }
-      lastDoc = snapshot.docs[snapshot.docs.length - 1];
-      console.log(`${checked} compte(s) vérifié(s)...`);
+    for (const userDoc of snapshot.docs) {
+      const profileSnap = await db.collection('classement_profiles').doc(userDoc.id).get();
+      results.push(await diffOne(userDoc.id, profileSnap.exists ? profileSnap.data() : {}, colorById));
     }
+    lastDoc = snapshot.docs[snapshot.docs.length - 1];
+    console.log(`${results.length} compte(s) vérifié(s)...`);
   }
+  return results;
+}
 
-  console.log(`\n${checked} profil(s) vérifié(s), ${driftedCount} en écart${FIX ? ' (corrigés)' : ''}.`);
+async function main() {
+  console.log(FIX ? 'Mode correction (--fix) : les écarts seront écrits si le garde-fou le permet.' : 'Mode simulation : aucune écriture.');
+  const colorById = await loadActiveColorById();
+  console.log(`${colorById.size} bloc(s) quotidien(s) actif(s) chargé(s).`);
 
-  if (log.length > 0) {
+  // ✅ Toujours calculé en simulation d'abord (aucune écriture ici) : le garde-fou a
+  // besoin de connaître l'ampleur de la dérive AVANT toute décision d'écrire.
+  const diffs = await fetchAllDiffs(colorById);
+  const drifted = diffs.filter((d) => d.drifted);
+  const checked = diffs.length;
+
+  console.log(`\n${checked} profil(s) vérifié(s), ${drifted.length} en écart.`);
+
+  // ✅ Journalisé même si le garde-fou interrompt ensuite tout — c'est ce journal qui
+  // permettra de trancher entre "vraie dérive" et "bug du script" (retour de ClaudeNav §A).
+  if (drifted.length > 0) {
     fs.mkdirSync(STATE_DIR, { recursive: true });
+    const log = drifted.map((d) => ({ uid: d.uid, drift: d.drift, fixedAt: null }));
     fs.writeFileSync(LOG_PATH, JSON.stringify(log, null, 2));
     console.log(`Détail des écarts journalisé dans ${LOG_PATH}`);
   }
-  if (!FIX && driftedCount > 0) {
-    console.log('Relancez avec --fix pour corriger ces profils.');
+
+  if (!FIX) {
+    if (drifted.length > 0) console.log('Relancez avec --fix pour corriger ces profils.');
+    return;
+  }
+
+  // ✅ Le garde-fou lui-même : ne se déclenche que si SINGLE_UID n'est pas utilisé (un
+  // débogage ciblé sur un seul compte n'a pas de "proportion" à évaluer) et si --force
+  // n'a pas été passé explicitement.
+  const ratio = checked > 0 ? drifted.length / checked : 0;
+  const guardTriggered = !SINGLE_UID && !FORCE &&
+    ratio > DRIFT_GUARD_RATIO && drifted.length >= DRIFT_GUARD_ABSOLUTE_MIN;
+
+  if (guardTriggered) {
+    console.error(
+      `\n🛑 Garde-fou déclenché : ${drifted.length}/${checked} profils en écart ` +
+      `(${(ratio * 100).toFixed(1)}%, seuil ${DRIFT_GUARD_RATIO * 100}% ET ≥${DRIFT_GUARD_ABSOLUTE_MIN}). ` +
+      `Une réconciliation saine trouve zéro ou un écart isolé — en trouver une telle proportion ` +
+      `signifie probablement un bug du SCRIPT (ou une évolution du barème non répercutée ici), ` +
+      `pas une dérive légitime à corriger. AUCUNE écriture effectuée. ` +
+      `Relancez avec --force si l'écart est confirmé légitime.`
+    );
+    process.exitCode = 1; // ✅ Échec visible du workflow, pas un run vert qui aurait refusé d'agir en silence.
+    return;
+  }
+
+  for (const d of drifted) {
+    await db.collection('classement_profiles').doc(d.uid).set({
+      score: d.expected.score,
+      bouldersValidated: d.expected.bouldersValidated,
+      bestColorRank: d.expected.bestColorRank,
+      colorCounts: d.expected.colorCounts,
+    }, { merge: true });
+  }
+
+  if (drifted.length > 0) {
+    const log = drifted.map((d) => ({ uid: d.uid, drift: d.drift, fixedAt: new Date().toISOString() }));
+    fs.writeFileSync(LOG_PATH, JSON.stringify(log, null, 2));
+    console.log(`${drifted.length} profil(s) corrigé(s).`);
   }
 }
 

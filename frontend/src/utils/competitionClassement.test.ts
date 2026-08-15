@@ -4,6 +4,7 @@ import {
   getClassementByCategory,
   getOfficialParticipantTotals,
   getOfficialClassementByCategory,
+  rankOfficialEntries,
   type ParticipantBase,
 } from './competitionClassement';
 
@@ -196,5 +197,55 @@ describe('getOfficialClassementByCategory', () => {
     const byAge = getOfficialClassementByCategory(results, participants, 'age');
     const allParticipants = byAge.flatMap(g => g.participants.map(p => p.participant.user_id));
     expect(allParticipants.sort()).toEqual(['alice', 'bob']);
+  });
+});
+
+describe('rankOfficialEntries (§B.4 : égalités massives sur l\'écran live)', () => {
+  const carol: TestParticipant = { user_id: 'carol', first_name: 'Carol', gender: 'F', age: 20 };
+
+  it('renvoie un tableau vide sans entrée', () => {
+    expect(rankOfficialEntries([])).toEqual([]);
+  });
+
+  it('classement 1..N sans aucune égalité', () => {
+    const results = [
+      { user_id: 'alice', boulder_id: 'b1', success: true, attempts: 1, zone: true, attempts_to_zone: 1 },
+      { user_id: 'bob', boulder_id: 'b1', success: false, attempts: 3, zone: true, attempts_to_zone: 3 },
+    ];
+    const totals = getOfficialParticipantTotals(results, participants);
+    expect(rankOfficialEntries(totals)).toEqual([1, 2]);
+  });
+
+  it('égalité parfaite en tête : rang de compétition (1, 1, 3), pas séquentiel (1, 2, 3)', () => {
+    // Alice et Bob strictement à égalité (0 top, 0 zone chacun) ; Carol dernière.
+    const results = [
+      { user_id: 'alice', boulder_id: 'b1', success: false, attempts: 5, zone: false, attempts_to_zone: 0 },
+      { user_id: 'bob', boulder_id: 'b1', success: false, attempts: 5, zone: false, attempts_to_zone: 0 },
+      { user_id: 'carol', boulder_id: 'b1', success: false, attempts: 8, zone: false, attempts_to_zone: 0 },
+    ];
+    const totals = getOfficialParticipantTotals(results, [alice, bob, carol]);
+    // Alice/Bob à égalité totale (0 tops/0 zones/0 essais comptés puisque ni top ni
+    // zone) -> même rang 1 ; Carol, à égalité elle aussi (aucun résultat compté),
+    // partage donc le même rang que les deux autres : cas "tous à zéro" du §B.4.
+    expect(rankOfficialEntries(totals)).toEqual([1, 1, 1]);
+  });
+
+  it('ouverture d\'épreuve : "tous à zéro" produit un rang unique pour tout le monde', () => {
+    const results = [
+      { user_id: 'alice', boulder_id: 'b1', success: false, attempts: 1 },
+      { user_id: 'bob', boulder_id: 'b1', success: false, attempts: 1 },
+    ];
+    const totals = getOfficialParticipantTotals(results, participants);
+    expect(rankOfficialEntries(totals)).toEqual([1, 1]);
+  });
+
+  it('après le rang partagé, le suivant saute les positions occupées (1, 1, 3)', () => {
+    const results = [
+      { user_id: 'alice', boulder_id: 'b1', success: true, attempts: 1, zone: true, attempts_to_zone: 1 },
+      { user_id: 'bob', boulder_id: 'b1', success: true, attempts: 1, zone: true, attempts_to_zone: 1 },
+      { user_id: 'carol', boulder_id: 'b1', success: false, attempts: 5, zone: true, attempts_to_zone: 3 },
+    ];
+    const totals = getOfficialParticipantTotals(results, [alice, bob, carol]);
+    expect(rankOfficialEntries(totals)).toEqual([1, 1, 3]);
   });
 });
