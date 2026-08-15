@@ -320,8 +320,14 @@ Sans conséquence ici (le seul lecteur est l'admin lui-même), mais à ne pas co
 4. ✅ **§3** — chiffrer le coût du listener. FAIT, mesuré le 15/08/2026
    (`measure-live-screen-reads.mjs`) : 28 010 lectures/soirée (56,0 % du plafond) à 3
    remontages, sous le critère de sortie de 30 000. Pas besoin de revoir l'approche.
-5. Route + layout nu + Wake Lock (coquille vide, vérifie l'ouverture en fenêtre séparée).
-6. Listeners + recalcul groupé.
+5. ✅ Route + layout nu + Wake Lock (coquille vide). FAIT, V2.31 (commit `e9af13b`) :
+   `AdminCompetitionLiveDisplay.tsx`, route `/admin/competitions/live-display`, Navbar
+   masquée sur cette route, bouton "Ouvrir l'affichage TV" (window.open) sur
+   `AdminCompetitionManagement.tsx` pour les compétitions diffusées, sélecteur de
+   compétition (status == 'en cours' && liveDisplayEnabled == true), repère de version.
+   Reste à vérifier manuellement l'ouverture en fenêtre séparée / mode étendu (pas
+   automatisable, pas de suite Playwright — voir §9).
+6. Listeners + recalcul groupé. **← prochaine étape**
 7. Mise en page grand écran + rotation par catégorie.
 8. **Répétition matérielle à froid** : PC + câble HDMI + TV, mode étendu, overscan, veille
    désactivée. Une fois, avant le jour J — pas le soir même.
