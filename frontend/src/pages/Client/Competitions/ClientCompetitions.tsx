@@ -40,6 +40,9 @@ interface Competition {
   registered_count: number;
   minLevel?: string;
   maxLevel?: string;
+  // ✅ Écran live TV (CONCEPTION-ecran-live-competition.md §7) : si vrai, la mention de
+  // diffusion est affichée ci-dessous — l'inscription vaut alors consentement.
+  liveDisplayEnabled?: boolean;
 }
 
 interface RegistrableUser {
@@ -184,7 +187,8 @@ const ClientCompetitions: React.FC = () => {
           max_participants: doc.data().max_participants || 0,
           registered_count: doc.data().registered_count || 0,
           minLevel: doc.data().minLevel,
-          maxLevel: doc.data().maxLevel
+          maxLevel: doc.data().maxLevel,
+          liveDisplayEnabled: doc.data().liveDisplayEnabled || false
         }));
         setCompetitions(competitionsData);
       } catch (err: unknown) {
@@ -677,6 +681,16 @@ const ClientCompetitions: React.FC = () => {
                   {selectedCompetition.maxLevel ? `max ${selectedCompetition.maxLevel}` : ''}
                 </Typography>
               ) : null}
+              {/* ✅ Mention de diffusion (CONCEPTION-ecran-live-competition.md §7) :
+                  seul mécanisme de consentement retenu — l'inscription qui suit vaut
+                  consentement. */}
+              {selectedCompetition.liveDisplayEnabled && (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  Le classement de cette compétition sera diffusé en direct sur l'écran
+                  de la salle pendant l'épreuve (prénom et initiale du nom uniquement).
+                  En vous inscrivant, vous en êtes informé·e.
+                </Alert>
+              )}
             </DialogContent>
             <DialogActions>
               <Button onClick={() => setOpenRegisterDialog(false)}>Annuler</Button>

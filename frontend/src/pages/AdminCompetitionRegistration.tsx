@@ -38,6 +38,10 @@ interface Competition {
   registered_count: number;
   minLevel?: Level; // ✅ Restrictions de niveau
   maxLevel?: Level;
+  // ✅ Écran live TV (CONCEPTION-ecran-live-competition.md §7) : un participant inscrit
+  // ici par l'admin ne voit jamais l'écran d'inscription client, donc jamais la mention
+  // de diffusion — d'où l'avertissement affiché plus bas quand ce champ est vrai.
+  liveDisplayEnabled?: boolean;
 }
 
 interface CompetitionParticipant {
@@ -161,7 +165,8 @@ const AdminCompetitionRegistration: React.FC = () => {
           max_participants: doc.data().max_participants || 50,
           registered_count: doc.data().registered_count || 0,
           minLevel: doc.data().minLevel,
-          maxLevel: doc.data().maxLevel
+          maxLevel: doc.data().maxLevel,
+          liveDisplayEnabled: doc.data().liveDisplayEnabled || false
         }));
         setCompetitions(competitionsData);
 
@@ -484,6 +489,18 @@ const AdminCompetitionRegistration: React.FC = () => {
                   </TableBody>
                 </Table>
               </TableContainer>
+            )}
+
+            {/* ✅ Trou de la chaîne de consentement (CONCEPTION-ecran-live-competition.md
+                §7) : une inscription faite ici ne passe jamais par l'écran client qui
+                affiche la mention de diffusion — l'admin doit en informer le participant
+                lui-même. */}
+            {selectedCompetition.liveDisplayEnabled && (
+              <Alert severity="warning" sx={{ mb: 2 }}>
+                Cette compétition sera diffusée en direct sur l'écran de la salle.
+                Un participant inscrit ici ne voit pas la mention de diffusion affichée
+                à l'inscription en ligne — assurez-vous qu'il en est informé.
+              </Alert>
             )}
 
             <Typography variant="h6" gutterBottom>

@@ -4,6 +4,7 @@ import {
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   IconButton, Dialog, DialogTitle, DialogContent, DialogActions,
   Snackbar, Alert, FormControl, InputLabel, Select, MenuItem, Chip,
+  FormControlLabel, Switch, Tooltip,
   useTheme, useMediaQuery
 } from '@mui/material';
 import { Delete as DeleteIcon, Edit as EditIcon, Add as AddIcon } from '@mui/icons-material';
@@ -27,6 +28,9 @@ interface Competition {
   registered_count: number;
   minLevel?: Level; // ✅ Nouveau : Niveau minimum
   maxLevel?: Level; // ✅ Nouveau : Niveau maximum
+  // ✅ Écran live TV (CONCEPTION-ecran-live-competition.md §7) : diffusion optionnelle,
+  // verrouillée côté règles dès que status quitte "à venir" (voir firestore.rules).
+  liveDisplayEnabled?: boolean;
 }
 
 const AdminCompetitionManagement: React.FC = () => {
@@ -48,7 +52,8 @@ const AdminCompetitionManagement: React.FC = () => {
     access_code: '',
     max_participants: 50,
     minLevel: undefined, // ✅ Nouveau
-    maxLevel: undefined  // ✅ Nouveau
+    maxLevel: undefined, // ✅ Nouveau
+    liveDisplayEnabled: false // ✅ Nouveau
   });
   const [editForm, setEditForm] = useState<Omit<Competition, 'id' | 'registered_count'>>({
     name: '',
@@ -57,7 +62,8 @@ const AdminCompetitionManagement: React.FC = () => {
     access_code: '',
     max_participants: 50,
     minLevel: undefined, // ✅ Nouveau
-    maxLevel: undefined  // ✅ Nouveau
+    maxLevel: undefined, // ✅ Nouveau
+    liveDisplayEnabled: false // ✅ Nouveau
   });
   const navigate = useNavigate();
 
@@ -75,7 +81,8 @@ const AdminCompetitionManagement: React.FC = () => {
           max_participants: doc.data().max_participants || 50,
           registered_count: doc.data().registered_count || 0,
           minLevel: doc.data().minLevel, // ✅ Nouveau
-          maxLevel: doc.data().maxLevel  // ✅ Nouveau
+          maxLevel: doc.data().maxLevel, // ✅ Nouveau
+          liveDisplayEnabled: doc.data().liveDisplayEnabled || false // ✅ Nouveau
         }));
         setCompetitions(competitionsData);
       } catch (error: unknown) {
@@ -108,6 +115,7 @@ const AdminCompetitionManagement: React.FC = () => {
         // de niveau n'est choisie) : on omet le champ plutôt que de le passer à undefined.
         ...(createForm.minLevel ? { minLevel: createForm.minLevel } : {}),
         ...(createForm.maxLevel ? { maxLevel: createForm.maxLevel } : {}),
+        liveDisplayEnabled: createForm.liveDisplayEnabled ?? false, // ✅ Nouveau
       });
       const querySnapshot = await getDocs(collection(db, 'competitions'));
       setCompetitions(querySnapshot.docs.map(doc => ({
@@ -119,7 +127,8 @@ const AdminCompetitionManagement: React.FC = () => {
         max_participants: doc.data().max_participants,
         registered_count: doc.data().registered_count || 0,
         minLevel: doc.data().minLevel, // ✅ Nouveau
-        maxLevel: doc.data().maxLevel  // ✅ Nouveau
+        maxLevel: doc.data().maxLevel, // ✅ Nouveau
+        liveDisplayEnabled: doc.data().liveDisplayEnabled || false // ✅ Nouveau
       })));
       setOpenCreateDialog(false);
       setSnackbarMessage("Compétition créée avec succès !");
@@ -140,10 +149,18 @@ const AdminCompetitionManagement: React.FC = () => {
       access_code: competition.access_code,
       max_participants: competition.max_participants,
       minLevel: competition.minLevel, // ✅ Nouveau
-      maxLevel: competition.maxLevel  // ✅ Nouveau
+      maxLevel: competition.maxLevel, // ✅ Nouveau
+      liveDisplayEnabled: competition.liveDisplayEnabled ?? false // ✅ Nouveau
     });
     setOpenEditDialog(true);
   };
+
+  // ✅ CONCEPTION-ecran-live-competition.md §7 : liveDisplayEnabled n'est modifiable
+  // que tant que la compétition est "à venir" (verrouillé côté règles au-delà —
+  // voir firestore.rules). Le formulaire d'édition désactive le switch dans ce cas,
+  // mais on garde ce garde-fou ici pour ne jamais envoyer une valeur différente de
+  // celle déjà en base une fois verrouillé (l'écriture serait de toute façon refusée).
+  const isLiveDisplayEditable = (competition: Competition) => competition.status === 'à venir';
 
   const handleUpdateCompetition = async () => {
     if (!selectedCompetition) return;
@@ -158,6 +175,9 @@ const AdminCompetitionManagement: React.FC = () => {
         // permet en plus d'effacer une restriction existante (contrairement à l'omettre).
         minLevel: editForm.minLevel || deleteField(),
         maxLevel: editForm.maxLevel || deleteField(),
+        liveDisplayEnabled: isLiveDisplayEditable(selectedCompetition)
+          ? (editForm.liveDisplayEnabled ?? false)
+          : selectedCompetition.liveDisplayEnabled ?? false,
       });
       const querySnapshot = await getDocs(collection(db, 'competitions'));
       setCompetitions(querySnapshot.docs.map(doc => ({
@@ -169,7 +189,8 @@ const AdminCompetitionManagement: React.FC = () => {
         max_participants: doc.data().max_participants,
         registered_count: doc.data().registered_count || 0,
         minLevel: doc.data().minLevel, // ✅ Nouveau
-        maxLevel: doc.data().maxLevel  // ✅ Nouveau
+        maxLevel: doc.data().maxLevel, // ✅ Nouveau
+        liveDisplayEnabled: doc.data().liveDisplayEnabled || false // ✅ Nouveau
       })));
       setOpenEditDialog(false);
       setSnackbarMessage("Compétition mise à jour avec succès !");
@@ -378,6 +399,26 @@ const AdminCompetitionManagement: React.FC = () => {
                   </Select>
                 </FormControl>
               </Box>
+
+              {/* ✅ Écran live TV (CONCEPTION-ecran-live-competition.md §7) : diffusion
+                  optionnelle par compétition, à décider avant le déclenchement — voir le
+                  Tooltip sur le switch du dialogue d'édition pour le verrouillage. */}
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={createForm.liveDisplayEnabled ?? false}
+                    onChange={(e) => setCreateForm({ ...createForm, liveDisplayEnabled: e.target.checked })}
+                  />
+                }
+                label="Diffuser le classement en direct sur l'écran TV"
+              />
+              {createForm.liveDisplayEnabled && (
+                <Alert severity="info">
+                  La mention de diffusion sera affichée aux participants à l'inscription.
+                  Une fois la compétition déclenchée ("en cours"), ce choix ne pourra plus
+                  être modifié.
+                </Alert>
+              )}
             </Box>
           </DialogContent>
           <DialogActions>
@@ -470,6 +511,31 @@ const AdminCompetitionManagement: React.FC = () => {
                   </Select>
                 </FormControl>
               </Box>
+
+              {/* ✅ Écran live TV (CONCEPTION-ecran-live-competition.md §7) : verrouillé
+                  côté règles dès que la compétition quitte "à venir" (firestore.rules)
+                  — le switch est désactivé ici pour ne pas laisser croire qu'un
+                  changement serait pris en compte. */}
+              <Tooltip
+                title={
+                  selectedCompetition && !isLiveDisplayEditable(selectedCompetition)
+                    ? "Verrouillé : la compétition a déjà été déclenchée. Ce choix ne peut plus être modifié."
+                    : ''
+                }
+              >
+                <span>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={editForm.liveDisplayEnabled ?? false}
+                        disabled={!selectedCompetition || !isLiveDisplayEditable(selectedCompetition)}
+                        onChange={(e) => setEditForm({ ...editForm, liveDisplayEnabled: e.target.checked })}
+                      />
+                    }
+                    label="Diffuser le classement en direct sur l'écran TV"
+                  />
+                </span>
+              </Tooltip>
             </Box>
           </DialogContent>
           <DialogActions>

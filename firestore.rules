@@ -303,9 +303,20 @@ service cloud.firestore {
       allow create, delete: if request.auth != null &&
                               (isUserRole("admin") ||
                                isUserRole("ouvreur"));
+      // ✅ liveDisplayEnabled (écran live TV, CONCEPTION-ecran-live-competition.md §7) :
+      // une fois la compétition déclenchée (status != 'à venir'), le drapeau devient
+      // non modifiable, y compris pour admin/ouvreur — à la différence du verrouillage
+      // de competition_results (qui exempte admin/ouvreur pour permettre des
+      // corrections), ce verrou porte justement sur les seuls comptes qui écrivent ce
+      // champ : le laisser modifiable romprait la garantie de consentement (un client
+      // voit la mention de diffusion à l'inscription, qui n'arrive qu'une fois la
+      // compétition "en cours" — voir ClientCompetitions.tsx). Dérivé de `status`
+      // plutôt qu'un flag séparé à tenir synchronisé (même choix que
+      // courseSessionStatus.ts : état dérivé, pas de booléen redondant).
       allow update: if request.auth != null &&
-                      (isUserRole("admin") ||
-                       isUserRole("ouvreur") ||
+                      (((isUserRole("admin") || isUserRole("ouvreur")) &&
+                        (resource.data.status == 'à venir' ||
+                         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['liveDisplayEnabled']))) ||
                        // ✅ Un client qui s'inscrit incrémente registered_count
                        // (ClientCompetitions.tsx) : restreint à ce seul champ.
                        (isUserRole("client") &&
