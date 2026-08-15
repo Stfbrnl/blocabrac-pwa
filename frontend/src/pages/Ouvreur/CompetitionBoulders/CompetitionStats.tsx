@@ -14,12 +14,16 @@ import {
   getClassementByCategory as computeClassementByCategory,
   type ScoreEntry,
   type CategoryGroup,
+  type ScoringMode,
+  type CustomScoringTable,
 } from '../../../utils/competitionClassement';
 
 interface Competition {
   id: string;
   name: string;
   date: string;
+  scoring_mode?: ScoringMode; // ✅ Nouveau
+  custom_scoring?: CustomScoringTable; // ✅ Nouveau
 }
 
 interface CompetitionResult {
@@ -39,6 +43,7 @@ interface Boulder {
   color?: string;
   number: number;
   wall: string;
+  points_value?: number; // ✅ Mode de comptage "Blocs validés" uniquement
 }
 
 interface Participant {
@@ -118,7 +123,9 @@ const CompetitionStats: React.FC = () => {
           .map(doc => ({
             id: doc.id,
             name: doc.data().name || '',
-            date: doc.data().date || ''
+            date: doc.data().date || '',
+            scoring_mode: doc.data().scoring_mode || 'blocabrac',
+            custom_scoring: doc.data().custom_scoring
           }));
         setCompetitions(competitionsData);
       } catch (err: unknown) {
@@ -164,7 +171,8 @@ const CompetitionStats: React.FC = () => {
           difficulty: doc.data().difficulty || '',
           color: doc.data().color,
           number: doc.data().number || 0,
-          wall: doc.data().wall || ''
+          wall: doc.data().wall || '',
+          points_value: doc.data().points_value
         }));
         setBoulders(bouldersData);
 
@@ -198,15 +206,19 @@ const CompetitionStats: React.FC = () => {
     fetchData();
   }, [selectedCompetition, users]);
 
+  const selectedCompetitionDoc = competitions.find(c => c.id === selectedCompetition);
+  const scoringMode = selectedCompetitionDoc?.scoring_mode || 'blocabrac';
+  const customScoring = selectedCompetitionDoc?.custom_scoring;
+
   function getClassementByCategory(category: 'global'): ScoreEntry<Participant>[];
   function getClassementByCategory(category: 'age' | 'gender'): CategoryGroup<Participant>[];
   function getClassementByCategory(
     category: 'global' | 'age' | 'gender'
   ): ScoreEntry<Participant>[] | CategoryGroup<Participant>[] {
     if (category === 'global') {
-      return computeClassementByCategory(results, participants, boulders, category);
+      return computeClassementByCategory(results, participants, boulders, category, scoringMode, customScoring);
     }
-    return computeClassementByCategory(results, participants, boulders, category);
+    return computeClassementByCategory(results, participants, boulders, category, scoringMode, customScoring);
   }
 
   return (

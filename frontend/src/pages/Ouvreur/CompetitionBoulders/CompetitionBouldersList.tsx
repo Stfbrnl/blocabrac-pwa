@@ -22,6 +22,7 @@ interface Competition {
   date: string;
   status: string;
   walls: string[];
+  scoring_mode?: 'blocabrac' | 'blocs_valides' | 'personnalise'; // ✅ Nouveau
 }
 
 interface Boulder {
@@ -38,6 +39,7 @@ interface Boulder {
   competition_active?: boolean;
   is_active: boolean;
   difficulty_level?: 'Plus' | 'Égal' | 'Moins';
+  points_value?: number; // ✅ Mode de comptage "Blocs validés" uniquement
 }
 
 const colorRatings: { value: string; label: string }[] = colorGrades.map(
@@ -204,6 +206,9 @@ export default function CompetitionBouldersList(): JSX.Element {
     await updateDoc(doc(db, 'boulders', boulderToRemove), {
       competition_id: deleteField(),
       competition_active: deleteField(),
+      // ✅ Une valeur en points n'a de sens que pour CETTE compétition (mode "Blocs
+      // validés") — la laisser survivrait sur un bloc redevenu purement quotidien.
+      points_value: deleteField(),
     });
     setBoulders(boulders.filter(b => b.id !== boulderToRemove));
     setOpenRemoveDialog(false);
@@ -283,11 +288,18 @@ export default function CompetitionBouldersList(): JSX.Element {
       const batch = writeBatch(db);
       boulders.forEach((boulder) => {
         if (isReusedDailyBoulder(boulder)) {
-          batch.update(doc(db, 'boulders', boulder.id), { competition_active: deleteField() });
+          // ✅ Même raison que dans handleConfirmRemove : la valeur en points ne
+          // vaut que pour cette compétition, elle doit repartir avec elle.
+          batch.update(doc(db, 'boulders', boulder.id), { competition_active: deleteField(), points_value: deleteField() });
         } else {
+          // ✅ Ce bloc devient un bloc quotidien ordinaire : s'il est un jour
+          // réutilisé dans une future compétition en mode "Blocs validés", sa
+          // valeur en points doit être ressaisie pour cette nouvelle épreuve,
+          // jamais hériter de celle d'une compétition passée déjà terminée.
           batch.update(doc(db, 'boulders', boulder.id), {
             type: 'daily',
             color: boulder.difficulty,
+            points_value: deleteField(),
           });
         }
       });
@@ -305,6 +317,24 @@ export default function CompetitionBouldersList(): JSX.Element {
 
   const newlyCreatedCount = boulders.filter(b => !isReusedDailyBoulder(b)).length;
   const reusedCount = boulders.filter(isReusedDailyBoulder).length;
+  // ✅ Les blocs créés pour l'épreuve saisissent déjà leur valeur en points dans leur
+  // propre formulaire (CompetitionBoulderForm.tsx) ; cette colonne ne sert donc qu'aux
+  // blocs quotidiens réutilisés, seuls à ne pas passer par ce formulaire.
+  const isBlocsValidesMode = competitions.find(c => c.id === selectedCompetition)?.scoring_mode === 'blocs_valides';
+
+  const handlePointsValueChange = (boulderId: string, rawValue: string): void => {
+    const value = rawValue === '' ? undefined : parseInt(rawValue, 10) || 0;
+    setBoulders(prev => prev.map(b => (b.id === boulderId ? { ...b, points_value: value } : b)));
+  };
+
+  const handlePointsValueBlur = async (boulderId: string, value: number | undefined): Promise<void> => {
+    try {
+      await updateDoc(doc(db, 'boulders', boulderId), { points_value: value ?? deleteField() });
+    } catch (error: unknown) {
+      console.error('Erreur lors de la sauvegarde de la valeur en points :', error);
+      alert('Une erreur est survenue lors de la sauvegarde de la valeur en points.');
+    }
+  };
 
   return (
     <Container maxWidth="lg">
@@ -376,6 +406,7 @@ export default function CompetitionBouldersList(): JSX.Element {
                       <TableCell>Origine</TableCell>
                       <TableCell>Difficulté (interne)</TableCell>
                       <TableCell>Types</TableCell>
+                      {isBlocsValidesMode && <TableCell>Points</TableCell>}
                       <TableCell>Actions</TableCell>
                     </TableRow>
                   </TableHead>
@@ -421,6 +452,26 @@ export default function CompetitionBouldersList(): JSX.Element {
                           )}
                         </TableCell>
                         <TableCell>{boulder.difficulty_types?.join(', ') || 'Aucun'}</TableCell>
+                        {isBlocsValidesMode && (
+                          <TableCell>
+                            {isReusedDailyBoulder(boulder) ? (
+                              <TextField
+                                type="number"
+                                value={boulder.points_value ?? ''}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>): void =>
+                                  handlePointsValueChange(boulder.id, e.target.value)
+                                }
+                                onBlur={(e: React.FocusEvent<HTMLInputElement>): void => {
+                                  void handlePointsValueBlur(boulder.id, e.target.value === '' ? undefined : parseInt(e.target.value, 10) || 0);
+                                }}
+                                size="small"
+                                sx={{ width: 90 }}
+                              />
+                            ) : (
+                              boulder.points_value ?? '—'
+                            )}
+                          </TableCell>
+                        )}
                         <TableCell>
                           {isReusedDailyBoulder(boulder) ? (
                             <>

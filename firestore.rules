@@ -313,10 +313,15 @@ service cloud.firestore {
       // compétition "en cours" — voir ClientCompetitions.tsx). Dérivé de `status`
       // plutôt qu'un flag séparé à tenir synchronisé (même choix que
       // courseSessionStatus.ts : état dérivé, pas de booléen redondant).
+      // ✅ scoring_mode/custom_scoring (chantier "comptes de points") : même verrou —
+      // changer le mode de comptage en cours d'épreuve changerait rétroactivement le
+      // classement de tout le monde, pas seulement des prochaines validations.
+      // AdminCompetitionManagement.tsx désactive déjà le bouton côté UI (isScoringModeEditable)
+      // mais ce n'est qu'un confort d'affichage — l'enforcement qui compte est ici.
       allow update: if request.auth != null &&
                       (((isUserRole("admin") || isUserRole("ouvreur")) &&
                         (resource.data.status == 'à venir' ||
-                         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['liveDisplayEnabled']))) ||
+                         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['liveDisplayEnabled', 'scoring_mode', 'custom_scoring']))) ||
                        // ✅ Un client qui s'inscrit incrémente registered_count
                        // (ClientCompetitions.tsx) : restreint à ce seul champ.
                        (isUserRole("client") &&

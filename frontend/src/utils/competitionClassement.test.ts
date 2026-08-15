@@ -54,6 +54,26 @@ describe('getParticipantScores', () => {
       { participant: alice, score: 100, boulders: 1 },
     ]);
   });
+
+  it('mode "blocs_valides" : additionne points_value sans tenir compte des essais', () => {
+    const valBoulders = [
+      { id: 'b1', difficulty: 'bleu', points_value: 150 },
+      { id: 'b2', difficulty: 'rose', points_value: 900 },
+    ];
+    const results = [
+      { user_id: 'alice', boulder_id: 'b1', success: true, attempts: 4 },
+      { user_id: 'alice', boulder_id: 'b2', success: true, attempts: 1 },
+    ];
+    expect(getParticipantScores(results, participants, valBoulders, 'blocs_valides'))
+      .toEqual([{ participant: alice, score: 1050, boulders: 2 }]);
+  });
+
+  it('mode "personnalise" : applique le barème par couleur fourni pour cette compétition', () => {
+    const results = [{ user_id: 'alice', boulder_id: 'b1', success: true, attempts: 1 }];
+    const customScoring = { bleu: { base: 999, deduction: 0 } };
+    expect(getParticipantScores(results, participants, boulders, 'personnalise', customScoring))
+      .toEqual([{ participant: alice, score: 999, boulders: 1 }]);
+  });
 });
 
 describe('getClassementByCategory', () => {

@@ -1,5 +1,7 @@
-import { calculatePoints } from './climbingPoints';
+import { calculateCompetitionPoints, type ScoringMode, type CustomScoringTable } from './climbingPoints';
 import { getSeasonAge, getFfmeCategory } from './ageCategory';
+
+export type { ScoringMode, CustomScoringTable };
 
 // ✅ Extrait de AdminCompetitionStats.tsx / Ouvreur/CompetitionBoulders/CompetitionStats.tsx
 // (CONCEPTION-ecran-live-competition.md §1) : ce calcul existait en double, et un
@@ -25,6 +27,8 @@ export interface BoulderInput {
   id: string;
   color?: string;
   difficulty: string;
+  // Mode "Blocs validés" uniquement — voir climbingPoints.ts.
+  points_value?: number;
 }
 
 export interface ScoreEntry<P extends ParticipantBase = ParticipantBase> {
@@ -44,7 +48,12 @@ export interface CategoryGroup<P extends ParticipantBase = ParticipantBase> {
 export const getParticipantScores = <P extends ParticipantBase>(
   results: CompetitionResultInput[],
   participants: P[],
-  boulders: BoulderInput[]
+  boulders: BoulderInput[],
+  // ✅ Chantier "comptes de points" : par défaut le barème actuel (mode "Blocabrac"),
+  // pour ne rien changer aux appelants existants qui n'ont pas encore de sélecteur de
+  // mode câblé.
+  scoringMode: ScoringMode = 'blocabrac',
+  customScoring?: CustomScoringTable
 ): ScoreEntry<P>[] => {
   const scores: Record<string, { score: number; boulders: number }> = {};
 
@@ -55,7 +64,7 @@ export const getParticipantScores = <P extends ParticipantBase>(
     const boulder = boulders.find(b => b.id === result.boulder_id);
     if (!boulder) return;
 
-    const points = calculatePoints(boulder.color || boulder.difficulty, result.attempts, result.success);
+    const points = calculateCompetitionPoints(boulder, result.attempts, result.success, scoringMode, customScoring);
     const key = participant.user_id;
 
     if (!scores[key]) {
@@ -81,21 +90,27 @@ export function getClassementByCategory<P extends ParticipantBase>(
   results: CompetitionResultInput[],
   participants: P[],
   boulders: BoulderInput[],
-  category: 'global'
+  category: 'global',
+  scoringMode?: ScoringMode,
+  customScoring?: CustomScoringTable
 ): ScoreEntry<P>[];
 export function getClassementByCategory<P extends ParticipantBase>(
   results: CompetitionResultInput[],
   participants: P[],
   boulders: BoulderInput[],
-  category: 'age' | 'gender'
+  category: 'age' | 'gender',
+  scoringMode?: ScoringMode,
+  customScoring?: CustomScoringTable
 ): CategoryGroup<P>[];
 export function getClassementByCategory<P extends ParticipantBase>(
   results: CompetitionResultInput[],
   participants: P[],
   boulders: BoulderInput[],
-  category: 'global' | 'age' | 'gender'
+  category: 'global' | 'age' | 'gender',
+  scoringMode: ScoringMode = 'blocabrac',
+  customScoring?: CustomScoringTable
 ): ScoreEntry<P>[] | CategoryGroup<P>[] {
-  const scores = getParticipantScores(results, participants, boulders);
+  const scores = getParticipantScores(results, participants, boulders, scoringMode, customScoring);
 
   if (category === 'global') {
     return scores;

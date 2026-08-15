@@ -39,6 +39,7 @@ interface Boulder {
   competition_id: string;
   is_active: boolean;
   difficulty_level?: DifficultyLevel;
+  points_value?: number; // ✅ Mode de comptage "Blocs validés" uniquement
 }
 
 interface Competition {
@@ -46,6 +47,7 @@ interface Competition {
   name: string;
   date: string;
   walls: string[];
+  scoring_mode?: 'blocabrac' | 'blocs_valides' | 'personnalise'; // ✅ Nouveau
 }
 
 interface ColorRating {
@@ -122,6 +124,7 @@ export default function CompetitionBoulderForm(): JSX.Element {
     imagePreview: string;
     annotations: BoulderAnnotations;
     difficulty_level: DifficultyLevel;
+    points_value: string;
   }>({
     number: '',
     wall: '',
@@ -134,7 +137,8 @@ export default function CompetitionBoulderForm(): JSX.Element {
       start_holds: [],
       end_holds: []
     },
-    difficulty_level: 'Égal'
+    difficulty_level: 'Égal',
+    points_value: ''
   });
   const [currentMode, setCurrentMode] = useState<'start' | 'end'>('start');
   const [isUploading, setIsUploading] = useState<boolean>(false);
@@ -174,7 +178,8 @@ export default function CompetitionBoulderForm(): JSX.Element {
             imageFile: null,
             imagePreview: (data.image_public_id ? getBoulderImageUrl(data.image_public_id, 'full') : data.image_base64) || '',
             annotations: data.annotations || { start_holds: [], end_holds: [] },
-            difficulty_level: data.difficulty_level || 'Égal'
+            difficulty_level: data.difficulty_level || 'Égal',
+            points_value: data.points_value !== undefined ? String(data.points_value) : ''
           });
         }
       } catch (error: unknown) {
@@ -294,6 +299,12 @@ export default function CompetitionBoulderForm(): JSX.Element {
       alert('Veuillez sélectionner une cotation.');
       return;
     }
+    // ✅ Mode "Blocs validés" : la valeur en points remplace le barème par couleur
+    // pour cette compétition, elle est donc obligatoire dans ce mode précis.
+    if (competition?.scoring_mode === 'blocs_valides' && !formData.points_value) {
+      alert('Veuillez saisir la valeur en points de ce bloc (mode de comptage "Blocs validés").');
+      return;
+    }
     if (!formData.imagePreview) {
       alert('Veuillez uploader une image.');
       return;
@@ -366,6 +377,9 @@ export default function CompetitionBoulderForm(): JSX.Element {
         competition_id: competitionId,
         is_active: true,
         difficulty_level: formData.difficulty_level,
+        // ✅ N'écrit ce champ que dans le mode qui s'en sert : évite de laisser une
+        // ancienne valeur sur un bloc si la compétition change plus tard de mode.
+        ...(formData.points_value ? { points_value: parseInt(formData.points_value, 10) } : {}),
         // ✅ Ne pas écraser la date/l'auteur de création d'origine lors d'une modification
         ...(boulderId
           ? {}
@@ -462,6 +476,23 @@ export default function CompetitionBoulderForm(): JSX.Element {
               </Typography>
             </FormControl>
           </Box>
+
+          {/* ✅ Mode de comptage "Blocs validés" (voir AdminCompetitionManagement.tsx) :
+              la cotation reste cachée aux grimpeurs, donc un barème par couleur ne
+              reflète pas la difficulté réelle — l'ouvreur fixe directement les points. */}
+          {competition?.scoring_mode === 'blocs_valides' && (
+            <TextField
+              label="Valeur en points (mode « Blocs validés »)"
+              type="number"
+              value={formData.points_value}
+              onChange={(e: ChangeEvent<HTMLInputElement>): void => setFormData({ ...formData, points_value: e.target.value })}
+              fullWidth
+              required
+              disabled={isUploading}
+              margin="normal"
+              helperText="Invisible des grimpeurs. Rapportés intégralement si le bloc est réussi, quel que soit le nombre d'essais."
+            />
+          )}
 
           <FormControl fullWidth margin="normal" disabled={isUploading}>
             <InputLabel id="types-de-difficulte-multiple-select-label">Types de difficulté (multiple)</InputLabel>

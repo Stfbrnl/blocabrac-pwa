@@ -11,6 +11,8 @@ import {
   type ParticipantBase,
   type ScoreEntry,
   type CategoryGroup,
+  type ScoringMode,
+  type CustomScoringTable,
 } from '../utils/competitionClassement';
 
 // ✅ Étapes 5 à 7 de CONCEPTION-ecran-live-competition.md §8 : route + layout nu +
@@ -24,6 +26,8 @@ const RECOMPUTE_DEBOUNCE_MS = 1500; // "groupé toutes les 1 à 2 secondes" (§4
 interface Competition {
   id: string;
   name: string;
+  scoring_mode?: ScoringMode; // ✅ Nouveau
+  custom_scoring?: CustomScoringTable; // ✅ Nouveau
 }
 
 interface LiveParticipant extends ParticipantBase {
@@ -97,6 +101,8 @@ function useWakeLock() {
 // réinitialiser du state — évite d'appeler setState en plein corps d'effect
 // (react-hooks/set-state-in-effect) pour un simple reset.
 const LiveCompetitionView: React.FC<{ competition: Competition }> = ({ competition }) => {
+  const scoringMode = competition.scoring_mode || 'blocabrac';
+  const customScoring = competition.custom_scoring;
   const [boulders, setBoulders] = useState<BoulderInput[]>([]);
   const [bouldersLoaded, setBouldersLoaded] = useState(false);
   const [globalClassement, setGlobalClassement] = useState<ScoreEntry<LiveParticipant>[]>([]);
@@ -119,6 +125,7 @@ const LiveCompetitionView: React.FC<{ competition: Competition }> = ({ competiti
           id: d.id,
           color: d.data().color,
           difficulty: d.data().difficulty || '',
+          points_value: d.data().points_value,
         })));
       } catch (err) {
         console.error('Erreur lors du chargement des blocs :', err);
@@ -147,10 +154,10 @@ const LiveCompetitionView: React.FC<{ competition: Competition }> = ({ competiti
       recomputeTimer = setTimeout(() => {
         recomputeTimer = null;
         setGlobalClassement(
-          getClassementByCategory(resultsRef.current, participantsRef.current, boulders, 'global')
+          getClassementByCategory(resultsRef.current, participantsRef.current, boulders, 'global', scoringMode, customScoring)
         );
         setByAgeClassement(
-          getClassementByCategory(resultsRef.current, participantsRef.current, boulders, 'age')
+          getClassementByCategory(resultsRef.current, participantsRef.current, boulders, 'age', scoringMode, customScoring)
         );
         setLastUpdated(new Date());
       }, RECOMPUTE_DEBOUNCE_MS);
@@ -192,7 +199,7 @@ const LiveCompetitionView: React.FC<{ competition: Competition }> = ({ competiti
       unsubscribeParticipants();
       if (recomputeTimer) clearTimeout(recomputeTimer);
     };
-  }, [competition.id, bouldersLoaded, boulders]);
+  }, [competition.id, bouldersLoaded, boulders, scoringMode, customScoring]);
 
   // ✅ "ne pas afficher 90 lignes" (§5) : rotation par catégorie FFME plutôt qu'un
   // classement général complet (8 pages de 90 lignes = ~90s par tour, un grimpeur
@@ -318,7 +325,12 @@ const AdminCompetitionLiveDisplay: React.FC = () => {
           where('liveDisplayEnabled', '==', true)
         );
         const snapshot = await getDocs(q);
-        setEligibleCompetitions(snapshot.docs.map(d => ({ id: d.id, name: d.data().name || '' })));
+        setEligibleCompetitions(snapshot.docs.map(d => ({
+          id: d.id,
+          name: d.data().name || '',
+          scoring_mode: d.data().scoring_mode || 'blocabrac',
+          custom_scoring: d.data().custom_scoring,
+        })));
       } catch (err) {
         console.error('Erreur lors du chargement des compétitions diffusées :', err);
       } finally {

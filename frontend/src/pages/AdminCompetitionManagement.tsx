@@ -7,16 +7,42 @@ import {
   FormControlLabel, Switch, Tooltip,
   useTheme, useMediaQuery
 } from '@mui/material';
-import { Delete as DeleteIcon, Edit as EditIcon, Add as AddIcon } from '@mui/icons-material';
+import { Delete as DeleteIcon, Edit as EditIcon, Add as AddIcon, Tune as TuneIcon } from '@mui/icons-material';
 import { db } from '../services/firebaseConfig';
 import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, deleteField } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
+import { basePoints, deductions, type ScoringMode, type CustomScoringTable } from '../utils/climbingPoints';
 
 type CompetitionStatus = 'à venir' | 'en cours' | 'terminée' | 'annulée';
 type Level = 'jaune' | 'vert' | 'bleu' | 'violet' | 'rouge' | 'noir' | 'blanc' | 'rose';
 
 // ✅ Liste des niveaux (pour les sélecteurs)
 const levelOptions: Level[] = ['jaune', 'vert', 'bleu', 'violet', 'rouge', 'noir', 'blanc', 'rose'];
+
+// ✅ Chantier "comptes de points" : 3 modes proposés ici (le 4e, officiel coupe de
+// France/du monde par tops/zones, est un chantier séparé — voir climbingPoints.ts).
+// Jamais utilisé par le classement annuel (classementScore.ts n'a jamais connaissance
+// de ce champ) : uniquement les écrans de classement compétition.
+const scoringModeOptions: { value: ScoringMode; label: string; description: string }[] = [
+  {
+    value: 'blocabrac',
+    label: 'Blocabrac (barème habituel)',
+    description: 'Le barème par couleur utilisé partout ailleurs, avec dégression selon le nombre d\'essais.'
+  },
+  {
+    value: 'blocs_valides',
+    label: 'Blocs validés',
+    description: 'Chaque bloc rapporte une valeur en points fixée individuellement par l\'ouvreur/l\'admin (la cotation étant cachée en compétition), sans tenir compte du nombre d\'essais.'
+  },
+  {
+    value: 'personnalise',
+    label: 'Personnalisé',
+    description: 'Un barème par couleur propre à cette compétition : points de base et déduction par essai supplémentaire, réglables couleur par couleur.'
+  }
+];
+
+const defaultCustomScoring = (): CustomScoringTable =>
+  Object.fromEntries(levelOptions.map(level => [level, { base: basePoints[level] || 0, deduction: deductions[level] || 0 }]));
 
 interface Competition {
   id: string;
@@ -31,6 +57,11 @@ interface Competition {
   // ✅ Écran live TV (CONCEPTION-ecran-live-competition.md §7) : diffusion optionnelle,
   // verrouillée côté règles dès que status quitte "à venir" (voir firestore.rules).
   liveDisplayEnabled?: boolean;
+  // ✅ Chantier "comptes de points" : verrouillé côté UI dès que status quitte "à venir"
+  // (même garde-fou que liveDisplayEnabled), pour ne jamais changer les règles du jeu
+  // une fois la compétition commencée.
+  scoring_mode?: ScoringMode;
+  custom_scoring?: CustomScoringTable;
 }
 
 const AdminCompetitionManagement: React.FC = () => {
@@ -45,6 +76,7 @@ const AdminCompetitionManagement: React.FC = () => {
   const [openSnackbar, setOpenSnackbar] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [selectedCompetition, setSelectedCompetition] = useState<Competition | null>(null);
+  const [openScoringDialog, setOpenScoringDialog] = useState<'create' | 'edit' | null>(null);
   const [createForm, setCreateForm] = useState<Omit<Competition, 'id' | 'registered_count'>>({
     name: '',
     date: new Date().toISOString().split('T')[0],
@@ -53,7 +85,9 @@ const AdminCompetitionManagement: React.FC = () => {
     max_participants: 50,
     minLevel: undefined, // ✅ Nouveau
     maxLevel: undefined, // ✅ Nouveau
-    liveDisplayEnabled: false // ✅ Nouveau
+    liveDisplayEnabled: false, // ✅ Nouveau
+    scoring_mode: 'blocabrac', // ✅ Nouveau
+    custom_scoring: defaultCustomScoring() // ✅ Nouveau
   });
   const [editForm, setEditForm] = useState<Omit<Competition, 'id' | 'registered_count'>>({
     name: '',
@@ -63,7 +97,9 @@ const AdminCompetitionManagement: React.FC = () => {
     max_participants: 50,
     minLevel: undefined, // ✅ Nouveau
     maxLevel: undefined, // ✅ Nouveau
-    liveDisplayEnabled: false // ✅ Nouveau
+    liveDisplayEnabled: false, // ✅ Nouveau
+    scoring_mode: 'blocabrac', // ✅ Nouveau
+    custom_scoring: defaultCustomScoring() // ✅ Nouveau
   });
   const navigate = useNavigate();
 
@@ -82,7 +118,9 @@ const AdminCompetitionManagement: React.FC = () => {
           registered_count: doc.data().registered_count || 0,
           minLevel: doc.data().minLevel, // ✅ Nouveau
           maxLevel: doc.data().maxLevel, // ✅ Nouveau
-          liveDisplayEnabled: doc.data().liveDisplayEnabled || false // ✅ Nouveau
+          liveDisplayEnabled: doc.data().liveDisplayEnabled || false, // ✅ Nouveau
+          scoring_mode: doc.data().scoring_mode || 'blocabrac', // ✅ Nouveau
+          custom_scoring: doc.data().custom_scoring // ✅ Nouveau
         }));
         setCompetitions(competitionsData);
       } catch (error: unknown) {
@@ -116,6 +154,10 @@ const AdminCompetitionManagement: React.FC = () => {
         ...(createForm.minLevel ? { minLevel: createForm.minLevel } : {}),
         ...(createForm.maxLevel ? { maxLevel: createForm.maxLevel } : {}),
         liveDisplayEnabled: createForm.liveDisplayEnabled ?? false, // ✅ Nouveau
+        scoring_mode: createForm.scoring_mode ?? 'blocabrac', // ✅ Nouveau
+        ...(createForm.scoring_mode === 'personnalise'
+          ? { custom_scoring: createForm.custom_scoring ?? defaultCustomScoring() }
+          : {}),
       });
       const querySnapshot = await getDocs(collection(db, 'competitions'));
       setCompetitions(querySnapshot.docs.map(doc => ({
@@ -128,7 +170,9 @@ const AdminCompetitionManagement: React.FC = () => {
         registered_count: doc.data().registered_count || 0,
         minLevel: doc.data().minLevel, // ✅ Nouveau
         maxLevel: doc.data().maxLevel, // ✅ Nouveau
-        liveDisplayEnabled: doc.data().liveDisplayEnabled || false // ✅ Nouveau
+        liveDisplayEnabled: doc.data().liveDisplayEnabled || false, // ✅ Nouveau
+        scoring_mode: doc.data().scoring_mode || 'blocabrac', // ✅ Nouveau
+        custom_scoring: doc.data().custom_scoring // ✅ Nouveau
       })));
       setOpenCreateDialog(false);
       setSnackbarMessage("Compétition créée avec succès !");
@@ -150,7 +194,9 @@ const AdminCompetitionManagement: React.FC = () => {
       max_participants: competition.max_participants,
       minLevel: competition.minLevel, // ✅ Nouveau
       maxLevel: competition.maxLevel, // ✅ Nouveau
-      liveDisplayEnabled: competition.liveDisplayEnabled ?? false // ✅ Nouveau
+      liveDisplayEnabled: competition.liveDisplayEnabled ?? false, // ✅ Nouveau
+      scoring_mode: competition.scoring_mode ?? 'blocabrac', // ✅ Nouveau
+      custom_scoring: competition.custom_scoring ?? defaultCustomScoring() // ✅ Nouveau
     });
     setOpenEditDialog(true);
   };
@@ -162,9 +208,18 @@ const AdminCompetitionManagement: React.FC = () => {
   // celle déjà en base une fois verrouillé (l'écriture serait de toute façon refusée).
   const isLiveDisplayEditable = (competition: Competition) => competition.status === 'à venir';
 
+  // ✅ Chantier "comptes de points" : même verrou que liveDisplayEnabled — changer le
+  // mode de comptage en cours d'épreuve changerait le classement rétroactivement pour
+  // tout le monde, pas seulement les prochaines validations.
+  const isScoringModeEditable = (competition: Competition) => competition.status === 'à venir';
+
   const handleUpdateCompetition = async () => {
     if (!selectedCompetition) return;
     try {
+      const scoringModeEditable = isScoringModeEditable(selectedCompetition);
+      const effectiveScoringMode = scoringModeEditable
+        ? (editForm.scoring_mode ?? 'blocabrac')
+        : selectedCompetition.scoring_mode ?? 'blocabrac';
       await updateDoc(doc(db, 'competitions', selectedCompetition.id), {
         name: editForm.name,
         date: editForm.date,
@@ -178,6 +233,10 @@ const AdminCompetitionManagement: React.FC = () => {
         liveDisplayEnabled: isLiveDisplayEditable(selectedCompetition)
           ? (editForm.liveDisplayEnabled ?? false)
           : selectedCompetition.liveDisplayEnabled ?? false,
+        scoring_mode: effectiveScoringMode,
+        ...(effectiveScoringMode === 'personnalise'
+          ? { custom_scoring: (scoringModeEditable ? editForm.custom_scoring : selectedCompetition.custom_scoring) ?? defaultCustomScoring() }
+          : { custom_scoring: deleteField() }),
       });
       const querySnapshot = await getDocs(collection(db, 'competitions'));
       setCompetitions(querySnapshot.docs.map(doc => ({
@@ -190,7 +249,9 @@ const AdminCompetitionManagement: React.FC = () => {
         registered_count: doc.data().registered_count || 0,
         minLevel: doc.data().minLevel, // ✅ Nouveau
         maxLevel: doc.data().maxLevel, // ✅ Nouveau
-        liveDisplayEnabled: doc.data().liveDisplayEnabled || false // ✅ Nouveau
+        liveDisplayEnabled: doc.data().liveDisplayEnabled || false, // ✅ Nouveau
+        scoring_mode: doc.data().scoring_mode || 'blocabrac', // ✅ Nouveau
+        custom_scoring: doc.data().custom_scoring // ✅ Nouveau
       })));
       setOpenEditDialog(false);
       setSnackbarMessage("Compétition mise à jour avec succès !");
@@ -438,6 +499,17 @@ const AdminCompetitionManagement: React.FC = () => {
                   être modifié.
                 </Alert>
               )}
+
+              {/* ✅ Chantier "comptes de points" : bouton → menu dédié plutôt qu'un Select
+                  en ligne, le mode "Personnalisé" a besoin de 8 champs supplémentaires. */}
+              <Button
+                variant="outlined"
+                startIcon={<TuneIcon />}
+                onClick={() => setOpenScoringDialog('create')}
+                sx={{ alignSelf: 'flex-start' }}
+              >
+                Mode de comptage : {scoringModeOptions.find(o => o.value === createForm.scoring_mode)?.label}
+              </Button>
             </Box>
           </DialogContent>
           <DialogActions>
@@ -555,12 +627,144 @@ const AdminCompetitionManagement: React.FC = () => {
                   />
                 </span>
               </Tooltip>
+
+              {/* ✅ Même verrou que liveDisplayEnabled : désactivé dès que la
+                  compétition a quitté "à venir". */}
+              <Tooltip
+                title={
+                  selectedCompetition && !isScoringModeEditable(selectedCompetition)
+                    ? "Verrouillé : la compétition a déjà été déclenchée. Le mode de comptage ne peut plus être modifié."
+                    : ''
+                }
+              >
+                <span>
+                  <Button
+                    variant="outlined"
+                    startIcon={<TuneIcon />}
+                    disabled={!selectedCompetition || !isScoringModeEditable(selectedCompetition)}
+                    onClick={() => setOpenScoringDialog('edit')}
+                  >
+                    Mode de comptage : {scoringModeOptions.find(o => o.value === editForm.scoring_mode)?.label}
+                  </Button>
+                </span>
+              </Tooltip>
             </Box>
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setOpenEditDialog(false)}>Annuler</Button>
             <Button onClick={handleUpdateCompetition} color="primary">
               Enregistrer
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* ✅ Chantier "comptes de points" : dialogue-menu partagé création/édition,
+            piloté par openScoringDialog ('create' | 'edit' | null). Opère directement
+            sur createForm/editForm — refermer sans "Valider" ne les modifie pas puisque
+            chaque champ y écrit déjà au fil de la saisie (comme le reste du formulaire),
+            donc on ne restaure rien à l'annulation : ce menu n'a pas d'état à lui. */}
+        <Dialog
+          open={openScoringDialog !== null}
+          onClose={() => setOpenScoringDialog(null)}
+          fullWidth
+          maxWidth="sm"
+          fullScreen={isMobile}
+        >
+          <DialogTitle>Mode de comptage des points</DialogTitle>
+          <DialogContent>
+            <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Alert severity="info">
+                Ne s'applique qu'au classement de cette compétition — jamais au
+                classement annuel des grimpeurs.
+              </Alert>
+              {(() => {
+                const form = openScoringDialog === 'create' ? createForm : editForm;
+                const setForm = openScoringDialog === 'create' ? setCreateForm : setEditForm;
+                const customScoring = form.custom_scoring ?? defaultCustomScoring();
+                return (
+                  <>
+                    <FormControl fullWidth>
+                      <InputLabel id="scoring-mode-select-label">Mode</InputLabel>
+                      <Select
+                        labelId="scoring-mode-select-label" id="scoring-mode-select"
+                        value={form.scoring_mode ?? 'blocabrac'}
+                        onChange={(e) => setForm({ ...form, scoring_mode: e.target.value as ScoringMode })}
+                        label="Mode"
+                      >
+                        {scoringModeOptions.map(option => (
+                          <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                    <Typography variant="body2" color="text.secondary">
+                      {scoringModeOptions.find(o => o.value === (form.scoring_mode ?? 'blocabrac'))?.description}
+                    </Typography>
+
+                    {form.scoring_mode === 'blocs_valides' && (
+                      <Alert severity="warning">
+                        La valeur en points de chaque bloc se règle ensuite sur le bloc
+                        lui-même, dans l'écran de gestion des blocs de compétition.
+                      </Alert>
+                    )}
+
+                    {form.scoring_mode === 'personnalise' && (
+                      <TableContainer>
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow>
+                              <TableCell>Couleur</TableCell>
+                              <TableCell align="right">Points de base</TableCell>
+                              <TableCell align="right">Déduction / essai</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {levelOptions.map(level => (
+                              <TableRow key={level}>
+                                <TableCell>{level.charAt(0).toUpperCase() + level.slice(1)}</TableCell>
+                                <TableCell align="right">
+                                  <TextField
+                                    type="number"
+                                    size="small"
+                                    value={customScoring[level]?.base ?? 0}
+                                    onChange={(e) => setForm({
+                                      ...form,
+                                      custom_scoring: {
+                                        ...customScoring,
+                                        [level]: { ...customScoring[level], base: parseInt(e.target.value) || 0 }
+                                      }
+                                    })}
+                                    sx={{ width: 100 }}
+                                  />
+                                </TableCell>
+                                <TableCell align="right">
+                                  <TextField
+                                    type="number"
+                                    size="small"
+                                    value={customScoring[level]?.deduction ?? 0}
+                                    onChange={(e) => setForm({
+                                      ...form,
+                                      custom_scoring: {
+                                        ...customScoring,
+                                        [level]: { ...customScoring[level], deduction: parseInt(e.target.value) || 0 }
+                                      }
+                                    })}
+                                    sx={{ width: 100 }}
+                                  />
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    )}
+                  </>
+                );
+              })()}
+            </Box>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setOpenScoringDialog(null)} variant="contained">
+              Valider
             </Button>
           </DialogActions>
         </Dialog>

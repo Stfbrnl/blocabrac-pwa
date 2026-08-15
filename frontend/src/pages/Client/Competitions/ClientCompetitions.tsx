@@ -13,7 +13,7 @@ import {
   useMediaQuery
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
-import { calculatePoints } from '../../../utils/climbingPoints';
+import { calculateCompetitionPoints, type ScoringMode, type CustomScoringTable } from '../../../utils/climbingPoints';
 import { logoPath } from '../../../config/gymConfig';
 import { getBoulderImageUrl } from '../../../services/imageStorage';
 
@@ -43,6 +43,10 @@ interface Competition {
   // ✅ Écran live TV (CONCEPTION-ecran-live-competition.md §7) : si vrai, la mention de
   // diffusion est affichée ci-dessous — l'inscription vaut alors consentement.
   liveDisplayEnabled?: boolean;
+  // ✅ Chantier "comptes de points" : n'affecte que l'aperçu de points affiché ici
+  // pendant la validation, pas ce qui est écrit dans competition_results.
+  scoring_mode?: ScoringMode;
+  custom_scoring?: CustomScoringTable;
 }
 
 interface RegistrableUser {
@@ -65,6 +69,7 @@ interface Boulder {
   competition_active?: boolean;
   is_active: boolean;
   color?: string;
+  points_value?: number; // ✅ Mode de comptage "Blocs validés" uniquement
 }
 
 const ClientCompetitions: React.FC = () => {
@@ -188,7 +193,9 @@ const ClientCompetitions: React.FC = () => {
           registered_count: doc.data().registered_count || 0,
           minLevel: doc.data().minLevel,
           maxLevel: doc.data().maxLevel,
-          liveDisplayEnabled: doc.data().liveDisplayEnabled || false
+          liveDisplayEnabled: doc.data().liveDisplayEnabled || false,
+          scoring_mode: doc.data().scoring_mode || 'blocabrac',
+          custom_scoring: doc.data().custom_scoring
         }));
         setCompetitions(competitionsData);
       } catch (err: unknown) {
@@ -214,7 +221,8 @@ const ClientCompetitions: React.FC = () => {
     image_public_id: docSnap.data().image_public_id as string | undefined,
     competition_id: docSnap.data().competition_id as string | undefined,
     is_active: (docSnap.data().is_active as boolean) || false,
-    color: docSnap.data().color as string | undefined
+    color: docSnap.data().color as string | undefined,
+    points_value: docSnap.data().points_value as number | undefined
   });
 
   const loadBoulders = async (competition: Competition) => {
@@ -735,8 +743,13 @@ const ClientCompetitions: React.FC = () => {
                     rating: 0,
                     proposedDifficulty: ''
                   };
-                  const difficulty = boulder.color || boulder.difficulty;
-                  const points = calculatePoints(difficulty, result.attempts, result.success);
+                  const points = calculateCompetitionPoints(
+                    boulder,
+                    result.attempts,
+                    result.success,
+                    selectedCompetition.scoring_mode || 'blocabrac',
+                    selectedCompetition.custom_scoring
+                  );
                   return (
                     <Card key={boulder.id} sx={{ width: 300, mb: 2 }}>
                       <CardMedia
