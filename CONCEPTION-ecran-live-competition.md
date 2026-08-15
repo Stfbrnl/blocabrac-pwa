@@ -7,11 +7,11 @@
 > hypothèses de l'époque ne sont plus valables — les écarts sont signalés explicitement,
 > parce que le handoff V2.25→V2.28 en reprend au moins un qui est faux (voir §2).
 >
-> **Statut : faisable, les deux prérequis techniques sont levés.** Le blocage de fond
+> **Statut : tous les prérequis sont levés (§1, §2, §3, §7 faits).** Le blocage de fond
 > (validations en état React, rien à afficher avant soumission) a été corrigé au
-> chantier 1. La question du consentement a été tranchée le 15/08 (§7). §1 (extraction,
-> V2.29) et §3 (chiffrage, mesuré empiriquement le 15/08) sont faits — le critère de
-> sortie du §3 est respecté avec de la marge. Reste à écrire l'écran lui-même (§4 à §8).
+> chantier 1. §1 (extraction, V2.29), §3 (chiffrage, mesuré empiriquement le 15/08,
+> critère de sortie respecté avec de la marge) et §7 (drapeau `liveDisplayEnabled`,
+> V2.30) sont faits. Reste uniquement à écrire l'écran lui-même (§4 à §6, §8 étape 5+).
 
 ---
 
@@ -225,7 +225,13 @@ d'administration ouverte par erreur les affiche sur grand écran.
 
 ---
 
-## §7 — Diffusion optionnelle par compétition + consentement (TRANCHÉ)
+## §7 — Diffusion optionnelle par compétition + consentement (TRANCHÉ, FAIT — V2.30)
+
+✅ **Implémenté le 15/08/2026 (commit `7ffeb30`).** Schéma, interrupteur, verrouillage
+côté règles (dérivé de `status`, pas de champ `liveDisplayLocked` séparé), mention à
+l'inscription client, avertissement sur `AdminCompetitionRegistration.tsx` : tout fait.
+7 tests de règles dédiés (`live-display-flag-lock.test.ts`), 65/65 verts avec le reste
+de la suite `test:rules`.
 
 ### Décisions prises le 15/08/2026
 
@@ -310,10 +316,7 @@ Sans conséquence ici (le seul lecteur est l'admin lui-même), mais à ne pas co
 1. ✅ **§1** — extraire `getParticipantScores()` + tests. FAIT, V2.29 (commit `33df75d`).
 2. ✅ Vérifier le schéma : `competition_id` présent sur `competition_results` ? FAIT,
    vérifié le 15/08/2026 — déjà présent, aucune migration nécessaire.
-3. **§7** — drapeau `liveDisplayEnabled` : schéma, interrupteur sur l'écran de création,
-   verrouillage au déclenchement (règles + test), mention à l'inscription client,
-   avertissement sur `AdminCompetitionRegistration.tsx`. Indépendant de l'écran lui-même,
-   peut être livré séparément. **← prochaine étape**
+3. ✅ **§7** — drapeau `liveDisplayEnabled`. FAIT, V2.30 (commit `7ffeb30`).
 4. ✅ **§3** — chiffrer le coût du listener. FAIT, mesuré le 15/08/2026
    (`measure-live-screen-reads.mjs`) : 28 010 lectures/soirée (56,0 % du plafond) à 3
    remontages, sous le critère de sortie de 30 000. Pas besoin de revoir l'approche.
