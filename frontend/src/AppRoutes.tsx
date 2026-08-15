@@ -125,7 +125,10 @@ export default function AppRoutes() {
         {/* ✅ Écran live TV (CONCEPTION-ecran-live-competition.md) : hors du layout
             habituel (pas de Navbar, voir Navbar.tsx), ouvert en fenêtre séparée
             depuis AdminCompetitionManagement.tsx. */}
-        <Route path="/admin/competitions/live-display" element={<ProtectedRoute role="admin"><AdminCompetitionLiveDisplay /></ProtectedRoute>} />
+        {/* ✅ Compétition en paramètre d'URL (CONCEPTION-selecteur-marge-compteur-incremental.md
+            §1, 16/08/2026) : plus de sélecteur interne à l'écran, l'admin choisit
+            depuis AdminCompetitionManagement.tsx. */}
+        <Route path="/admin/competitions/live-display/:competitionId" element={<ProtectedRoute role="admin"><AdminCompetitionLiveDisplay /></ProtectedRoute>} />
         <Route path="/admin/announcements" element={<ProtectedRoute role="admin"><AdminAnnouncements /></ProtectedRoute>} />
       </Routes>
     </Suspense>

@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Box, Typography, FormControl, InputLabel, Select, MenuItem, CircularProgress } from '@mui/material';
-import { useSearchParams } from 'react-router-dom';
-import { collection, getDocs, onSnapshot, query, where } from 'firebase/firestore';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Box, Typography, CircularProgress } from '@mui/material';
+import { useParams } from 'react-router-dom';
+import { collection, doc, getDoc, getDocs, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '../services/firebaseConfig';
 import { formattedAppVersion } from '../config/appVersion';
 import {
@@ -19,6 +19,19 @@ import {
 // Wake Lock (étape 5, V2.31), listeners temps réel + recalcul groupé (étape 6),
 // mise en page grand écran + rotation par catégorie (étape 7). Étape 8 (répétition
 // matérielle à froid) est hors périmètre d'un agent — matériel physique.
+//
+// ✅ CONCEPTION-selecteur-marge-compteur-incremental.md §1 (16/08/2026) : le
+// sélecteur de compétition interne à cet écran a été supprimé au profit d'un
+// paramètre d'URL (/live-display/:competitionId). Changer de compétition via un
+// simple Select remontait `LiveCompetitionView` (key={competition.id}) et repayait
+// les 3 240 documents du snapshot initial à chaque clic — un geste qui semblait
+// anodin mais qui, répété quelques fois, faisait franchir le budget mesuré de 3
+// remontages (§3 de CONCEPTION-ecran-live-competition.md). Le choix se fait
+// maintenant depuis AdminCompetitionManagement.tsx (bouton "Ouvrir l'affichage
+// TV", un par compétition diffusée) : changer de compétition redevient ce que
+// c'est réellement, ouvrir une autre fenêtre — le coût reste visible au lieu
+// d'être déguisé en clic anodin dans l'écran lui-même, qui n'a par ailleurs
+// aucune autre interaction (§5, "il se regarde, il ne s'utilise pas").
 
 const ROTATION_INTERVAL_MS = 18000; // 15-20s demandés par le §5
 const RECOMPUTE_DEBOUNCE_MS = 1500; // "groupé toutes les 1 à 2 secondes" (§4)
@@ -306,45 +319,48 @@ const LiveCompetitionView: React.FC<{ competition: Competition }> = ({ competiti
 };
 
 const AdminCompetitionLiveDisplay: React.FC = () => {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [eligibleCompetitions, setEligibleCompetitions] = useState<Competition[]>([]);
-  const [loading, setLoading] = useState(true);
-  const selectedCompetitionId = searchParams.get('competitionId') || '';
+  const { competitionId } = useParams<{ competitionId: string }>();
+  // ✅ 3 états distincts plutôt qu'un simple booléen "trouvée" : le message reste le
+  // même dans les 3 cas (doc absent, pas "en cours", pas diffusée — voir plus bas),
+  // mais 'loading' doit rester exclusif des deux autres pour ne jamais afficher le
+  // message d'erreur pendant la toute première lecture.
+  const [status, setStatus] = useState<'loading' | 'ineligible' | 'ready'>('loading');
+  const [competition, setCompetition] = useState<Competition | null>(null);
 
   useWakeLock();
 
   useEffect(() => {
-    const fetchEligibleCompetitions = async () => {
+    let cancelled = false;
+    const fetchCompetition = async () => {
+      if (!competitionId) {
+        setStatus('ineligible');
+        return;
+      }
       try {
-        setLoading(true);
-        // ✅ Deux égalités simples : pas d'index composite nécessaire (voir
-        // CONCEPTION-ecran-live-competition.md §7, "Implications sur l'écran live").
-        const q = query(
-          collection(db, 'competitions'),
-          where('status', '==', 'en cours'),
-          where('liveDisplayEnabled', '==', true)
-        );
-        const snapshot = await getDocs(q);
-        setEligibleCompetitions(snapshot.docs.map(d => ({
-          id: d.id,
-          name: d.data().name || '',
-          scoring_mode: d.data().scoring_mode || 'blocabrac',
-          custom_scoring: d.data().custom_scoring,
-        })));
+        const snap = await getDoc(doc(db, 'competitions', competitionId));
+        if (cancelled) return;
+        // ✅ Mêmes deux conditions qu'avant (§7 de CONCEPTION-ecran-live-competition.md,
+        // "Implications sur l'écran live") : une compétition non "en cours" ou non
+        // diffusée n'a rien à faire sur cet écran, qu'elle existe ou non.
+        if (!snap.exists() || snap.data().status !== 'en cours' || snap.data().liveDisplayEnabled !== true) {
+          setStatus('ineligible');
+          return;
+        }
+        setCompetition({
+          id: snap.id,
+          name: snap.data().name || '',
+          scoring_mode: snap.data().scoring_mode || 'blocabrac',
+          custom_scoring: snap.data().custom_scoring,
+        });
+        setStatus('ready');
       } catch (err) {
-        console.error('Erreur lors du chargement des compétitions diffusées :', err);
-      } finally {
-        setLoading(false);
+        console.error('Erreur lors du chargement de la compétition :', err);
+        if (!cancelled) setStatus('ineligible');
       }
     };
-    fetchEligibleCompetitions();
-  }, []);
-
-  const handleSelectCompetition = useCallback((competitionId: string) => {
-    setSearchParams(competitionId ? { competitionId } : {});
-  }, [setSearchParams]);
-
-  const selectedCompetition = eligibleCompetitions.find(c => c.id === selectedCompetitionId) || null;
+    fetchCompetition();
+    return () => { cancelled = true; };
+  }, [competitionId]);
 
   return (
     <Box
@@ -364,34 +380,19 @@ const AdminCompetitionLiveDisplay: React.FC = () => {
         overflow: 'hidden',
       }}
     >
-      {loading ? (
+      {status === 'loading' ? (
         <CircularProgress sx={{ color: '#fff' }} />
-      ) : eligibleCompetitions.length === 0 ? (
-        // ✅ Message explicite plutôt qu'un écran vide (§7) : l'admin doit
-        // comprendre pourquoi rien ne s'affiche sans ouvrir la console.
+      ) : status === 'ineligible' || !competition ? (
+        // ✅ Message explicite plutôt qu'un écran vide (§7) : l'admin doit comprendre
+        // pourquoi rien ne s'affiche sans ouvrir la console. Un seul message pour les
+        // 3 cas (compétition inexistante, pas "en cours", pas diffusée) : aucun des
+        // trois ne doit afficher quoi que ce soit ici, la distinction n'aiderait pas
+        // l'admin à agir différemment.
         <Typography variant="h4" sx={{ opacity: 0.8 }}>
           Aucune compétition en diffusion pour le moment.
         </Typography>
-      ) : selectedCompetition ? (
-        <LiveCompetitionView key={selectedCompetition.id} competition={selectedCompetition} />
       ) : (
-        <FormControl sx={{ minWidth: 320 }}>
-          <InputLabel id="live-display-competition-select-label" sx={{ color: '#fff' }}>
-            Compétition à diffuser
-          </InputLabel>
-          <Select
-            labelId="live-display-competition-select-label"
-            id="live-display-competition-select"
-            value=""
-            label="Compétition à diffuser"
-            onChange={(e) => handleSelectCompetition(e.target.value)}
-            sx={{ color: '#fff', '.MuiOutlinedInput-notchedOutline': { borderColor: '#fff' } }}
-          >
-            {eligibleCompetitions.map(comp => (
-              <MenuItem key={comp.id} value={comp.id}>{comp.name}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+        <LiveCompetitionView key={competition.id} competition={competition} />
       )}
 
       {/* ✅ Repère de version, discret (§5) : seul moyen de repérer un écran

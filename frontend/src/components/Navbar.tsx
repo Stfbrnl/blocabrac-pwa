@@ -105,8 +105,11 @@ const Navbar: React.FC = () => {
   // ✅ Écran live TV (CONCEPTION-ecran-live-competition.md §4) : "rendue hors du
   // layout habituel, pas de Navbar" — cette route s'ouvre dans une fenêtre HDMI
   // étendue dédiée à la TV de la salle, la Navbar n'y a aucun sens et mangerait
-  // de l'espace sur un écran conçu pour être lu à 5 mètres.
-  if (location.pathname === '/admin/competitions/live-display') {
+  // de l'espace sur un écran conçu pour être lu à 5 mètres. Préfixe plutôt
+  // qu'égalité stricte depuis que la compétition est en paramètre d'URL
+  // (CONCEPTION-selecteur-marge-compteur-incremental.md §1) : le chemin exact varie
+  // désormais selon la compétition affichée.
+  if (location.pathname.startsWith('/admin/competitions/live-display/')) {
     return null;
   }
 

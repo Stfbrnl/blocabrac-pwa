@@ -382,7 +382,7 @@ const AdminCompetitionManagement: React.FC = () => {
                         size="small"
                         sx={{ ml: 1 }}
                         onClick={() => window.open(
-                          `/admin/competitions/live-display?competitionId=${competition.id}`,
+                          `/admin/competitions/live-display/${competition.id}`,
                           '_blank',
                           'noopener'
                         )}

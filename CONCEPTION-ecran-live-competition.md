@@ -128,6 +128,12 @@ Les parades sans développement ci-dessous restent donc impératives, pas option
 - Veille, économiseur d'écran et notifications système **désactivés** sur le PC admin.
 - **Ne pas laisser le service worker se mettre à jour pendant l'événement** : ouvrir la
   page une fois, ne plus y toucher. Envisager de ne pas déployer le jour J.
+- ✅ **Devenu sans objet le 16/08/2026** : l'écran n'a plus de sélecteur de compétition
+  interne (`CONCEPTION-selecteur-marge-compteur-incremental.md` §1) — changer de
+  compétition affichée passe désormais par l'ouverture d'une nouvelle fenêtre depuis
+  `AdminCompetitionManagement.tsx`, pas par un clic sur l'écran TV lui-même. Rien à
+  rappeler à l'admin sur ce point le jour J au-delà de : ouvrir la bonne fenêtre une
+  fois, ne plus y toucher (déjà couvert par le point ci-dessus).
 
 ---
 
