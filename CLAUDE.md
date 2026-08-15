@@ -82,7 +82,19 @@ Firestore rules only let a client read their own `users` doc — clients cannot 
 
 ### Points scoring
 
-`utils/climbingPoints.ts` (`calculatePoints`, `basePoints`, `deductions`) is the single shared scoring function for daily classement (`utils/classementScore.ts`), official competition classement, and mini-compétition classement. It scores by color string (`jaune` through `rose`), degressive by attempt count. Real "grosse compétition" boulders never use `jaune` in practice (beginner-only) even though the picker still lists it — that's intentional gym policy, not a bug.
+`utils/climbingPoints.ts` (`calculatePoints`, `basePoints`, `deductions`) is the single shared scoring function for daily classement (`utils/classementScore.ts`) and mini-compétition classement. It scores by color string (`jaune` through `rose`), degressive by attempt count. Real "grosse compétition" boulders never use `jaune` in practice (beginner-only) even though the picker still lists it — that's intentional gym policy, not a bug. **The annual classement (`classementScore.ts`) always uses `calculatePoints` and nothing else — it has no concept of `scoring_mode` and never will**, see below.
+
+### Competition scoring modes (`scoring_mode`) — competitions only, never the annual classement
+
+Official/regular competitions (not the annual `classement des grimpeurs`) can pick one of three counting modes per competition, chosen via a button → menu in `AdminCompetitionManagement.tsx`, stored as `competitions.scoring_mode` (`'blocabrac' | 'blocs_valides' | 'personnalise'`, defaults to `'blocabrac'` when absent). `utils/climbingPoints.ts`'s `calculateCompetitionPoints` is the dedicated calculation — a separate function from `calculatePoints`, never called by `classementScore.ts` or the mini-compétition path, so this feature cannot leak into the annual classement by construction.
+
+- **`blocabrac`** (default): identical to the classic barème, degressive by attempt count — behaves exactly like `calculatePoints`.
+- **`blocs_valides`**: each boulder carries its own `points_value` (set by the ouvreur/admin, invisible to climbers), awarded in full on success regardless of attempt count. Exists because the cotation is hidden in competition ("Mystère"), so a per-color barème doesn't reflect a boulder's actual relative difficulty — the ouvreur assigns points directly instead. For a boulder created for the event (`type: 'competition'`, `CompetitionBoulderForm.tsx`), `points_value` is a required field of that form when the competition is in this mode, and lives permanently on that competition-scoped doc. For a *reused daily boulder* (`type: 'daily'` + `competition_active`, tagged in via `CompetitionBouldersList.tsx`), `points_value` is edited inline in that list and is **cleared** (`deleteField()`) whenever the boulder leaves the competition (manual removal, or "Terminer la compétition") — the same physical boulder can be reused in a later competition with a different mode/value, so this field must never survive past this one competition's lifecycle on a shared doc.
+- **`personnalise`**: a full custom barème for this competition only, stored as `competitions.custom_scoring` (`Record<color, {base, deduction}>`), editable in the same button → menu, pre-filled from the default `basePoints`/`deductions` when first opened.
+
+Like `liveDisplayEnabled`, `scoring_mode`/`custom_scoring` are locked once a competition leaves `status: 'à venir'` — enforced **server-side** in `firestore.rules` (not just disabled in the UI), same `affectedKeys().hasAny([...])` pattern, same rationale: changing the mode mid-event would retroactively change everyone's score, not just future validations.
+
+A 4th mode discussed with the user — official IFSC/FFME-style scoring (ranked by tops, then zones, then attempts-to-top/attempts-to-zone) — was deliberately **not** built: it isn't a points sum at all (it's a multi-key sort), and the app doesn't currently capture "zone reached" per attempt. Treat it as a separate, larger chantier if it comes up again, not an extension of `calculateCompetitionPoints`.
 
 ### App version display
 
