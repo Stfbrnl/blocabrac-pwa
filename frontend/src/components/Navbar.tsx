@@ -26,7 +26,7 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useThemeMode } from '../context/ThemeModeContext';
 
 type UserRole = 'admin' | 'ouvreur' | 'moniteur' | 'client';
@@ -47,6 +47,7 @@ const Navbar: React.FC = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const { mode, toggleMode } = useThemeMode();
+  const location = useLocation();
 
   useEffect(() => {
     if (user) {
@@ -98,6 +99,14 @@ const Navbar: React.FC = () => {
   };
 
   if (loadingAuth || loadingRole) {
+    return null;
+  }
+
+  // ✅ Écran live TV (CONCEPTION-ecran-live-competition.md §4) : "rendue hors du
+  // layout habituel, pas de Navbar" — cette route s'ouvre dans une fenêtre HDMI
+  // étendue dédiée à la TV de la salle, la Navbar n'y a aucun sens et mangerait
+  // de l'espace sur un écran conçu pour être lu à 5 mètres.
+  if (location.pathname === '/admin/competitions/live-display') {
     return null;
   }
 

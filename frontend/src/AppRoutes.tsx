@@ -55,6 +55,7 @@ const AdminCompetitionManagement = lazy(() => import('./pages/AdminCompetitionMa
 const AdminCompetitionList = lazy(() => import('./pages/AdminCompetitionList'));
 const AdminCompetitionRegistration = lazy(() => import('./pages/AdminCompetitionRegistration'));
 const AdminCompetitionStats = lazy(() => import('./pages/AdminCompetitionStats'));
+const AdminCompetitionLiveDisplay = lazy(() => import('./pages/AdminCompetitionLiveDisplay'));
 const AdminAnnouncements = lazy(() => import('./pages/AdminAnnouncements'));
 
 export default function AppRoutes() {
@@ -121,6 +122,10 @@ export default function AppRoutes() {
         <Route path="/admin/competitions/list" element={<ProtectedRoute role="admin"><AdminCompetitionList /></ProtectedRoute>} />
         <Route path="/admin/competitions/register" element={<ProtectedRoute role="admin"><AdminCompetitionRegistration /></ProtectedRoute>} />
         <Route path="/admin/competitions/stats" element={<ProtectedRoute role="admin"><AdminCompetitionStats /></ProtectedRoute>} />
+        {/* ✅ Écran live TV (CONCEPTION-ecran-live-competition.md) : hors du layout
+            habituel (pas de Navbar, voir Navbar.tsx), ouvert en fenêtre séparée
+            depuis AdminCompetitionManagement.tsx. */}
+        <Route path="/admin/competitions/live-display" element={<ProtectedRoute role="admin"><AdminCompetitionLiveDisplay /></ProtectedRoute>} />
         <Route path="/admin/announcements" element={<ProtectedRoute role="admin"><AdminAnnouncements /></ProtectedRoute>} />
       </Routes>
     </Suspense>

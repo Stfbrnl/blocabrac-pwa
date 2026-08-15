@@ -310,6 +310,25 @@ const AdminCompetitionManagement: React.FC = () => {
                     >
                       Gérer les inscriptions
                     </Button>
+                    {/* ✅ Écran live TV (CONCEPTION-ecran-live-competition.md §7) :
+                        n'apparaît que pour les compétitions diffusées. window.open
+                        (pas navigate) : l'admin garde son poste de travail, la TV
+                        reçoit une fenêtre séparée en mode HDMI étendu (jamais miroir,
+                        voir §6 — sinon les cotations cachées de l'admin s'y afficheraient). */}
+                    {competition.liveDisplayEnabled && (
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        sx={{ ml: 1 }}
+                        onClick={() => window.open(
+                          `/admin/competitions/live-display?competitionId=${competition.id}`,
+                          '_blank',
+                          'noopener'
+                        )}
+                      >
+                        Ouvrir l'affichage TV
+                      </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
