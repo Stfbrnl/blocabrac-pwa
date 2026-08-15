@@ -19,10 +19,10 @@ type Level = 'jaune' | 'vert' | 'bleu' | 'violet' | 'rouge' | 'noir' | 'blanc' |
 // ✅ Liste des niveaux (pour les sélecteurs)
 const levelOptions: Level[] = ['jaune', 'vert', 'bleu', 'violet', 'rouge', 'noir', 'blanc', 'rose'];
 
-// ✅ Chantier "comptes de points" : 3 modes proposés ici (le 4e, officiel coupe de
-// France/du monde par tops/zones, est un chantier séparé — voir climbingPoints.ts).
-// Jamais utilisé par le classement annuel (classementScore.ts n'a jamais connaissance
-// de ce champ) : uniquement les écrans de classement compétition.
+// ✅ Chantier "comptes de points" : 4 modes. "officiel" (tops/zones) ne produit pas
+// de points — voir climbingPoints.ts/competitionClassement.ts. Jamais utilisé par le
+// classement annuel (classementScore.ts n'a jamais connaissance de ce champ) :
+// uniquement les écrans de classement compétition.
 const scoringModeOptions: { value: ScoringMode; label: string; description: string }[] = [
   {
     value: 'blocabrac',
@@ -38,6 +38,11 @@ const scoringModeOptions: { value: ScoringMode; label: string; description: stri
     value: 'personnalise',
     label: 'Personnalisé',
     description: 'Un barème par couleur propre à cette compétition : points de base et déduction par essai supplémentaire, réglables couleur par couleur.'
+  },
+  {
+    value: 'officiel',
+    label: 'Officiel (FFME / coupe du monde)',
+    description: 'Classement par tops, puis zones, puis essais au top, puis essais à la zone (version simplifiée sur les totaux cumulés de la compétition, pas un classement bloc par bloc). Aucun score en points — les grimpeurs valident top et zone séparément.'
   }
 ];
 

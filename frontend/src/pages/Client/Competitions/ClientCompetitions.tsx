@@ -55,6 +55,23 @@ interface RegistrableUser {
   level?: string;
 }
 
+// ✅ Mode "Officiel FFME/coupe du monde" (climbingPoints.ts/competitionClassement.ts) :
+// zone/attemptsToZone s'ajoutent au reste, écrits pour toutes les compétitions (pas
+// seulement en mode officiel) — coût nul, la même écriture différée existante gagne
+// juste deux champs de plus, jamais lus par les autres modes.
+interface ValidationResult {
+  success: boolean;
+  attempts: number;
+  rating: number;
+  proposedDifficulty: string;
+  zone: boolean;
+  attemptsToZone: number;
+}
+
+const defaultValidationResult: ValidationResult = {
+  success: false, attempts: 1, rating: 0, proposedDifficulty: '', zone: false, attemptsToZone: 1
+};
+
 interface Boulder {
   id: string;
   number: number;
@@ -84,12 +101,7 @@ const ClientCompetitions: React.FC = () => {
   const [openRegisterDialog, setOpenRegisterDialog] = useState(false);
   const [openValidationDialog, setOpenValidationDialog] = useState(false);
 
-  const [validationResults, setValidationResults] = useState<Record<string, {
-    success: boolean;
-    attempts: number;
-    rating: number;
-    proposedDifficulty: string;
-  }>>({});
+  const [validationResults, setValidationResults] = useState<Record<string, ValidationResult>>({});
 
   // ✅ Verrouillage des résultats : une fois soumis (submitted: true côté
   // Firestore), plus aucune modification n'est possible — ni ici ni côté règles.
@@ -111,7 +123,7 @@ const ClientCompetitions: React.FC = () => {
   const debounceEntries = useRef<Record<string, {
     timer: ReturnType<typeof setTimeout>;
     boulderId: string;
-    result: { success: boolean; attempts: number; rating: number; proposedDifficulty: string };
+    result: ValidationResult;
   }>>({});
   // ✅ Ids des blocs déjà persistés (chargés au 1.3 ou écrits cette session) :
   // permet de ne poser created_at qu'une seule fois par document.
@@ -121,9 +133,7 @@ const ClientCompetitions: React.FC = () => {
   // renvoie rien à Firestore si rien n'a changé depuis la dernière écriture
   // (modale rouverte sans modification, resélection de la même valeur, reclic
   // sur un bloc déjà marqué dans le même état).
-  const lastPersistedRef = useRef<Record<string, {
-    success: boolean; attempts: number; rating: number; proposedDifficulty: string;
-  }>>({});
+  const lastPersistedRef = useRef<Record<string, ValidationResult>>({});
 
   // ✅ Chargement unique des résultats du grimpeur par compétition (voir
   // SUIVI-quota-lectures-competition.md option A, puis
@@ -310,11 +320,13 @@ const ClientCompetitions: React.FC = () => {
       let lockedAtValue: string | null = null;
       snapshot.forEach(docSnap => {
         const data = docSnap.data();
-        const loaded = {
+        const loaded: ValidationResult = {
           success: data.success || false,
           attempts: data.attempts || 1,
           rating: data.rating || 0,
-          proposedDifficulty: data.proposed_difficulty || ''
+          proposedDifficulty: data.proposed_difficulty || '',
+          zone: data.zone || false,
+          attemptsToZone: data.attempts_to_zone || 1
         };
         results[data.boulder_id] = loaded;
         persistedBoulderIds.current.add(data.boulder_id);
@@ -438,16 +450,16 @@ const ClientCompetitions: React.FC = () => {
   // à la dernière valeur réellement persistée (voir lastPersistedRef) — un
   // reclic sur "Réussi" déjà actif, ou une resélection du même nombre
   // d'essais, ne déclenche plus d'écriture Firestore.
-  const persistResult = async (boulderId: string, result: {
-    success: boolean; attempts: number; rating: number; proposedDifficulty: string;
-  }) => {
+  const persistResult = async (boulderId: string, result: ValidationResult) => {
     if (!user || !selectedCompetition) return;
     const last = lastPersistedRef.current[boulderId];
     if (last &&
         last.success === result.success &&
         last.attempts === result.attempts &&
         last.rating === result.rating &&
-        last.proposedDifficulty === result.proposedDifficulty) {
+        last.proposedDifficulty === result.proposedDifficulty &&
+        last.zone === result.zone &&
+        last.attemptsToZone === result.attemptsToZone) {
       return;
     }
     const resultId = `${user.uid}_${boulderId}_${selectedCompetition.id}`;
@@ -461,6 +473,10 @@ const ClientCompetitions: React.FC = () => {
         attempts: result.attempts,
         rating: result.rating,
         proposed_difficulty: result.proposedDifficulty,
+        // ✅ Mode "Officiel" uniquement (voir climbingPoints.ts) — écrit pour toutes
+        // les compétitions, ignoré par les autres modes de comptage.
+        zone: result.zone,
+        attempts_to_zone: result.attemptsToZone,
         ...(isFirstWrite ? { createdAt: new Date().toISOString(), submitted: false } : {}),
         updated_at: new Date().toISOString()
       }, { merge: true });
@@ -504,16 +520,26 @@ const ClientCompetitions: React.FC = () => {
     return () => window.removeEventListener('pagehide', handler);
   }, []);
 
+  // ✅ Accepte une mise à jour PARTIELLE (fusionnée avec le résultat courant) plutôt
+  // que la liste complète des champs en paramètres positionnels — l'ajout de
+  // zone/attemptsToZone (mode "Officiel") aurait porté cette liste à 7 arguments
+  // booléens/numériques indistincts au site d'appel.
   const handleValidateBoulder = (
     boulderId: string,
-    success: boolean,
-    attempts: number,
-    rating: number,
-    proposedDifficulty: string,
+    updates: Partial<ValidationResult>,
     immediate: boolean = false
   ) => {
     if (isLocked) return;
-    const result = { success, attempts, rating, proposedDifficulty };
+    const current = validationResults[boulderId] || defaultValidationResult;
+    const result: ValidationResult = { ...current, ...updates };
+    // ✅ Un top implique la zone (elle est franchie en chemin, voir
+    // getOfficialParticipantTotals côté classement) : cocher "Réussi" coche donc
+    // aussi "Zone" si elle ne l'était pas déjà, jamais l'inverse ("Échoué" ne
+    // décoche pas une zone déjà atteinte indépendamment).
+    if (updates.success === true && !result.zone) {
+      result.zone = true;
+      if (result.attemptsToZone > result.attempts) result.attemptsToZone = result.attempts;
+    }
     setValidationResults(prev => ({ ...prev, [boulderId]: result }));
 
     if (immediate) {
@@ -737,12 +763,8 @@ const ClientCompetitions: React.FC = () => {
               )}
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
                 {boulders.map((boulder) => {
-                  const result = validationResults[boulder.id] || {
-                    success: false,
-                    attempts: 1,
-                    rating: 0,
-                    proposedDifficulty: ''
-                  };
+                  const result = validationResults[boulder.id] || defaultValidationResult;
+                  const isOfficialMode = selectedCompetition.scoring_mode === 'officiel';
                   const points = calculateCompetitionPoints(
                     boulder,
                     result.attempts,
@@ -767,14 +789,7 @@ const ClientCompetitions: React.FC = () => {
                             color="success"
                             size="small"
                             disabled={isLocked}
-                            onClick={() => handleValidateBoulder(
-                              boulder.id,
-                              true,
-                              result.attempts,
-                              result.rating,
-                              result.proposedDifficulty,
-                              true
-                            )}
+                            onClick={() => handleValidateBoulder(boulder.id, { success: true }, true)}
                           >
                             ✅ Réussi
                           </Button>
@@ -783,51 +798,65 @@ const ClientCompetitions: React.FC = () => {
                             color="error"
                             size="small"
                             disabled={isLocked}
-                            onClick={() => handleValidateBoulder(
-                              boulder.id,
-                              false,
-                              result.attempts,
-                              result.rating,
-                              result.proposedDifficulty,
-                              true
-                            )}
+                            onClick={() => handleValidateBoulder(boulder.id, { success: false }, true)}
                           >
                             ❌ Échoué
                           </Button>
                         </Box>
+                        {/* ✅ Mode "Officiel FFME/coupe du monde" uniquement : la zone se
+                            valide indépendamment du top (un top vaut zone automatiquement,
+                            voir handleValidateBoulder — cocher "Réussi" coche déjà la
+                            zone, ce bouton sert au cas "zone atteinte, top non atteint"). */}
+                        {isOfficialMode && (
+                          <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                            <Button
+                              variant={result.zone ? "contained" : "outlined"}
+                              color="info"
+                              size="small"
+                              disabled={isLocked}
+                              onClick={() => handleValidateBoulder(boulder.id, { zone: !result.zone }, true)}
+                            >
+                              🟡 Zone {result.zone ? 'atteinte' : 'non atteinte'}
+                            </Button>
+                          </Box>
+                        )}
                         <FormControl fullWidth sx={{ mt: 1 }} disabled={isLocked}>
-                          <InputLabel id="nombre-d-essais-select-label">Nombre d'essais</InputLabel>
+                          <InputLabel id="nombre-d-essais-select-label">Nombre d'essais (top)</InputLabel>
                           <Select
                             labelId="nombre-d-essais-select-label" id="nombre-d-essais-select"
                             value={result.attempts}
                             disabled={isLocked}
-                            onChange={(e) => handleValidateBoulder(
-                              boulder.id,
-                              result.success,
-                              e.target.value as number,
-                              result.rating,
-                              result.proposedDifficulty
-                            )}
-                            label="Nombre d'essais"
+                            onChange={(e) => handleValidateBoulder(boulder.id, { attempts: e.target.value as number })}
+                            label="Nombre d'essais (top)"
                           >
                             {Array.from({ length: 15 }, (_, i) => i + 1).map(num => (
                               <MenuItem key={num} value={num}>{num} essai{num > 1 ? 's' : ''}</MenuItem>
                             ))}
                           </Select>
                         </FormControl>
+                        {isOfficialMode && result.zone && (
+                          <FormControl fullWidth sx={{ mt: 1 }} disabled={isLocked}>
+                            <InputLabel id="essais-zone-select-label">Nombre d'essais (zone)</InputLabel>
+                            <Select
+                              labelId="essais-zone-select-label" id="essais-zone-select"
+                              value={result.attemptsToZone}
+                              disabled={isLocked}
+                              onChange={(e) => handleValidateBoulder(boulder.id, { attemptsToZone: e.target.value as number })}
+                              label="Nombre d'essais (zone)"
+                            >
+                              {Array.from({ length: 15 }, (_, i) => i + 1).map(num => (
+                                <MenuItem key={num} value={num}>{num} essai{num > 1 ? 's' : ''}</MenuItem>
+                              ))}
+                            </Select>
+                          </FormControl>
+                        )}
                         <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
                           <Typography>Note: </Typography>
                           <Rating
                             name={`rating-${boulder.id}`}
                             value={result.rating}
                             disabled={isLocked}
-                            onChange={(e, newValue) => handleValidateBoulder(
-                              boulder.id,
-                              result.success,
-                              result.attempts,
-                              newValue || 0,
-                              result.proposedDifficulty
-                            )}
+                            onChange={(e, newValue) => handleValidateBoulder(boulder.id, { rating: newValue || 0 })}
                           />
                         </Box>
                         <FormControl fullWidth sx={{ mt: 1 }} disabled={isLocked}>
@@ -836,13 +865,7 @@ const ClientCompetitions: React.FC = () => {
                             labelId="cotation-proposee-select-label" id="cotation-proposee-select"
                             value={result.proposedDifficulty}
                             disabled={isLocked}
-                            onChange={(e) => handleValidateBoulder(
-                              boulder.id,
-                              result.success,
-                              result.attempts,
-                              result.rating,
-                              e.target.value
-                            )}
+                            onChange={(e) => handleValidateBoulder(boulder.id, { proposedDifficulty: e.target.value })}
                             label="Cotation proposée"
                           >
                             {Object.keys(levelColors).map(color => (
@@ -861,9 +884,16 @@ const ClientCompetitions: React.FC = () => {
                             ))}
                           </Select>
                         </FormControl>
-                        <Typography sx={{ mt: 1, fontWeight: 'bold' }}>
-                          Points: {points}
-                        </Typography>
+                        {/* ✅ Mode "Officiel" : pas de points, un aperçu de classement par
+                            bloc n'aurait pas de sens (le classement est global — tops/
+                            zones/essais cumulés sur toute la compétition, voir les écrans
+                            de classement) — rien à afficher ici plutôt qu'un "Points: 0"
+                            trompeur. */}
+                        {!isOfficialMode && (
+                          <Typography sx={{ mt: 1, fontWeight: 'bold' }}>
+                            Points: {points}
+                          </Typography>
+                        )}
                       </CardContent>
                     </Card>
                   );

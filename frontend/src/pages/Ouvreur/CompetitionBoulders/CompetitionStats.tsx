@@ -12,7 +12,9 @@ import { getSeasonAge, getFfmeCategory, OPEN_CATEGORY } from '../../../utils/age
 // ce calcul existait en double avec AdminCompetitionStats.tsx.
 import {
   getClassementByCategory as computeClassementByCategory,
+  getOfficialClassementByCategory as computeOfficialClassementByCategory,
   type ScoreEntry,
+  type OfficialScoreEntry,
   type CategoryGroup,
   type ScoringMode,
   type CustomScoringTable,
@@ -35,6 +37,8 @@ interface CompetitionResult {
   attempts: number;
   rating: number;
   proposed_difficulty: string;
+  zone?: boolean; // ✅ Mode "Officiel" uniquement
+  attempts_to_zone?: number; // ✅ Mode "Officiel" uniquement
 }
 
 interface Boulder {
@@ -157,7 +161,9 @@ const CompetitionStats: React.FC = () => {
           success: doc.data().success || false,
           attempts: doc.data().attempts || 0,
           rating: doc.data().rating || 0,
-          proposed_difficulty: doc.data().proposed_difficulty || ''
+          proposed_difficulty: doc.data().proposed_difficulty || '',
+          zone: doc.data().zone,
+          attempts_to_zone: doc.data().attempts_to_zone
         }));
         setResults(resultsData);
 
@@ -209,16 +215,26 @@ const CompetitionStats: React.FC = () => {
   const selectedCompetitionDoc = competitions.find(c => c.id === selectedCompetition);
   const scoringMode = selectedCompetitionDoc?.scoring_mode || 'blocabrac';
   const customScoring = selectedCompetitionDoc?.custom_scoring;
+  const isOfficialMode = scoringMode === 'officiel';
 
   function getClassementByCategory(category: 'global'): ScoreEntry<Participant>[];
-  function getClassementByCategory(category: 'age' | 'gender'): CategoryGroup<Participant>[];
+  function getClassementByCategory(category: 'age' | 'gender'): CategoryGroup<ScoreEntry<Participant>>[];
   function getClassementByCategory(
     category: 'global' | 'age' | 'gender'
-  ): ScoreEntry<Participant>[] | CategoryGroup<Participant>[] {
+  ): ScoreEntry<Participant>[] | CategoryGroup<ScoreEntry<Participant>>[] {
     if (category === 'global') {
       return computeClassementByCategory(results, participants, boulders, category, scoringMode, customScoring);
     }
     return computeClassementByCategory(results, participants, boulders, category, scoringMode, customScoring);
+  }
+
+  function getOfficialClassementByCategory(category: 'global'): OfficialScoreEntry<Participant>[];
+  function getOfficialClassementByCategory(category: 'age' | 'gender'): CategoryGroup<OfficialScoreEntry<Participant>>[];
+  function getOfficialClassementByCategory(
+    category: 'global' | 'age' | 'gender'
+  ): OfficialScoreEntry<Participant>[] | CategoryGroup<OfficialScoreEntry<Participant>>[] {
+    if (category === 'global') return computeOfficialClassementByCategory(results, participants, category);
+    return computeOfficialClassementByCategory(results, participants, category);
   }
 
   return (
@@ -254,103 +270,219 @@ const CompetitionStats: React.FC = () => {
         <LinearProgress />
       ) : selectedCompetition ? (
         <>
-          <Paper sx={{ p: { xs: 1.5, sm: 2 }, mb: 3 }}>
-            <Typography variant="h6">Classement {OPEN_CATEGORY}</Typography>
-            {/* ✅ Scroll horizontal de secours : 6 colonnes ne tiennent jamais sur mobile */}
-            <TableContainer sx={{ overflowX: 'auto' }}>
-              <Table sx={{ minWidth: 600 }}>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Position</TableCell>
-                    <TableCell>Participant</TableCell>
-                    <TableCell>Score</TableCell>
-                    <TableCell>Blocs validés</TableCell>
-                    <TableCell>Âge</TableCell>
-                    <TableCell>Genre</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {getClassementByCategory('global').map((item, index) => (
-                    <TableRow key={index}>
-                      <TableCell>{index + 1}</TableCell>
-                      <TableCell>{item.participant.first_name} {item.participant.last_name}</TableCell>
-                      <TableCell>{item.score}</TableCell>
-                      <TableCell>{item.boulders}</TableCell>
-                      <TableCell>{getFfmeCategory(getSeasonAge(item.participant.dateOfBirth, item.participant.age))}</TableCell>
-                      <TableCell>{item.participant.gender || 'Inconnu'}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Paper>
-
-          <Paper sx={{ p: { xs: 1.5, sm: 2 }, mb: 3 }}>
-            <Typography variant="h6">Classement par Catégorie d'Âge</Typography>
-            {getClassementByCategory('age').map((category) => (
-              category.participants.length > 0 && (
-                <Box key={category.category} sx={{ mb: 3 }}>
-                  <Typography variant="subtitle1">{category.category}</Typography>
-                  {/* ✅ Scroll horizontal de secours */}
-                  <TableContainer sx={{ overflowX: 'auto' }}>
-                    <Table size="small" sx={{ minWidth: 400 }}>
-                      <TableHead>
-                        <TableRow>
-                          <TableCell>Position</TableCell>
-                          <TableCell>Participant</TableCell>
-                          <TableCell>Score</TableCell>
-                          <TableCell>Blocs validés</TableCell>
+          {isOfficialMode ? (
+            // ✅ Mode "Officiel FFME/coupe du monde" : colonnes tops/zones/essais,
+            // jamais de colonne "Score" — voir competitionClassement.ts.
+            <>
+              <Paper sx={{ p: { xs: 1.5, sm: 2 }, mb: 3 }}>
+                <Typography variant="h6">Classement {OPEN_CATEGORY}</Typography>
+                <TableContainer sx={{ overflowX: 'auto' }}>
+                  <Table sx={{ minWidth: 700 }}>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Position</TableCell>
+                        <TableCell>Participant</TableCell>
+                        <TableCell>Tops</TableCell>
+                        <TableCell>Zones</TableCell>
+                        <TableCell>Essais (top)</TableCell>
+                        <TableCell>Essais (zone)</TableCell>
+                        <TableCell>Âge</TableCell>
+                        <TableCell>Genre</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {getOfficialClassementByCategory('global').map((item, index) => (
+                        <TableRow key={index}>
+                          <TableCell>{index + 1}</TableCell>
+                          <TableCell>{item.participant.first_name} {item.participant.last_name}</TableCell>
+                          <TableCell>{item.totals.tops}</TableCell>
+                          <TableCell>{item.totals.zones}</TableCell>
+                          <TableCell>{item.totals.attemptsToTop}</TableCell>
+                          <TableCell>{item.totals.attemptsToZone}</TableCell>
+                          <TableCell>{getFfmeCategory(getSeasonAge(item.participant.dateOfBirth, item.participant.age))}</TableCell>
+                          <TableCell>{item.participant.gender || 'Inconnu'}</TableCell>
                         </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {category.participants.map((item: ScoreEntry<Participant>, index: number) => (
-                          <TableRow key={index}>
-                            <TableCell>{index + 1}</TableCell>
-                            <TableCell>{item.participant.first_name} {item.participant.last_name}</TableCell>
-                            <TableCell>{item.score}</TableCell>
-                            <TableCell>{item.boulders}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                </Box>
-              )
-            ))}
-          </Paper>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Paper>
 
-          <Paper sx={{ p: { xs: 1.5, sm: 2 } }}>
-            <Typography variant="h6">Classement par Genre</Typography>
-            {getClassementByCategory('gender').map((gender) => (
-              gender.participants.length > 0 && (
-                <Box key={gender.category} sx={{ mb: 3 }}>
-                  <Typography variant="subtitle1">{gender.category}</Typography>
-                  <TableContainer sx={{ overflowX: 'auto' }}>
-                    <Table size="small" sx={{ minWidth: 400 }}>
-                      <TableHead>
-                        <TableRow>
-                          <TableCell>Position</TableCell>
-                          <TableCell>Participant</TableCell>
-                          <TableCell>Score</TableCell>
-                          <TableCell>Blocs validés</TableCell>
+              <Paper sx={{ p: { xs: 1.5, sm: 2 }, mb: 3 }}>
+                <Typography variant="h6">Classement par Catégorie d'Âge</Typography>
+                {getOfficialClassementByCategory('age').map((category) => (
+                  category.participants.length > 0 && (
+                    <Box key={category.category} sx={{ mb: 3 }}>
+                      <Typography variant="subtitle1">{category.category}</Typography>
+                      <TableContainer sx={{ overflowX: 'auto' }}>
+                        <Table size="small" sx={{ minWidth: 500 }}>
+                          <TableHead>
+                            <TableRow>
+                              <TableCell>Position</TableCell>
+                              <TableCell>Participant</TableCell>
+                              <TableCell>Tops</TableCell>
+                              <TableCell>Zones</TableCell>
+                              <TableCell>Essais (top)</TableCell>
+                              <TableCell>Essais (zone)</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {category.participants.map((item, index) => (
+                              <TableRow key={index}>
+                                <TableCell>{index + 1}</TableCell>
+                                <TableCell>{item.participant.first_name} {item.participant.last_name}</TableCell>
+                                <TableCell>{item.totals.tops}</TableCell>
+                                <TableCell>{item.totals.zones}</TableCell>
+                                <TableCell>{item.totals.attemptsToTop}</TableCell>
+                                <TableCell>{item.totals.attemptsToZone}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    </Box>
+                  )
+                ))}
+              </Paper>
+
+              <Paper sx={{ p: { xs: 1.5, sm: 2 } }}>
+                <Typography variant="h6">Classement par Genre</Typography>
+                {getOfficialClassementByCategory('gender').map((gender) => (
+                  gender.participants.length > 0 && (
+                    <Box key={gender.category} sx={{ mb: 3 }}>
+                      <Typography variant="subtitle1">{gender.category}</Typography>
+                      <TableContainer sx={{ overflowX: 'auto' }}>
+                        <Table size="small" sx={{ minWidth: 500 }}>
+                          <TableHead>
+                            <TableRow>
+                              <TableCell>Position</TableCell>
+                              <TableCell>Participant</TableCell>
+                              <TableCell>Tops</TableCell>
+                              <TableCell>Zones</TableCell>
+                              <TableCell>Essais (top)</TableCell>
+                              <TableCell>Essais (zone)</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {gender.participants.map((item, index) => (
+                              <TableRow key={index}>
+                                <TableCell>{index + 1}</TableCell>
+                                <TableCell>{item.participant.first_name} {item.participant.last_name}</TableCell>
+                                <TableCell>{item.totals.tops}</TableCell>
+                                <TableCell>{item.totals.zones}</TableCell>
+                                <TableCell>{item.totals.attemptsToTop}</TableCell>
+                                <TableCell>{item.totals.attemptsToZone}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    </Box>
+                  )
+                ))}
+              </Paper>
+            </>
+          ) : (
+            <>
+              <Paper sx={{ p: { xs: 1.5, sm: 2 }, mb: 3 }}>
+                <Typography variant="h6">Classement {OPEN_CATEGORY}</Typography>
+                {/* ✅ Scroll horizontal de secours : 6 colonnes ne tiennent jamais sur mobile */}
+                <TableContainer sx={{ overflowX: 'auto' }}>
+                  <Table sx={{ minWidth: 600 }}>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Position</TableCell>
+                        <TableCell>Participant</TableCell>
+                        <TableCell>Score</TableCell>
+                        <TableCell>Blocs validés</TableCell>
+                        <TableCell>Âge</TableCell>
+                        <TableCell>Genre</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {getClassementByCategory('global').map((item, index) => (
+                        <TableRow key={index}>
+                          <TableCell>{index + 1}</TableCell>
+                          <TableCell>{item.participant.first_name} {item.participant.last_name}</TableCell>
+                          <TableCell>{item.score}</TableCell>
+                          <TableCell>{item.boulders}</TableCell>
+                          <TableCell>{getFfmeCategory(getSeasonAge(item.participant.dateOfBirth, item.participant.age))}</TableCell>
+                          <TableCell>{item.participant.gender || 'Inconnu'}</TableCell>
                         </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {gender.participants.map((item: ScoreEntry<Participant>, index: number) => (
-                          <TableRow key={index}>
-                            <TableCell>{index + 1}</TableCell>
-                            <TableCell>{item.participant.first_name} {item.participant.last_name}</TableCell>
-                            <TableCell>{item.score}</TableCell>
-                            <TableCell>{item.boulders}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                </Box>
-              )
-            ))}
-          </Paper>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Paper>
+
+              <Paper sx={{ p: { xs: 1.5, sm: 2 }, mb: 3 }}>
+                <Typography variant="h6">Classement par Catégorie d'Âge</Typography>
+                {getClassementByCategory('age').map((category) => (
+                  category.participants.length > 0 && (
+                    <Box key={category.category} sx={{ mb: 3 }}>
+                      <Typography variant="subtitle1">{category.category}</Typography>
+                      {/* ✅ Scroll horizontal de secours */}
+                      <TableContainer sx={{ overflowX: 'auto' }}>
+                        <Table size="small" sx={{ minWidth: 400 }}>
+                          <TableHead>
+                            <TableRow>
+                              <TableCell>Position</TableCell>
+                              <TableCell>Participant</TableCell>
+                              <TableCell>Score</TableCell>
+                              <TableCell>Blocs validés</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {category.participants.map((item: ScoreEntry<Participant>, index: number) => (
+                              <TableRow key={index}>
+                                <TableCell>{index + 1}</TableCell>
+                                <TableCell>{item.participant.first_name} {item.participant.last_name}</TableCell>
+                                <TableCell>{item.score}</TableCell>
+                                <TableCell>{item.boulders}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    </Box>
+                  )
+                ))}
+              </Paper>
+
+              <Paper sx={{ p: { xs: 1.5, sm: 2 } }}>
+                <Typography variant="h6">Classement par Genre</Typography>
+                {getClassementByCategory('gender').map((gender) => (
+                  gender.participants.length > 0 && (
+                    <Box key={gender.category} sx={{ mb: 3 }}>
+                      <Typography variant="subtitle1">{gender.category}</Typography>
+                      <TableContainer sx={{ overflowX: 'auto' }}>
+                        <Table size="small" sx={{ minWidth: 400 }}>
+                          <TableHead>
+                            <TableRow>
+                              <TableCell>Position</TableCell>
+                              <TableCell>Participant</TableCell>
+                              <TableCell>Score</TableCell>
+                              <TableCell>Blocs validés</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {gender.participants.map((item: ScoreEntry<Participant>, index: number) => (
+                              <TableRow key={index}>
+                                <TableCell>{index + 1}</TableCell>
+                                <TableCell>{item.participant.first_name} {item.participant.last_name}</TableCell>
+                                <TableCell>{item.score}</TableCell>
+                                <TableCell>{item.boulders}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    </Box>
+                  )
+                ))}
+              </Paper>
+            </>
+          )}
         </>
       ) : (
         <Typography>Sélectionnez une compétition pour voir les statistiques.</Typography>

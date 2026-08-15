@@ -58,4 +58,8 @@ describe('calculateCompetitionPoints', () => {
     const customScoring: CustomScoringTable = { rouge: { base: 50, deduction: 100 } };
     expect(calculateCompetitionPoints({ difficulty: 'rouge' }, 5, true, 'personnalise', customScoring)).toBe(0);
   });
+
+  it('mode "officiel" renvoie toujours 0 : pas une somme de points, voir getOfficialParticipantTotals', () => {
+    expect(calculateCompetitionPoints({ difficulty: 'rose' }, 1, true, 'officiel')).toBe(0);
+  });
 });

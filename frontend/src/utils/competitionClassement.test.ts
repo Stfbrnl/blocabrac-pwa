@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { getParticipantScores, getClassementByCategory, type ParticipantBase } from './competitionClassement';
+import {
+  getParticipantScores,
+  getClassementByCategory,
+  getOfficialParticipantTotals,
+  getOfficialClassementByCategory,
+  type ParticipantBase,
+} from './competitionClassement';
 
 interface TestParticipant extends ParticipantBase {
   first_name: string;
@@ -105,6 +111,89 @@ describe('getClassementByCategory', () => {
     const byAge = getClassementByCategory(results, participants, boulders, 'age');
     // Alice (12 ans) et Bob (30 ans, "Open") tombent dans des catégories FFME différentes
     expect(byAge.length).toBeGreaterThanOrEqual(2);
+    const allParticipants = byAge.flatMap(g => g.participants.map(p => p.participant.user_id));
+    expect(allParticipants.sort()).toEqual(['alice', 'bob']);
+  });
+});
+
+describe('getOfficialParticipantTotals (mode "Officiel FFME/coupe du monde")', () => {
+  it('renvoie un tableau vide sans résultat', () => {
+    expect(getOfficialParticipantTotals([], participants)).toEqual([]);
+  });
+
+  it('compte les tops, zones et essais séparément', () => {
+    const results = [
+      { user_id: 'alice', boulder_id: 'b1', success: true, attempts: 2, zone: true, attempts_to_zone: 1 },
+      { user_id: 'alice', boulder_id: 'b2', success: false, attempts: 3, zone: true, attempts_to_zone: 2 },
+    ];
+    const totals = getOfficialParticipantTotals(results, participants);
+    expect(totals).toEqual([{
+      participant: alice,
+      totals: { tops: 1, zones: 2, attemptsToTop: 2, attemptsToZone: 1 + 2 },
+    }]);
+  });
+
+  it('un top compte comme zone même si "zone" n\'a pas été explicitement coché', () => {
+    // ✅ Repli pour un résultat écrit par un ancien client / avant ce chantier.
+    const results = [{ user_id: 'alice', boulder_id: 'b1', success: true, attempts: 3 }];
+    const totals = getOfficialParticipantTotals(results, participants);
+    expect(totals[0].totals).toEqual({ tops: 1, zones: 1, attemptsToTop: 3, attemptsToZone: 3 });
+  });
+
+  it('classe par tops (le plus), départage par zones (le plus)', () => {
+    const results = [
+      { user_id: 'alice', boulder_id: 'b1', success: true, attempts: 1, zone: true, attempts_to_zone: 1 },
+      { user_id: 'bob', boulder_id: 'b1', success: false, attempts: 5, zone: true, attempts_to_zone: 1 },
+      { user_id: 'bob', boulder_id: 'b2', success: false, attempts: 5, zone: true, attempts_to_zone: 1 },
+    ];
+    const totals = getOfficialParticipantTotals(results, participants);
+    // Alice : 1 top, 1 zone. Bob : 0 top, 2 zones. Le top d'Alice prime toujours.
+    expect(totals.map(t => t.participant.user_id)).toEqual(['alice', 'bob']);
+  });
+
+  it('à tops et zones égaux, départage par le moins d\'essais au top', () => {
+    const results = [
+      { user_id: 'alice', boulder_id: 'b1', success: true, attempts: 4, zone: true, attempts_to_zone: 1 },
+      { user_id: 'bob', boulder_id: 'b1', success: true, attempts: 1, zone: true, attempts_to_zone: 1 },
+    ];
+    const totals = getOfficialParticipantTotals(results, participants);
+    expect(totals.map(t => t.participant.user_id)).toEqual(['bob', 'alice']); // Bob : moins d'essais
+  });
+
+  it('à tops/zones/essais-top égaux, départage final par le moins d\'essais à la zone', () => {
+    const results = [
+      { user_id: 'alice', boulder_id: 'b1', success: true, attempts: 3, zone: true, attempts_to_zone: 3 },
+      { user_id: 'bob', boulder_id: 'b1', success: true, attempts: 3, zone: true, attempts_to_zone: 1 },
+    ];
+    const totals = getOfficialParticipantTotals(results, participants);
+    expect(totals.map(t => t.participant.user_id)).toEqual(['bob', 'alice']);
+  });
+
+  it('essais à la zone se replie sur "attempts" si "attempts_to_zone" est absent', () => {
+    const results = [{ user_id: 'alice', boulder_id: 'b1', success: false, attempts: 4, zone: true }];
+    const totals = getOfficialParticipantTotals(results, participants);
+    expect(totals[0].totals.attemptsToZone).toBe(4);
+  });
+});
+
+describe('getOfficialClassementByCategory', () => {
+  const results = [
+    { user_id: 'alice', boulder_id: 'b1', success: true, attempts: 1, zone: true, attempts_to_zone: 1 },
+    { user_id: 'bob', boulder_id: 'b1', success: true, attempts: 2, zone: true, attempts_to_zone: 1 },
+  ];
+
+  it('"global" renvoie la même liste que getOfficialParticipantTotals', () => {
+    expect(getOfficialClassementByCategory(results, participants, 'global'))
+      .toEqual(getOfficialParticipantTotals(results, participants));
+  });
+
+  it('"gender" groupe les participants par genre', () => {
+    const byGender = getOfficialClassementByCategory(results, participants, 'gender');
+    expect(byGender.map(g => g.category).sort()).toEqual(['F', 'M']);
+  });
+
+  it('"age" groupe les participants par catégorie FFME', () => {
+    const byAge = getOfficialClassementByCategory(results, participants, 'age');
     const allParticipants = byAge.flatMap(g => g.participants.map(p => p.participant.user_id));
     expect(allParticipants.sort()).toEqual(['alice', 'bob']);
   });

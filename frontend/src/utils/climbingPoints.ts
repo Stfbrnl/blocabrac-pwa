@@ -17,11 +17,13 @@ export const calculatePoints = (difficulty: string, attempts: number, success: b
 };
 
 // ✅ Modes de comptage propres aux compétitions (jamais au classement annuel — voir
-// competitionClassement.ts, seul appelant de calculateCompetitionPoints). Le mode
-// "officiel coupe de France/du monde" (tops/zones, pas une somme de points) est
-// délibérément absent : classement par tri multi-critères, pas compatible avec cette
-// fonction — chantier séparé si un jour construit.
-export type ScoringMode = 'blocabrac' | 'blocs_valides' | 'personnalise';
+// competitionClassement.ts, seul appelant de calculateCompetitionPoints). "officiel"
+// (coupe de France/du monde, tops/zones) N'EST PAS calculé ici : ce n'est pas une
+// somme de points mais un classement par tri multi-critères — voir
+// getOfficialParticipantTotals dans competitionClassement.ts, jamais
+// calculateCompetitionPoints pour ce mode (qui renvoie 0, volontairement inutilisable
+// telle quelle plutôt que silencieusement fausse).
+export type ScoringMode = 'blocabrac' | 'blocs_valides' | 'personnalise' | 'officiel';
 
 export interface CustomScoringEntry {
   base: number;
@@ -51,6 +53,9 @@ export const calculateCompetitionPoints = (
   customScoring?: CustomScoringTable
 ): number => {
   if (!success) return 0;
+  // ✅ Voir la note sur ScoringMode ci-dessus : ce mode ne produit pas de points,
+  // renvoyer 0 plutôt que de laisser cette fonction faire semblant.
+  if (mode === 'officiel') return 0;
   const colorKey = boulder.color || boulder.difficulty;
 
   if (mode === 'blocs_valides') {

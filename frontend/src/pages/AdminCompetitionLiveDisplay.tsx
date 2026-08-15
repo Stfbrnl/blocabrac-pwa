@@ -6,10 +6,12 @@ import { db } from '../services/firebaseConfig';
 import { formattedAppVersion } from '../config/appVersion';
 import {
   getClassementByCategory,
+  getOfficialClassementByCategory,
   type BoulderInput,
   type CompetitionResultInput,
   type ParticipantBase,
   type ScoreEntry,
+  type OfficialScoreEntry,
   type CategoryGroup,
   type ScoringMode,
   type CustomScoringTable,
@@ -49,10 +51,16 @@ interface LiveParticipant extends ParticipantBase {
   submitted: boolean;
 }
 
+// ✅ Mode "Officiel FFME/coupe du monde" : entrées de forme différente (totals, pas
+// score) — union discriminée par "totals" au rendu (voir renderEntryValue plus bas).
 interface LivePage {
   title: string;
-  entries: ScoreEntry<LiveParticipant>[];
+  entries: (ScoreEntry<LiveParticipant> | OfficialScoreEntry<LiveParticipant>)[];
 }
+
+const isOfficialEntry = (
+  entry: ScoreEntry<LiveParticipant> | OfficialScoreEntry<LiveParticipant>
+): entry is OfficialScoreEntry<LiveParticipant> => 'totals' in entry;
 
 // ✅ Prénom + initiale (§7, "Format d'affichage") : les catégories FFME impliquent des
 // mineurs, le nom complet n'est pas affiché sur un écran public.
@@ -116,10 +124,21 @@ function useWakeLock() {
 const LiveCompetitionView: React.FC<{ competition: Competition }> = ({ competition }) => {
   const scoringMode = competition.scoring_mode || 'blocabrac';
   const customScoring = competition.custom_scoring;
+  // ✅ scoring_mode est verrouillé côté firestore.rules dès que la compétition quitte
+  // "à venir" (AdminCompetitionManagement.tsx) — ne peut pas changer pendant la vie de
+  // ce composant (remonté par compétition via key={competition.id}), donc brancher une
+  // fois ici plutôt qu'à chaque recalcul est sûr.
+  const isOfficialMode = scoringMode === 'officiel';
   const [boulders, setBoulders] = useState<BoulderInput[]>([]);
   const [bouldersLoaded, setBouldersLoaded] = useState(false);
   const [globalClassement, setGlobalClassement] = useState<ScoreEntry<LiveParticipant>[]>([]);
-  const [byAgeClassement, setByAgeClassement] = useState<CategoryGroup<LiveParticipant>[]>([]);
+  const [byAgeClassement, setByAgeClassement] = useState<CategoryGroup<ScoreEntry<LiveParticipant>>[]>([]);
+  // ✅ Mode "Officiel" uniquement — voir isOfficialMode. États séparés plutôt qu'un
+  // type union sur globalClassement/byAgeClassement : plus simple à peupler depuis
+  // scheduleRecompute, au prix de deux paires d'états dont une seule est jamais
+  // utilisée pour une compétition donnée.
+  const [officialGlobalClassement, setOfficialGlobalClassement] = useState<OfficialScoreEntry<LiveParticipant>[]>([]);
+  const [officialByAgeClassement, setOfficialByAgeClassement] = useState<CategoryGroup<OfficialScoreEntry<LiveParticipant>>[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [pageIndex, setPageIndex] = useState(0);
 
@@ -166,12 +185,21 @@ const LiveCompetitionView: React.FC<{ competition: Competition }> = ({ competiti
       if (recomputeTimer) return; // un recalcul est déjà programmé pour ce cycle
       recomputeTimer = setTimeout(() => {
         recomputeTimer = null;
-        setGlobalClassement(
-          getClassementByCategory(resultsRef.current, participantsRef.current, boulders, 'global', scoringMode, customScoring)
-        );
-        setByAgeClassement(
-          getClassementByCategory(resultsRef.current, participantsRef.current, boulders, 'age', scoringMode, customScoring)
-        );
+        if (isOfficialMode) {
+          setOfficialGlobalClassement(
+            getOfficialClassementByCategory(resultsRef.current, participantsRef.current, 'global')
+          );
+          setOfficialByAgeClassement(
+            getOfficialClassementByCategory(resultsRef.current, participantsRef.current, 'age')
+          );
+        } else {
+          setGlobalClassement(
+            getClassementByCategory(resultsRef.current, participantsRef.current, boulders, 'global', scoringMode, customScoring)
+          );
+          setByAgeClassement(
+            getClassementByCategory(resultsRef.current, participantsRef.current, boulders, 'age', scoringMode, customScoring)
+          );
+        }
         setLastUpdated(new Date());
       }, RECOMPUTE_DEBOUNCE_MS);
     };
@@ -186,6 +214,8 @@ const LiveCompetitionView: React.FC<{ competition: Competition }> = ({ competiti
         boulder_id: d.data().boulder_id || '',
         success: d.data().success || false,
         attempts: d.data().attempts || 0,
+        zone: d.data().zone,
+        attempts_to_zone: d.data().attempts_to_zone,
       }));
       scheduleRecompute();
     }, (err) => console.error('Erreur du listener competition_results :', err));
@@ -212,19 +242,27 @@ const LiveCompetitionView: React.FC<{ competition: Competition }> = ({ competiti
       unsubscribeParticipants();
       if (recomputeTimer) clearTimeout(recomputeTimer);
     };
-  }, [competition.id, bouldersLoaded, boulders, scoringMode, customScoring]);
+  }, [competition.id, bouldersLoaded, boulders, scoringMode, customScoring, isOfficialMode]);
 
   // ✅ "ne pas afficher 90 lignes" (§5) : rotation par catégorie FFME plutôt qu'un
   // classement général complet (8 pages de 90 lignes = ~90s par tour, un grimpeur
   // attendrait 40s en moyenne). Top 10 général fixe en première page.
   const pages = useMemo<LivePage[]>(() => {
+    if (isOfficialMode) {
+      if (officialGlobalClassement.length === 0) return [];
+      const result: LivePage[] = [{ title: 'Top 10 — Classement général', entries: officialGlobalClassement.slice(0, 10) }];
+      officialByAgeClassement.forEach(group => {
+        if (group.participants.length > 0) result.push({ title: group.category, entries: group.participants });
+      });
+      return result;
+    }
     if (globalClassement.length === 0) return [];
     const result: LivePage[] = [{ title: 'Top 10 — Classement général', entries: globalClassement.slice(0, 10) }];
     byAgeClassement.forEach(group => {
       if (group.participants.length > 0) result.push({ title: group.category, entries: group.participants });
     });
     return result;
-  }, [globalClassement, byAgeClassement]);
+  }, [isOfficialMode, globalClassement, byAgeClassement, officialGlobalClassement, officialByAgeClassement]);
 
   useEffect(() => {
     if (pages.length <= 1) return;
@@ -282,9 +320,17 @@ const LiveCompetitionView: React.FC<{ competition: Competition }> = ({ competiti
                     provisoire
                   </Typography>
                 )}
-                <Typography variant="h5" sx={{ width: '8ch', textAlign: 'right', fontWeight: 700 }}>
-                  {entry.score} pts
-                </Typography>
+                {/* ✅ Mode "Officiel" : pas de points, tops/zones à la place — voir
+                    isOfficialEntry (union discriminée sur "totals"). */}
+                {isOfficialEntry(entry) ? (
+                  <Typography variant="h5" sx={{ width: '16ch', textAlign: 'right', fontWeight: 700 }}>
+                    {entry.totals.tops}T · {entry.totals.zones}Z
+                  </Typography>
+                ) : (
+                  <Typography variant="h5" sx={{ width: '8ch', textAlign: 'right', fontWeight: 700 }}>
+                    {entry.score} pts
+                  </Typography>
+                )}
               </Box>
             ))}
           </Box>

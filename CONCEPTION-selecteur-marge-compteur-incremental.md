@@ -311,8 +311,9 @@ non-retour est l'étape 4.
 - **Un projet Firebase par salle vs mutualisé** — à trancher avant tout développement
   multi-salles. Le §3 ci-dessus en est un prérequis de fait.
 - **Stockage durable des sauvegardes d'images** (`--backup`).
-- **Mode officiel IFSC/FFME** (tops/zones) — écarté du périmètre à V2.33, rien préparé en
-  amont, un futur chantier repartira de zéro.
+- ~~Mode officiel IFSC/FFME (tops/zones)~~ — **fait le 16/08/2026** (version simplifiée
+  sur totaux cumulés, décisions validées avec l'utilisateur), voir CLAUDE.md
+  "Competition scoring modes".
 - **Correction admin des résultats après verrouillage** — autorisée par les règles, aucune
   interface ne l'exerce.
 
