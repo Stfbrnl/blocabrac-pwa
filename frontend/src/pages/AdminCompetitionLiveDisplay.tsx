@@ -291,6 +291,19 @@ const LiveCompetitionView: React.FC<{ competition: Competition }> = ({ competiti
         {competition.name}
       </Typography>
 
+      {/* ✅ Pédagogie suggérée par relecture ClaudeNav (voir
+          HANDOFF-branding-navbar-2026-08-16.md) : le mode "Officiel" classe par
+          tops/zones/essais, pas par un score affiché à l'écran (contrairement aux
+          3 autres modes) — un spectateur qui ne connaît pas cette règle voit un
+          classement qui bouge sans comprendre pourquoi. Une phrase suffit, pas
+          besoin d'expliquer les essais-au-top/à-la-zone (départage silencieux,
+          voir competitionClassement.ts) pour que le principe soit suivable. */}
+      {isOfficialMode && (
+        <Typography variant="h6" sx={{ mb: 2, opacity: 0.75, fontWeight: 400 }}>
+          Classement par nombre de tops, puis de zones, puis au nombre d'essais
+        </Typography>
+      )}
+
       {isOfficialMode ? (
         // ✅ Mode "Officiel" — ADDENDUM-mode-ffme-finale-annee.md §1/§2 : pas de
         // rotation (deux classements de 5 lignes tiennent ensemble sur un seul écran),
