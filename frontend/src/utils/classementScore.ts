@@ -66,3 +66,14 @@ export const scoreDeltaForValidation = (
   const newPoints = newAttempts !== null ? calculatePoints(color, newAttempts, true) : 0;
   return newPoints - oldPoints;
 };
+
+// ✅ Classement de saison (CONCEPTION-classement-saisonnier.md) : détermine si une date
+// (ISO complète, ex. `new Date().toISOString()`) tombe dans la fenêtre de saison
+// `[debut, fin]` (dates ISO "YYYY-MM-DD", bornes incluses, lues depuis
+// `app_config/classement_saison`). Comparaison lexicographique, valide pour ce format.
+// Pure et testable indépendamment de `Date.now()` — `ClientDaily.tsx` s'en sert pour
+// décider si une validation alimente `season.*` en plus des champs all-time.
+export const isWithinSeasonWindow = (dateISO: string, debut: string, fin: string): boolean => {
+  const day = dateISO.slice(0, 10);
+  return day >= debut && day <= fin;
+};

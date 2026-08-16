@@ -222,6 +222,12 @@ const ClientProfile: React.FC = () => {
             }
             label="Apparaître dans le classement des grimpeurs"
           />
+          {/* ✅ CONCEPTION-classement-saisonnier.md, décision §3 : désactiver ce réglage
+              retire aussi de la qualification à la Finale, pas seulement du classement
+              public — sans ce texte, l'effet serait invisible pour le grimpeur. */}
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+            Désactiver ce réglage vous retire aussi de la qualification pour la Finale de fin de saison.
+          </Typography>
 
           <Box sx={{ mt: 4, display: 'flex', gap: 2 }}>
             <Button

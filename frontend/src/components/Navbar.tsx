@@ -125,6 +125,7 @@ const Navbar: React.FC = () => {
     { label: 'GÉRER LES INSCRIPTIONS', to: '/admin/competitions/list' },
     { label: 'STATISTIQUES', to: '/admin/competitions/stats' },
     { label: 'INFORMATIONS CLIENTS', to: '/admin/announcements' },
+    { label: 'CLASSEMENT DE SAISON', to: '/admin/season-config' },
   ];
 
   // ✅ Construit la liste de liens (hors admin) à partir des rôles, une seule fois,

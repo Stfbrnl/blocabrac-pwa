@@ -3,13 +3,14 @@ import {
   Container, Paper, Typography, Box, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, TableSortLabel, Chip, Card,
   CardContent, CircularProgress, useTheme, useMediaQuery, FormControl,
-  InputLabel, Select, MenuItem, IconButton, Tooltip
+  InputLabel, Select, MenuItem, IconButton, Tooltip, ToggleButtonGroup, ToggleButton
 } from '@mui/material';
 import { ArrowUpward as ArrowUpwardIcon, ArrowDownward as ArrowDownwardIcon } from '@mui/icons-material';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../../../services/firebaseConfig';
 import { getSeasonAge, getFfmeCategory, FFME_AGE_BANDS } from '../../../utils/ageCategory';
 import { levelOrder } from '../../../utils/competitionEligibility';
+import { summaryFromColorCounts, type ColorCounts } from '../../../utils/classementScore';
 
 const levelColors: Record<string, string> = {
   jaune: '#FFFF00', vert: '#00FF00', bleu: '#0000FF', violet: '#800080',
@@ -34,6 +35,14 @@ interface ClassementRow {
   bestColorRank: number;
   score: number;
   bouldersValidated: number;
+  // ✅ Classement de saison (CONCEPTION-classement-saisonnier.md) : mêmes métriques,
+  // dérivées de `season.colorCounts`/`season.score` — voir "mode" plus bas pour la
+  // bascule d'affichage. Pas de lecture Firestore supplémentaire : ces champs vivent
+  // déjà sur le même document `classement_profiles` chargé pour le classement général.
+  seasonScore: number;
+  seasonBouldersValidated: number;
+  seasonBestColor: string | null;
+  seasonBestColorRank: number;
 }
 
 interface RankedUser {
@@ -49,7 +58,12 @@ interface RankedUser {
   score?: number;
   bouldersValidated?: number;
   bestColorRank?: number;
+  // ✅ Absent sur les profils créés avant ce chantier, ou si aucune validation n'a
+  // encore eu lieu dans la saison en cours — repli à 0/vide géré au mapping.
+  season?: { score?: number; colorCounts?: ColorCounts };
 }
+
+type ClassementMode = 'general' | 'saison';
 
 type SortKey = 'name' | 'gender' | 'ageCategory' | 'bestColor' | 'score' | 'bouldersValidated';
 
@@ -69,6 +83,9 @@ const ClientClassement: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>('score');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  // ✅ Classement de saison : bascule d'affichage seulement, aucune nouvelle lecture
+  // Firestore (voir CONCEPTION-classement-saisonnier.md, "Écran de classement de saison").
+  const [mode, setMode] = useState<ClassementMode>('general');
 
   useEffect(() => {
     const fetchClassement = async () => {
@@ -93,6 +110,13 @@ const ClientClassement: React.FC = () => {
           const bestColorRank = user.bestColorRank ?? -1;
           const bestColor = bestColorRank >= 0 ? levelOrder[bestColorRank] : null;
 
+          // ✅ season.bouldersValidated/bestColorRank ne sont pas stockés (seuls
+          // colorCounts/score le sont, comme pour le compteur all-time) — dérivés ici
+          // avec la même fonction pure que ClientDaily.tsx, pas de nouveau calcul serveur.
+          const { bouldersValidated: seasonBouldersValidated, bestColorRank: seasonBestColorRank } =
+            summaryFromColorCounts(user.season?.colorCounts || {});
+          const seasonBestColor = seasonBestColorRank >= 0 ? levelOrder[seasonBestColorRank] : null;
+
           const seasonAge = getSeasonAge(user.dateOfBirth);
           const ageCategory = getFfmeCategory(seasonAge);
           const ageCategoryRank = FFME_AGE_BANDS.findIndex((band) => band.label === ageCategory);
@@ -107,6 +131,10 @@ const ClientClassement: React.FC = () => {
             bestColorRank,
             score: user.score ?? 0,
             bouldersValidated: user.bouldersValidated ?? 0,
+            seasonScore: user.season?.score ?? 0,
+            seasonBouldersValidated,
+            seasonBestColor,
+            seasonBestColorRank,
           };
         });
 
@@ -130,7 +158,20 @@ const ClientClassement: React.FC = () => {
     }
   };
 
-  const sortedRows = [...rows].sort((a, b) => {
+  // ✅ Classement de saison : plutôt que dupliquer le tri/rendu, on substitue les
+  // métriques actives (score/bouldersValidated/bestColor/bestColorRank) selon le mode
+  // AVANT le tri existant, qui reste inchangé pour les deux vues.
+  const displayRows: ClassementRow[] = mode === 'saison'
+    ? rows.map((row) => ({
+        ...row,
+        score: row.seasonScore,
+        bouldersValidated: row.seasonBouldersValidated,
+        bestColor: row.seasonBestColor,
+        bestColorRank: row.seasonBestColorRank,
+      }))
+    : rows;
+
+  const sortedRows = [...displayRows].sort((a, b) => {
     const direction = sortDirection === 'asc' ? 1 : -1;
     switch (sortKey) {
       case 'name':
@@ -169,6 +210,23 @@ const ClientClassement: React.FC = () => {
           Basé sur les blocs quotidiens validés (hors compétition). Seuls les grimpeurs ayant choisi
           d'apparaître ici sont listés — modifiable depuis "Modifier mes informations".
         </Typography>
+
+        <ToggleButtonGroup
+          value={mode}
+          exclusive
+          size="small"
+          onChange={(_, next) => next && setMode(next)}
+          sx={{ mb: 2 }}
+        >
+          <ToggleButton value="general">Classement général</ToggleButton>
+          <ToggleButton value="saison">Classement de saison</ToggleButton>
+        </ToggleButtonGroup>
+        {mode === 'saison' && (
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Blocs validés depuis le début de la saison en cours seulement — ce classement
+            détermine les qualifiés pour la Finale de fin de saison.
+          </Typography>
+        )}
 
         {rows.length === 0 ? (
           <Typography sx={{ mt: 2 }}>Aucun grimpeur n'apparaît pour l'instant dans le classement.</Typography>

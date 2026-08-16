@@ -103,6 +103,27 @@ service cloud.firestore {
                      (request.auth.uid == userId || isUserRole("admin"));
     }
 
+    // ✅ Fenêtre de la saison en cours (CONCEPTION-classement-saisonnier.md, point 1) —
+    // doc de config singleton, nouveau pattern dans ce projet. Lu par tout client
+    // authentifié (ClientDaily.tsx doit savoir si "aujourd'hui" tombe en saison pour
+    // alimenter season.*), écrit uniquement par l'admin. Le job planifié de fin de
+    // saison (scripts/compute-classement-saison.js) écrit `cloturee` via l'Admin SDK,
+    // jamais soumis à ces règles — rien à ouvrir ici pour lui.
+    match /app_config/{configId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && isUserRole("admin");
+    }
+
+    // ✅ Archive figée du top 10 garçons / top 10 filles de fin de saison
+    // (CONCEPTION-classement-saisonnier.md) — lecture large comme classement_profiles
+    // (un grimpeur qualifié doit pouvoir le constater sans attendre que l'admin génère
+    // le roster de la Finale). Écriture jamais côté client : seul le job planifié
+    // (Admin SDK) produit ces documents.
+    match /classement_saisons/{saisonId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
     // ✅ Annuaire public admin/moniteur/ouvreur (nom + rôles, rien d'autre), lu par
     // ClientMessages.tsx (choix du destinataire) et ClientDaily.tsx ("Créé par" un
     // bloc) : un client ne peut pas lister/lire la collection "users" d'un autre

@@ -9,7 +9,7 @@ import {
 } from '@mui/material';
 import { Delete as DeleteIcon, Edit as EditIcon, Add as AddIcon, Tune as TuneIcon } from '@mui/icons-material';
 import { db } from '../services/firebaseConfig';
-import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, deleteField } from 'firebase/firestore';
+import { collection, addDoc, getDocs, getDoc, doc, setDoc, updateDoc, deleteDoc, deleteField } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import { basePoints, deductions, type ScoringMode, type CustomScoringTable } from '../utils/climbingPoints';
 
@@ -285,6 +285,89 @@ const AdminCompetitionManagement: React.FC = () => {
     }
   };
 
+  // ✅ CONCEPTION-classement-saisonnier.md, "Le bouton admin Générer le roster" : lit
+  // l'archive de saison la plus récente (classement_saisons, IDs "YYYY-YYYY" — se
+  // trient lexicographiquement dans le bon ordre, voir le doc de conception "Points
+  // mineurs") et amorce le roster de cette compétition en mode officiel. N'écrase
+  // jamais les inscriptions déjà là (ID déterministe, `set` sans `merge` réécrit juste
+  // les mêmes champs pour un déjà-inscrit — idempotent), et reste modifiable ensuite à
+  // la main via "Gérer les inscriptions" comme n'importe quelle inscription manuelle.
+  const handleGenerateRoster = async (competition: Competition) => {
+    try {
+      // ✅ Pas de tri Firestore descendant sur l'ID du document ("Firestore does not
+      // support descending key scans", trouvé en e2e) — cette collection ne contient
+      // qu'un doc par saison (un par an), la trier côté client est sans coût réel.
+      const seasonsSnapshot = await getDocs(collection(db, 'classement_saisons'));
+      if (seasonsSnapshot.empty) {
+        setSnackbarMessage("Aucun classement de saison archivé pour l'instant — rien à générer.");
+        setOpenSnackbar(true);
+        return;
+      }
+      const mostRecentSeasonDoc = [...seasonsSnapshot.docs].sort((a, b) => b.id.localeCompare(a.id))[0];
+      const archive = mostRecentSeasonDoc.data();
+      const qualifiedUids: string[] = [
+        ...(archive.top_garcons || []).map((e: { uid: string }) => e.uid),
+        ...(archive.top_filles || []).map((e: { uid: string }) => e.uid),
+      ];
+      if (qualifiedUids.length === 0) {
+        setSnackbarMessage("Le classement de saison archivé ne contient aucun qualifié.");
+        setOpenSnackbar(true);
+        return;
+      }
+
+      const existingSnapshot = await getDocs(collection(db, 'competition_participants'));
+      const alreadyRegistered = new Set(
+        existingSnapshot.docs
+          .map((d) => d.data())
+          .filter((p) => p.competition_id === competition.id)
+          .map((p) => p.user_id)
+      );
+
+      let added = 0;
+      for (const uid of qualifiedUids) {
+        if (alreadyRegistered.has(uid)) continue;
+        const userSnap = await getDoc(doc(db, 'users', uid));
+        if (!userSnap.exists()) continue; // ✅ compte supprimé depuis l'archivage — ignoré, pas bloquant
+        const user = userSnap.data();
+        // ✅ `age` (trouvé en e2e) : un champ `users.age` absent produit `undefined`,
+        // que Firestore refuse dans un `setDoc` — contrairement au flux d'ajout manuel
+        // (`AdminCompetitionRegistration.tsx`), qui ne s'exécute qu'après un clic sur un
+        // utilisateur déjà affiché avec ses champs résolus. `?? null` couvre ce cas
+        // et tout autre champ optionnel absent sur un compte plus ancien.
+        await setDoc(doc(db, 'competition_participants', `${uid}_${competition.id}`), {
+          user_id: uid,
+          competition_id: competition.id,
+          email: user.email ?? null,
+          first_name: user.first_name ?? null,
+          last_name: user.last_name ?? null,
+          age: user.age ?? null,
+          dateOfBirth: user.dateOfBirth ?? null,
+          gender: user.gender ?? null,
+          level: user.level ?? null,
+          registered_at: new Date().toISOString(),
+          is_client: user.roles?.includes('client') ?? true,
+        });
+        added += 1;
+      }
+
+      if (added > 0) {
+        const newCount = competition.registered_count + added;
+        await updateDoc(doc(db, 'competitions', competition.id), { registered_count: newCount });
+        setCompetitions((prev) => prev.map((c) => (c.id === competition.id ? { ...c, registered_count: newCount } : c)));
+      }
+      setSnackbarMessage(
+        added > 0
+          ? `${added} qualifié(s) ajouté(s) au roster (${qualifiedUids.length - added} déjà inscrit(s)).`
+          : 'Tous les qualifiés étaient déjà inscrits — rien à ajouter.'
+      );
+      setOpenSnackbar(true);
+    } catch (error) {
+      console.error('Erreur :', error);
+      setSnackbarMessage('Erreur lors de la génération du roster.');
+      setOpenSnackbar(true);
+    }
+  };
+
   if (loading) {
     return <Typography>Chargement des compétitions...</Typography>;
   }
@@ -408,6 +491,19 @@ const AdminCompetitionManagement: React.FC = () => {
                         onClick={() => navigate(`/competitions/judge-entry/${competition.id}`)}
                       >
                         Saisie juge
+                      </Button>
+                    )}
+                    {/* ✅ CONCEPTION-classement-saisonnier.md, "Le bouton admin Générer
+                        le roster" : même restriction que "Saisie juge" — le roster
+                        automatique n'a de sens que pour la Finale (mode officiel). */}
+                    {competition.scoring_mode === 'officiel' && (
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        sx={{ ml: 1 }}
+                        onClick={() => handleGenerateRoster(competition)}
+                      >
+                        Générer le roster
                       </Button>
                     )}
                   </TableCell>

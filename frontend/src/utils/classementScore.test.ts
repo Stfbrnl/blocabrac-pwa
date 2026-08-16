@@ -3,6 +3,7 @@ import {
   summarizeValidatedResults,
   summaryFromColorCounts,
   scoreDeltaForValidation,
+  isWithinSeasonWindow,
   type ColorCounts,
   type ValidatedBoulderResult,
 } from './classementScore';
@@ -74,6 +75,26 @@ describe('scoreDeltaForValidation', () => {
   it('delta reflète un changement du nombre d\'essais sur le même bloc', () => {
     // 1er essai (100) -> 3e essai (80) : delta -20
     expect(scoreDeltaForValidation('bleu', 1, 3)).toBe(-20);
+  });
+});
+
+describe('isWithinSeasonWindow', () => {
+  it('vrai pour une date strictement à l\'intérieur de la fenêtre', () => {
+    expect(isWithinSeasonWindow('2026-11-20T10:00:00.000Z', '2026-09-15', '2027-05-31')).toBe(true);
+  });
+
+  it('vrai sur les deux bornes incluses', () => {
+    expect(isWithinSeasonWindow('2026-09-15T00:00:00.000Z', '2026-09-15', '2027-05-31')).toBe(true);
+    expect(isWithinSeasonWindow('2027-05-31T23:59:59.999Z', '2026-09-15', '2027-05-31')).toBe(true);
+  });
+
+  it('faux juste avant le début ou juste après la fin', () => {
+    expect(isWithinSeasonWindow('2026-09-14T23:59:59.999Z', '2026-09-15', '2027-05-31')).toBe(false);
+    expect(isWithinSeasonWindow('2027-06-01T00:00:00.000Z', '2026-09-15', '2027-05-31')).toBe(false);
+  });
+
+  it('faux pendant l\'été, entre deux saisons', () => {
+    expect(isWithinSeasonWindow('2027-07-14T10:00:00.000Z', '2026-09-15', '2027-05-31')).toBe(false);
   });
 });
 

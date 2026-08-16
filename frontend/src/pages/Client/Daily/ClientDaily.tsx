@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '../../../services/firebaseConfig';
 import { collection, query, where, getDocs, addDoc, setDoc, doc, getDoc, runTransaction } from 'firebase/firestore';
-import { summaryFromColorCounts, scoreDeltaForValidation, type ColorCounts } from '../../../utils/classementScore';
+import { summaryFromColorCounts, scoreDeltaForValidation, isWithinSeasonWindow, type ColorCounts } from '../../../utils/classementScore';
 import {
   Container, Typography, Box, Button, CircularProgress, Alert,
   Dialog, DialogTitle, DialogContent, DialogActions,
@@ -112,8 +112,12 @@ const ClientDaily: React.FC = () => {
   // la même session (ex. Réussi puis "Enregistrer" avec un nombre d'essais modifié) :
   // après une transition, on y stocke le nouvel état, qui devient la référence pour la
   // transition suivante. `undefined` = jamais consulté cette session (à lire) ;
-  // `null` = confirmé absent de Firestore (jamais validé avant cette session).
-  const previousStateCacheRef = useRef<Map<string, { attempts: number } | null>>(new Map());
+  // `null` = confirmé absent de Firestore (jamais écrit avant cette session, ni succès
+  // ni échec). `success`/`attempts` alimentent le delta de classement (uniquement si
+  // `success` est vrai) ; `createdAt` sert à préserver la date de première écriture du
+  // document (voir `resolvePreviousResultState` — correctif du bug où `createdAt` était
+  // réécrit à chaque édition, cf. RELECTURE-classement-saisonnier.md §1).
+  const previousStateCacheRef = useRef<Map<string, { attempts: number; success: boolean; createdAt: string } | null>>(new Map());
 
   // ✅ Chantier écritures point 5 (repris ici) : classement_profiles est un résumé
   // dérivé, pas la donnée source — pas besoin d'être exact à la seconde près. Les
@@ -126,6 +130,20 @@ const ClientDaily: React.FC = () => {
   const classementWriteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingScoreDeltaRef = useRef(0);
   const pendingColorDeltaRef = useRef<Map<string, number>>(new Map());
+
+  // ✅ Classement de saison (CONCEPTION-classement-saisonnier.md) : deltas en attente
+  // pour `season.score`/`season.colorCounts`, un sous-ensemble des deltas all-time
+  // ci-dessus — appliqués uniquement si la validation a lieu dans la fenêtre de saison
+  // (voir `applyClassementDelta`). Écrits dans la MÊME transaction que les champs
+  // all-time (voir `flushClassementWrite`), jamais une écriture séparée.
+  const pendingSeasonScoreDeltaRef = useRef(0);
+  const pendingSeasonColorDeltaRef = useRef<Map<string, number>>(new Map());
+
+  // ✅ Fenêtre de saison, lue une seule fois au montage depuis `app_config/classement_saison`
+  // (voir useEffect plus bas) — pas de lecture par validation, un doc de config ne le
+  // justifie pas. `null` = pas encore configurée par l'admin (aucune validation ne compte
+  // alors pour la saison, seulement pour la progression personnelle all-time).
+  const seasonWindowRef = useRef<{ debut: string; fin: string } | null>(null);
 
   // ✅ Chantier écritures point 3 : dernière valeur réellement PERSISTÉE (pas
   // affichée) par bloc pour client_boulder_results — évite une écriture si un
@@ -174,6 +192,28 @@ const ClientDaily: React.FC = () => {
     };
 
     fetchUsers();
+  }, [user, loadingAuth]);
+
+  // ✅ Classement de saison : fenêtre lue une seule fois au montage (voir
+  // `seasonWindowRef` ci-dessus). Une config absente ou incomplète (admin n'a jamais
+  // réglé `app_config/classement_saison`) laisse `seasonWindowRef` à `null` — aucune
+  // validation ne compte alors pour la saison, sans erreur ni blocage de la page.
+  useEffect(() => {
+    if (!user || loadingAuth) return;
+    const fetchSeasonWindow = async () => {
+      try {
+        const snap = await getDoc(doc(db, 'app_config', 'classement_saison'));
+        if (snap.exists()) {
+          const data = snap.data();
+          if (data.debut && data.fin) {
+            seasonWindowRef.current = { debut: data.debut, fin: data.fin };
+          }
+        }
+      } catch (err) {
+        console.error('Erreur lors du chargement de la fenêtre de saison:', err);
+      }
+    };
+    fetchSeasonWindow();
   }, [user, loadingAuth]);
 
   useEffect(() => {
@@ -296,12 +336,16 @@ const ClientDaily: React.FC = () => {
     if (!user) return;
     const scoreDelta = pendingScoreDeltaRef.current;
     const colorDeltas = pendingColorDeltaRef.current;
+    const seasonScoreDelta = pendingSeasonScoreDeltaRef.current;
+    const seasonColorDeltas = pendingSeasonColorDeltaRef.current;
     if (scoreDelta === 0 && colorDeltas.size === 0) return;
     // ✅ Capturé puis remis à zéro AVANT l'écriture (pas après) : un delta qui arrive
     // pendant la transaction doit s'accumuler dans un nouveau cycle, pas se perdre s'il
     // arrivait pendant l'await ci-dessous.
     pendingScoreDeltaRef.current = 0;
     pendingColorDeltaRef.current = new Map();
+    pendingSeasonScoreDeltaRef.current = 0;
+    pendingSeasonColorDeltaRef.current = new Map();
     try {
       const ref = doc(db, 'classement_profiles', user.uid);
       await runTransaction(db, async (tx) => {
@@ -312,11 +356,24 @@ const ClientDaily: React.FC = () => {
           colorCounts[color as keyof ColorCounts] = ((colorCounts[color as keyof ColorCounts] as number) || 0) + delta;
         });
         const { bouldersValidated, bestColorRank } = summaryFromColorCounts(colorCounts);
+
+        // ✅ Classement de saison : même mécanique, champs distincts (season.*), écrits
+        // dans la même transaction — jamais d'écriture séparée qui pourrait diverger.
+        const seasonData = (data.season || {}) as { colorCounts?: ColorCounts; score?: number };
+        const seasonColorCounts: ColorCounts = { ...seasonData.colorCounts };
+        seasonColorDeltas.forEach((delta, color) => {
+          seasonColorCounts[color as keyof ColorCounts] = ((seasonColorCounts[color as keyof ColorCounts] as number) || 0) + delta;
+        });
+
         tx.set(ref, {
           score: (data.score || 0) + scoreDelta,
           bouldersValidated,
           bestColorRank,
           colorCounts,
+          season: {
+            score: (seasonData.score || 0) + seasonScoreDelta,
+            colorCounts: seasonColorCounts,
+          },
         }, { merge: true });
       });
     } catch (err) {
@@ -326,6 +383,10 @@ const ClientDaily: React.FC = () => {
       pendingScoreDeltaRef.current += scoreDelta;
       colorDeltas.forEach((delta, color) => {
         pendingColorDeltaRef.current.set(color, (pendingColorDeltaRef.current.get(color) || 0) + delta);
+      });
+      pendingSeasonScoreDeltaRef.current += seasonScoreDelta;
+      seasonColorDeltas.forEach((delta, color) => {
+        pendingSeasonColorDeltaRef.current.set(color, (pendingSeasonColorDeltaRef.current.get(color) || 0) + delta);
       });
     }
   }, [user]);
@@ -342,44 +403,80 @@ const ClientDaily: React.FC = () => {
   // ✅ Phase 1/2 (lecture pure, aucune mutation) : résout l'ancien état de CE bloc,
   // lu une seule fois par session (pas l'historique entier) via un getDoc() ciblé sur
   // l'ID déterministe du résultat. Appelée AVANT l'écrasement de client_boulder_results
-  // par l'appelant, pour lire l'état encore en base. Séparée de applyClassementDelta
-  // ci-dessous pour que rien ne soit muté si le setDoc qui suit échoue ensuite — sans
-  // quoi classement_profiles pourrait dériver d'un résultat jamais réellement écrit.
-  const resolvePreviousClassementState = async (uid: string, boulderId: string): Promise<{ attempts: number } | null> => {
+  // par l'appelant, pour lire l'état encore en base. Séparée des mutations qui suivent
+  // pour que rien ne soit muté si le setDoc qui suit échoue ensuite — sans quoi
+  // classement_profiles pourrait dériver d'un résultat jamais réellement écrit.
+  //
+  // Renvoie l'état complet du document existant (pas seulement `attempts`), pour deux
+  // usages distincts par les appelants : le delta de classement (qui n'utilise
+  // `attempts` que si `success` était vrai) et la préservation de `createdAt` (qui en a
+  // besoin quel que soit `success` — un document créé par un clic "Échoué" a quand même
+  // une vraie date de première écriture). Correctif RELECTURE-classement-saisonnier.md
+  // §1 : avant ce correctif, `createdAt` était réécrit à "maintenant" à CHAQUE édition
+  // (même setDoc que `updatedAt`), donc inutilisable pour savoir quand une validation a
+  // réellement eu lieu — un prérequis du classement de saison.
+  const resolvePreviousResultState = async (uid: string, boulderId: string): Promise<{ attempts: number; success: boolean; createdAt: string } | null> => {
     const cached = previousStateCacheRef.current.get(boulderId);
     if (cached !== undefined) return cached;
     try {
       const snap = await getDoc(doc(db, 'client_boulder_results', `${uid}_${boulderId}`));
-      return snap.exists() && snap.data().success ? { attempts: snap.data().attempts || 1 } : null;
+      if (!snap.exists()) return null;
+      const data = snap.data();
+      return {
+        attempts: data.attempts || 1,
+        success: !!data.success,
+        createdAt: data.createdAt || new Date().toISOString() // ✅ repli si un doc antérieur au correctif n'a jamais eu ce champ correctement peuplé
+      };
     } catch (err) {
       console.error("Erreur lors de la lecture de l'ancien résultat:", err);
-      return null; // ✅ Traité comme "pas de validation antérieure" — le script de réconciliation corrigera un éventuel écart.
+      return null; // ✅ Traité comme "pas de résultat antérieur" — le script de réconciliation corrigera un éventuel écart de classement ; createdAt repartira de "maintenant" pour ce document.
     }
   };
 
-  // ✅ Phase 2/2 (mutation) : appelée seulement après le succès du setDoc de
-  // l'appelant. Accumule le delta dans les refs "pending" et planifie le flush débounced.
+  // ✅ Mutation : appelée seulement après le succès du setDoc de l'appelant. Accumule
+  // le delta de classement dans les refs "pending" et planifie le flush débounced. Ne
+  // touche plus au cache de l'état précédent (voir `cachePreviousResultState`
+  // ci-dessous, appelé séparément par l'appelant pour couvrir aussi le cas sans couleur).
   const applyClassementDelta = (
-    boulderId: string,
     color: string,
     previous: { attempts: number } | null,
     success: boolean,
     resultAttempts: number
   ) => {
     const newState = success ? { attempts: resultAttempts } : null;
-    pendingScoreDeltaRef.current += scoreDeltaForValidation(
+    const scoreDelta = scoreDeltaForValidation(
       color,
       previous?.attempts ?? null,
       newState?.attempts ?? null
     );
     const colorCountDelta = (newState ? 1 : 0) - (previous ? 1 : 0);
+    pendingScoreDeltaRef.current += scoreDelta;
     if (colorCountDelta !== 0) {
       pendingColorDeltaRef.current.set(color, (pendingColorDeltaRef.current.get(color) || 0) + colorCountDelta);
     }
-    previousStateCacheRef.current.set(boulderId, newState);
+
+    // ✅ Classement de saison : même delta que ci-dessus, accumulé séparément et
+    // seulement si "maintenant" tombe dans la fenêtre de saison configurée. Hors
+    // fenêtre (été, ou aucune saison configurée), seuls les champs all-time bougent.
+    const seasonWindow = seasonWindowRef.current;
+    if (seasonWindow && isWithinSeasonWindow(new Date().toISOString(), seasonWindow.debut, seasonWindow.fin)) {
+      pendingSeasonScoreDeltaRef.current += scoreDelta;
+      if (colorCountDelta !== 0) {
+        pendingSeasonColorDeltaRef.current.set(color, (pendingSeasonColorDeltaRef.current.get(color) || 0) + colorCountDelta);
+      }
+    }
 
     if (classementWriteTimer.current) clearTimeout(classementWriteTimer.current);
     classementWriteTimer.current = setTimeout(() => { flushClassementWrite(); }, CLASSEMENT_DEBOUNCE_MS);
+  };
+
+  // ✅ Met à jour le cache de session avec l'état réellement écrit — appelée
+  // inconditionnellement après chaque setDoc réussi (contrairement à
+  // `applyClassementDelta`, qui ne tourne que si le bloc a une couleur). Sans couleur,
+  // il n'y a pas de delta de classement à appliquer, mais `createdAt` doit quand même
+  // être mémorisé pour la prochaine édition de ce même bloc dans la session.
+  const cachePreviousResultState = (boulderId: string, success: boolean, resultAttempts: number, createdAt: string) => {
+    previousStateCacheRef.current.set(boulderId, { attempts: resultAttempts, success, createdAt });
   };
 
 
@@ -404,28 +501,32 @@ const ClientDaily: React.FC = () => {
       return;
     }
     // ✅ Lu AVANT l'écrasement du document (pure lecture, aucune mutation) : c'est le
-    // seul moment où l'ancien état de ce bloc est encore en base.
+    // seul moment où l'ancien état de ce bloc est encore en base. Appelé sans condition
+    // de couleur — createdAt doit être préservé même sur un bloc sans couleur active.
     const classementColor = colorById.get(boulderId);
-    const previousClassementState = classementColor
-      ? await resolvePreviousClassementState(user.uid, boulderId)
-      : null;
+    const previousResultState = await resolvePreviousResultState(user.uid, boulderId);
     try {
       const resultId = `${user.uid}_${boulderId}`;
+      // ✅ createdAt préservé depuis la première écriture de ce document (jamais
+      // réécrit ensuite) — updatedAt continue de refléter chaque édition.
+      const createdAt = previousResultState?.createdAt ?? new Date().toISOString();
       await setDoc(doc(db, 'client_boulder_results', resultId), {
         userId: user.uid,
         boulderId,
         ...candidate,
-        createdAt: new Date().toISOString(),
+        createdAt,
         updatedAt: new Date().toISOString()
       });
       lastPersistedResultRef.current[boulderId] = candidate;
+      cachePreviousResultState(boulderId, candidate.success, candidate.attempts, createdAt);
       setSuccessResults(prev => ({ ...prev, [boulderId]: success }));
       setSuccess('Réussite enregistrée!');
       setTimeout(() => setSuccess(null), 3000);
       // ✅ Appliqué seulement maintenant que l'écriture a réussi : si le setDoc
       // ci-dessus avait échoué, aucune mutation du classement n'aurait eu lieu.
       if (classementColor) {
-        applyClassementDelta(boulderId, classementColor, previousClassementState, success, candidate.attempts);
+        const previousClassementState = previousResultState?.success ? { attempts: previousResultState.attempts } : null;
+        applyClassementDelta(classementColor, previousClassementState, success, candidate.attempts);
       }
     } catch (err: unknown) {
       setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
@@ -454,23 +555,28 @@ const ClientDaily: React.FC = () => {
     // après le clic Réussi/Échoué initial est réellement sauvegardé (même doc,
     // ré-écrit ici) : il faut donc aussi rafraîchir le classement à ce moment, sinon
     // le score reste basé sur la valeur d'essais du tout premier clic. Lu AVANT
-    // l'écrasement du document, même raison que dans handleValidateSuccess.
+    // l'écrasement du document, même raison que dans handleValidateSuccess. Appelé sans
+    // condition de couleur — createdAt doit être préservé même sur un bloc sans couleur
+    // active.
     const classementColor = colorById.get(boulderId);
-    const previousClassementState = classementColor
-      ? await resolvePreviousClassementState(user.uid, boulderId)
-      : null;
+    const previousResultState = await resolvePreviousResultState(user.uid, boulderId);
     try {
       const resultId = `${user.uid}_${boulderId}`;
+      // ✅ createdAt préservé depuis la première écriture de ce document (jamais
+      // réécrit ensuite) — updatedAt continue de refléter chaque édition.
+      const createdAt = previousResultState?.createdAt ?? new Date().toISOString();
       await setDoc(doc(db, 'client_boulder_results', resultId), {
         userId: user.uid,
         boulderId,
         ...candidate,
-        createdAt: new Date().toISOString(),
+        createdAt,
         updatedAt: new Date().toISOString()
       });
       lastPersistedResultRef.current[boulderId] = candidate;
+      cachePreviousResultState(boulderId, candidate.success, candidate.attempts, createdAt);
       if (classementColor) {
-        applyClassementDelta(boulderId, classementColor, previousClassementState, candidate.success, candidate.attempts);
+        const previousClassementState = previousResultState?.success ? { attempts: previousResultState.attempts } : null;
+        applyClassementDelta(classementColor, previousClassementState, candidate.success, candidate.attempts);
       }
       setRatings(prev => ({ ...prev, [boulderId]: rating }));
       setComments(prev => ({ ...prev, [boulderId]: comment }));

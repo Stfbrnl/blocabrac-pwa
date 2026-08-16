@@ -195,6 +195,64 @@ describe('classement_profiles : fiche publique du classement', () => {
   });
 });
 
+// ✅ CONCEPTION-classement-saisonnier.md, point 1 : doc de config singleton, nouveau
+// pattern dans ce projet — lecture large (nécessaire à ClientDaily.tsx), écriture
+// admin uniquement côté client (le job planifié écrit via l'Admin SDK, jamais soumis
+// à ces règles, donc rien à tester ici pour lui).
+describe('app_config/classement_saison : fenêtre de la saison en cours', () => {
+  it('un client authentifié peut lire la fenêtre de saison', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'app_config', 'classement_saison'), {
+        debut: '2026-09-15', fin: '2027-05-31', cloturee: false,
+      });
+    });
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertSucceeds(getDoc(doc(clientDb, 'app_config', 'classement_saison')));
+  });
+
+  it('un client ne peut pas écrire la fenêtre de saison', async () => {
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertFails(setDoc(doc(clientDb, 'app_config', 'classement_saison'), {
+      debut: '2000-01-01', fin: '2000-01-02', cloturee: false,
+    }));
+  });
+
+  it('un admin peut écrire la fenêtre de saison', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'users', 'admin-1'), { roles: ['admin'] });
+    });
+    const adminDb = testEnv.authenticatedContext('admin-1').firestore();
+    await assertSucceeds(setDoc(doc(adminDb, 'app_config', 'classement_saison'), {
+      debut: '2026-09-15', fin: '2027-05-31', cloturee: false,
+    }));
+  });
+});
+
+// ✅ CONCEPTION-classement-saisonnier.md : archive figée du top 10/10 de fin de
+// saison — lecture large comme classement_profiles, écriture jamais côté client
+// (même l'admin ne l'écrit pas depuis l'UI : seul le job planifié, Admin SDK).
+describe('classement_saisons : archive du top 10/10 de fin de saison', () => {
+  it('un client authentifié peut lire l\'archive d\'une saison', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'classement_saisons', '2026-2027'), {
+        computed_at: '2027-06-01T00:00:00.000Z', top_garcons: [], top_filles: [],
+      });
+    });
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertSucceeds(getDoc(doc(clientDb, 'classement_saisons', '2026-2027')));
+  });
+
+  it('même un admin ne peut pas écrire l\'archive depuis le client (seul le job planifié le fait)', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'users', 'admin-1'), { roles: ['admin'] });
+    });
+    const adminDb = testEnv.authenticatedContext('admin-1').firestore();
+    await assertFails(setDoc(doc(adminDb, 'classement_saisons', '2026-2027'), {
+      computed_at: '2027-06-01T00:00:00.000Z', top_garcons: [], top_filles: [],
+    }));
+  });
+});
+
 // ✅ V2.10 : tout compte doit porter le rôle "client" (les 3 autres s'additionnant
 // par-dessus), pour que "Mon espace personnel" (qui héberge désormais "Potes de
 // grimpe") reste atteignable par le staff aussi. Garde-fou serveur en plus du

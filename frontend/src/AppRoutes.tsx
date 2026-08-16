@@ -58,6 +58,7 @@ const AdminCompetitionStats = lazy(() => import('./pages/AdminCompetitionStats')
 const AdminCompetitionLiveDisplay = lazy(() => import('./pages/AdminCompetitionLiveDisplay'));
 const CompetitionJudgeEntry = lazy(() => import('./pages/CompetitionJudgeEntry'));
 const AdminAnnouncements = lazy(() => import('./pages/AdminAnnouncements'));
+const AdminSeasonConfig = lazy(() => import('./pages/AdminSeasonConfig'));
 
 export default function AppRoutes() {
   return (
@@ -135,6 +136,8 @@ export default function AppRoutes() {
             et Ouvreur/CompetitionBoulders/CompetitionBouldersList.tsx). */}
         <Route path="/competitions/judge-entry/:competitionId" element={<ProtectedRoute allowedRoles={['admin', 'ouvreur']}><CompetitionJudgeEntry /></ProtectedRoute>} />
         <Route path="/admin/announcements" element={<ProtectedRoute role="admin"><AdminAnnouncements /></ProtectedRoute>} />
+        {/* ✅ CONCEPTION-classement-saisonnier.md, point 1 : fenêtre de saison paramétrable. */}
+        <Route path="/admin/season-config" element={<ProtectedRoute role="admin"><AdminSeasonConfig /></ProtectedRoute>} />
       </Routes>
     </Suspense>
   );

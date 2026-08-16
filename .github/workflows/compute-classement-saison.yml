@@ -1,0 +1,31 @@
+name: Clôture classement de saison
+
+# Classement de saison (CONCEPTION-classement-saisonnier.md) : la fenêtre de saison est
+# désormais paramétrable par l'admin (AdminSeasonConfig.tsx), plus une date calendaire
+# fixe — ce cron tourne donc quotidiennement et laisse scripts/compute-classement-saison.js
+# décider s'il y a réellement quelque chose à clôturer (garde-fou sur `fin`/`cloturee`,
+# voir le script). Coût négligeable : un getDoc par jour tant que rien n'est dépassé.
+on:
+  schedule:
+    - cron: '0 4 * * *' # 04h00 UTC chaque jour (après les deux autres crons de 03h/03h30)
+  workflow_dispatch: {} # déclenchement manuel possible depuis l'onglet Actions
+
+permissions:
+  contents: read # ce script n'écrit pas de fichier suivi par git (contrairement à reconcile-classement-profiles.js)
+
+jobs:
+  compute:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+
+      - run: npm ci
+
+      - name: Clôture de la saison si sa fenêtre est dépassée
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+        run: node scripts/compute-classement-saison.js
