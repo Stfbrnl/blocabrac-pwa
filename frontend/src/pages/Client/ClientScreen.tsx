@@ -32,8 +32,7 @@ import * as html2canvas from 'html2canvas';
 import AnnouncementBanner from '../../components/AnnouncementBanner';
 import WhatsNewPanel from '../../components/WhatsNewPanel';
 import { computeStreakDays, getStartOfWeek } from '../../utils/streak';
-import { colorGrades, logoPath, gymName } from '../../config/gymConfig';
-import { formattedAppVersion, buildDetail } from '../../config/appVersion';
+import { colorGrades, logoPath, gymName, brandGreen, brandGreenDark } from '../../config/gymConfig';
 
 // Tableau de correspondance code-couleur/cotations (cohérent avec ClientProfile.tsx, AdminUsers.tsx...)
 const levelOptions: Record<string, string> = Object.fromEntries(
@@ -267,20 +266,9 @@ const ClientScreen: React.FC = () => {
           <Typography variant="h4" gutterBottom sx={{ textAlign: 'center' }}>
             Mon espace personnel
           </Typography>
-          {/* ✅ Repère de version : permet de vérifier d'un coup d'œil que la PWA a
-              bien chargé le dernier déploiement plutôt qu'une version mise en cache
-              par le service worker (voir src/config/appVersion.ts). Info-bulle avec
-              le hash de commit + date de build : garde-fou automatique, toujours
-              exact même en cas d'oubli de bump du numéro de version. */}
-          <Tooltip title={buildDetail}>
-            <Typography
-              variant="caption"
-              color="text.secondary"
-              sx={{ display: 'block', textAlign: 'center', mt: -1, mb: 1, cursor: 'help' }}
-            >
-              {formattedAppVersion}
-            </Typography>
-          </Tooltip>
+          {/* ✅ Repère de version : déplacé dans la Navbar (visible sur tout l'appli,
+              en permanence) pour ne plus alourdir le défilement mobile de cet écran —
+              voir src/config/appVersion.ts et components/Navbar.tsx. */}
           <Tooltip title="Comment ça marche ?">
             <IconButton
               aria-label="Aide"
@@ -438,7 +426,9 @@ const ClientScreen: React.FC = () => {
               sx={{
                 p: 3,
                 borderRadius: 2,
-                background: 'linear-gradient(135deg, #1976d2, #6a1b9a)',
+                // ✅ Dégradé aligné sur le vert de la charte du site vitrine (voir
+                // gymConfig.ts) — auparavant un bleu/violet sans lien avec la marque.
+                background: `linear-gradient(135deg, ${brandGreen}, ${brandGreenDark})`,
                 color: '#fff',
                 textAlign: 'center',
               }}

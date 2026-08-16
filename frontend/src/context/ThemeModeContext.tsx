@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
-import { storageKeyPrefix } from '../config/gymConfig';
+import { storageKeyPrefix, brandGreen, brandGreenDark } from '../config/gymConfig';
 
 type Mode = 'light' | 'dark';
 
@@ -36,7 +36,20 @@ export const ThemeModeProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const toggleMode = () => setMode((prev) => (prev === 'light' ? 'dark' : 'light'));
 
-  const theme = useMemo(() => createTheme({ palette: { mode } }), [mode]);
+  // ✅ Charte du site vitrine (www.blocabrac.fr) : vert principal + sa variante
+  // foncée (dégradés/hover du site), police "Dosis" (self-hébergée, voir
+  // src/styles/fonts.css) en lieu et place du Roboto/bleu par défaut de MUI —
+  // même palette/police en clair et en sombre, seul le fond/texte change avec
+  // `mode` (comportement MUI standard, inchangé).
+  const theme = useMemo(() => createTheme({
+    palette: {
+      mode,
+      primary: { main: brandGreen, dark: brandGreenDark },
+    },
+    typography: {
+      fontFamily: '"Dosis", "Helvetica Neue", Arial, sans-serif',
+    },
+  }), [mode]);
 
   const value = useMemo(() => ({ mode, toggleMode }), [mode]);
 

@@ -26,7 +26,7 @@ const levelOptions: Level[] = ['jaune', 'vert', 'bleu', 'violet', 'rouge', 'noir
 const scoringModeOptions: { value: ScoringMode; label: string; description: string }[] = [
   {
     value: 'blocabrac',
-    label: 'Blocabrac (barème habituel)',
+    label: 'Barème par couleur (essais comptabilisés)',
     description: 'Le barème par couleur utilisé partout ailleurs, avec dégression selon le nombre d\'essais.'
   },
   {

@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { ThemeModeProvider } from './context/ThemeModeContext';
 import { AuthProvider } from './context/AuthContext';
+import './styles/fonts.css';
 
 // Composants partagés
 import Navbar from './components/Navbar';

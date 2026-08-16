@@ -1,7 +1,9 @@
 // ✅ Numéro de version de l'app, injecté au build depuis package.json (voir
-// vite.config.ts). Affiché dans "Mon espace personnel" (ClientScreen.tsx) pour
-// que l'utilisateur puisse vérifier que la PWA a bien chargé le dernier
-// déploiement, plutôt qu'une version mise en cache par le service worker.
+// vite.config.ts). Affiché dans la Navbar (components/Navbar.tsx), visible sur
+// toutes les pages, pour que l'utilisateur puisse vérifier que la PWA a bien
+// chargé le dernier déploiement, plutôt qu'une version mise en cache par le
+// service worker. Auparavant affiché uniquement sur "Mon espace personnel"
+// (ClientScreen.tsx) — déplacé pour ne plus alourdir son défilement mobile.
 //
 // Convention : le champ "version" de package.json doit suivre le numéro donné
 // en commit ("Application Sociale Blocabrac V2.XX" dans l'historique git) —

@@ -85,8 +85,11 @@ export default defineConfig(({ mode }) => {
         },
         workbox: {
           // ✅ L'app shell (HTML/JS/CSS) reste utilisable même avec un wifi capricieux ;
-          // les données Firestore, elles, dépendent toujours du réseau.
-          globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
+          // les données Firestore, elles, dépendent toujours du réseau. woff2 ajouté
+          // pour la police Dosis auto-hébergée (identité visuelle du site vitrine,
+          // voir src/styles/fonts.css) — sans lui elle ne serait pas précachée et
+          // retomberait sur la police système hors-ligne après le premier chargement.
+          globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
         },
       }),
     ],

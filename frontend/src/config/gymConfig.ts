@@ -11,6 +11,13 @@ export const appTitle = import.meta.env.VITE_APP_TITLE;
 export const appDescription = import.meta.env.VITE_APP_DESCRIPTION;
 export const themeColor = import.meta.env.VITE_THEME_COLOR;
 
+// ✅ Identité visuelle du site vitrine (www.blocabrac.fr) : vert principal des
+// boutons/liens et sa variante foncée (utilisée en dégradé sur le site), relevés
+// dans sa feuille de style. Consommés par ThemeModeContext.tsx pour que le thème
+// MUI de l'appli matche le site plutôt que le bleu par défaut de MUI.
+export const brandGreen = '#27B142';
+export const brandGreenDark = '#177038';
+
 // Chemin public (dossier `public/`) et asset empaqueté (import Vite) du même
 // logo, dupliqué aujourd'hui à ces deux emplacements physiques.
 export const logoPath = '/images/logo-blocabrac.png';

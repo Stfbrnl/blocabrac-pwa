@@ -26,8 +26,11 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
+import Tooltip from '@mui/material/Tooltip';
 import { Link, useLocation } from 'react-router-dom';
 import { useThemeMode } from '../context/ThemeModeContext';
+import { logoAssetUrl } from '../config/gymConfig';
+import { formattedAppVersion, buildDetail } from '../config/appVersion';
 
 type UserRole = 'admin' | 'ouvreur' | 'moniteur' | 'client';
 
@@ -164,9 +167,29 @@ const Navbar: React.FC = () => {
   return (
     <AppBar position="static">
       <Toolbar>
-        <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-          BLOCABRAC
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexGrow: 1 }}>
+          <Box
+            component="img"
+            src={logoAssetUrl}
+            alt=""
+            sx={{ height: 32, width: 32, objectFit: 'contain' }}
+          />
+          <Typography variant="h6" component="div">
+            BLOCABRAC
+          </Typography>
+          {/* ✅ Repère de version : déplacé ici depuis "Mon espace personnel" pour ne
+              plus alourdir le défilement mobile de cet écran — reste visible en
+              permanence, sur toutes les pages, plutôt que sur un seul écran. Info-bulle
+              avec le hash de commit + date de build (voir src/config/appVersion.ts). */}
+          <Tooltip title={buildDetail}>
+            <Typography
+              variant="caption"
+              sx={{ opacity: 0.75, cursor: 'help', whiteSpace: 'nowrap' }}
+            >
+              {formattedAppVersion}
+            </Typography>
+          </Tooltip>
+        </Box>
 
         {/* ✅ Bascule thème clair/sombre : toujours visible, avant le reste de la nav */}
         <IconButton
@@ -242,9 +265,24 @@ const Navbar: React.FC = () => {
       {/* ✅ Drawer latéral mobile : reprend tous les liens, fermeture au clic */}
       <Drawer anchor="right" open={drawerOpen} onClose={handleDrawerClose}>
         <Box sx={{ width: 260 }} role="presentation">
-          <Typography variant="h6" sx={{ p: 2 }}>
-            BLOCABRAC
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 2, bgcolor: 'primary.main', color: 'primary.contrastText' }}>
+            {/* ✅ Fond de contraste : le logo est un visuel blanc/transparent, invisible
+                sur le fond clair par défaut du Drawer (contrairement à l'AppBar, bleue) */}
+            <Box
+              component="img"
+              src={logoAssetUrl}
+              alt=""
+              sx={{ height: 28, width: 28, objectFit: 'contain' }}
+            />
+            <Typography variant="h6" color="inherit">
+              BLOCABRAC
+            </Typography>
+            <Tooltip title={buildDetail}>
+              <Typography variant="caption" color="inherit" sx={{ opacity: 0.75, cursor: 'help' }}>
+                {formattedAppVersion}
+              </Typography>
+            </Tooltip>
+          </Box>
           <Divider />
           <List>
             {isAdmin && (
