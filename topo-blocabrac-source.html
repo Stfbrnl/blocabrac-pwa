@@ -165,11 +165,11 @@
     À distribuer ou consulter pendant la présentation. Le contenu reflète le
     fonctionnement réel de l'application au moment de l'impression — en cas de
     doute sur un réglage, vérifier directement dans l'application avant
-    d'agir. Version de l'application au moment de la génération : V2.40.
+    d'agir. Version de l'application au moment de la génération : V2.41.
   </div>
   <footer class="pagefoot">
     <span>Topo Blocabrac — édition papier</span>
-    <span>Généré le 16 août 2026</span>
+    <span>Généré le 17 août 2026</span>
   </footer>
 </section>
 
@@ -221,7 +221,7 @@
     <tr><td class="label">Série, objectif &amp; partage</td><td>Série de jours consécutifs (perdue après 9 jours sans validation), objectif hebdomadaire personnalisable, carte de progression à télécharger/partager.</td></tr>
     <tr><td class="label">Mes compétitions</td><td>Inscription en un clic selon niveau/accès. Une fois inscrit, tous les blocs de l'épreuve sont notés en aveugle, comme des blocs « Mystère ».</td></tr>
     <tr><td class="label">Mes statistiques</td><td>Historique filtrable par période, répartition par couleur, détail des cours suivis, badges obtenus. Niveau affiché calculé automatiquement.</td></tr>
-    <tr><td class="label">Classement des grimpeurs</td><td>Optionnel (case à cocher dans le profil). Porte uniquement sur les blocs quotidiens, cumulé depuis la création du compte.</td></tr>
+    <tr><td class="label">Classement des grimpeurs</td><td>Optionnel (case à cocher dans le profil — désactiver retire aussi de la qualification pour la Finale, voir page 06). Deux vues au choix : classement général (cumulé depuis la création du compte) et classement de la saison en cours.</td></tr>
     <tr><td class="label">Mes cours</td><td>Visible seulement si inscrit aux cours : séances à venir, du jour, archivées ; mini-compétitions incluses ; messagerie avec son moniteur.</td></tr>
     <tr><td class="label">Potes de grimpe</td><td>Entièrement optionnel : ajout d'amis (double acceptation), statut « je grimpe en ce moment » (expire seul), prochaine session partagée.</td></tr>
     <tr><td class="label">Signalement de bloc</td><td>Depuis la fiche d'un bloc : prise défaillante, morphologie, trop difficile/simple, commentaire libre — transmis à l'équipe d'ouvreurs.</td></tr>
@@ -273,8 +273,9 @@
   </div>
   <table class="feature-table">
     <tr><td class="label">Utilisateurs</td><td>Création/édition des comptes, attribution des rôles (cumulables), activation/désactivation de l'accès aux compétitions par personne.</td></tr>
-    <tr><td class="label">Créer/gérer les compétitions</td><td>Restrictions de niveau, activation de la diffusion sur l'écran TV, mode de comptage des points parmi 4 (avant le déclenchement, verrouillé ensuite — voir page 06).</td></tr>
+    <tr><td class="label">Créer/gérer les compétitions</td><td>Restrictions de niveau, activation de la diffusion sur l'écran TV, mode de comptage des points parmi 4 (avant le déclenchement, verrouillé ensuite — voir page 06). En mode Officiel FFME, bouton « Générer le roster » : reprend automatiquement le top 10 garçons/filles de la dernière saison clôturée (voir page 06-07).</td></tr>
     <tr><td class="label">Gérer les inscriptions</td><td>Inscription manuelle d'un participant, retrait, contrôle de l'accès général aux compétitions par utilisateur.</td></tr>
+    <tr><td class="label">Classement de saison</td><td>Réglage de la fenêtre de la saison en cours (dates de début/fin libres, pas calées automatiquement sur le calendrier scolaire — voir page 06-07).</td></tr>
     <tr><td class="label">Statistiques &amp; publication</td><td>Classement général et par catégorie/genre, publication dans le bandeau d'annonces des clients.</td></tr>
     <tr><td class="label">Informations clients</td><td>Rédaction des annonces affichées en haut de l'écran d'accueil de tous les clients.</td></tr>
     <tr><td class="label">Écran live TV</td><td>Fenêtre séparée en plein écran (mode HDMI étendu) affichant le classement en direct, réservée aux compétitions diffusées et déclenchées. En mode « Officiel FFME », les deux groupes de genre s'affichent côte à côte en permanence, sans rotation.</td></tr>
@@ -365,10 +366,23 @@
     <div class="cat-pill">Vétérans 2 · 50+</div>
   </div>
   <div class="callout">
-    <b style="display:block; margin-bottom:4px; color:var(--green-dark);">Classement des grimpeurs (« annuel »)</b>
-    Ce nom d'usage peut prêter à confusion : ce classement est cumulé depuis
-    la création du compte, aucune remise à zéro en début de saison n'existe
-    aujourd'hui.
+    <b style="display:block; margin-bottom:4px; color:var(--green-dark);">Classement des grimpeurs — deux vues distinctes</b>
+    Le classement général reste cumulé depuis la création du compte, sans
+    remise à zéro (progression personnelle). Le classement <b>de saison</b>
+    (nouveau) porte seulement sur les blocs validés dans la fenêtre réglée
+    par l'admin (« Classement de saison », page 05) — c'est lui qui détermine
+    la qualification à la Finale, pas le classement général.
+  </div>
+  <div class="callout">
+    <b style="display:block; margin-bottom:4px; color:var(--green-dark);">Clôture de saison → Finale de l'année</b>
+    Une fois la fenêtre de saison dépassée, le classement de saison est figé
+    automatiquement (chaque nuit) : top 10 garçons et top 10 filles archivés,
+    compteurs de saison remis à zéro pour la saison suivante. L'admin
+    reconfigure ensuite la fenêtre suivante depuis « Classement de saison »
+    — tant que ce n'est pas fait, le classement de saison reste à zéro pour
+    tout le monde, sans casser le classement général. Le bouton « Générer le
+    roster » (page 05) reprend ce top 10/10 pour amorcer les inscriptions à
+    la Finale (mode Officiel FFME, page 06) — modifiable ensuite à la main.
   </div>
   <footer class="pagefoot">
     <span>Topo Blocabrac — édition papier</span>
@@ -401,7 +415,7 @@
   <div class="warn"><b>Retrait possible seulement avant activation</b><p>Une fois la séance activée, un client ne peut plus se retirer lui-même de la liste des participants.</p></div>
 
   <div class="warn-group-title">Classement &amp; clôture</div>
-  <div class="warn"><b>Classement des grimpeurs = cumulé, pas remis à zéro</b><p>Un grimpeur inactif garde son total — à présenter comme tel à l'équipe.</p></div>
+  <div class="warn"><b>Classement général = cumulé, pas remis à zéro</b><p>Un grimpeur inactif garde son total — à présenter comme tel à l'équipe. Seul le classement <b>de saison</b> (nouveau) se réinitialise, pas le général.</p></div>
 
   <footer class="pagefoot">
     <span>Topo Blocabrac — édition papier</span>
@@ -412,6 +426,8 @@
 <!-- PAGE 9 : 07 SUITE TECHNIQUE -->
 <section class="page">
   <div class="warn-group-title" style="margin-top:0;">Classement &amp; clôture (suite)</div>
+  <div class="warn"><b>Après une clôture, reconfigurer la saison suivante n'est pas automatique</b><p>Tant que l'admin n'a pas réglé la nouvelle fenêtre (« Classement de saison »), le classement de saison reste bloqué à zéro pour tout le monde — sans conséquence sur le classement général.</p></div>
+  <div class="warn"><b>Désactiver l'apparition au classement retire aussi de la Finale</b><p>La case à cocher du profil client ne masque pas seulement le nom du classement public : un score qualifiant ne compte plus pour le top 10/10 de fin de saison.</p></div>
   <div class="warn"><b>« Terminer la compétition » est définitif</b><p>La cotation cachée devient la couleur publique du bloc — à n'utiliser qu'une fois l'épreuve réellement terminée.</p></div>
 
   <div class="warn-group-title">Technique &amp; mises à jour</div>
