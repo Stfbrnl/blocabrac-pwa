@@ -5,7 +5,7 @@ import {
 } from '@mui/material';
 import { EmojiEvents as EmojiEventsIcon } from '@mui/icons-material';
 import { db } from '../services/firebaseConfig';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteField } from 'firebase/firestore';
 
 // ✅ CONCEPTION-classement-saisonnier.md — décision point 1 : la fenêtre de la saison
 // n'est plus codée en dur (1er septembre → 31 mai) mais réglée ici par l'admin, pour
@@ -73,6 +73,7 @@ const AdminSeasonConfig: React.FC = () => {
         debut: config.debut,
         fin: config.fin,
         cloturee: false,
+        cloturee_at: deleteField(), // ✅ n'a de sens que tant que cloturee est vrai — nettoyé à la reconfiguration
       }, { merge: true });
       setConfig((prev) => ({ ...prev, cloturee: false }));
       setSnackbarMessage('Fenêtre de saison enregistrée avec succès !');

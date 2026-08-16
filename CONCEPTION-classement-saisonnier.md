@@ -88,6 +88,40 @@
 > **Non fait** : `compute-classement-saison.js` n'a jamais tourné contre la prod
 > (seulement l'émulateur, aucune première saison n'y étant encore configurée).
 >
+> **17/08/2026 — second retour ClaudeNav, 3 points + 1 mineur, tous traités le même
+> jour :**
+> - **Point 1 (le plus important)** : `compute-classement-saison.js` — seul script du
+>   projet à écrire par défaut plutôt qu'en simulation, alors que c'est le plus
+>   destructeur des trois (reset irréversible, jamais rejoué contre la prod).
+>   **Corrigé** : convention inversée pour s'aligner sur `reconcile-classement-profiles.js`
+>   — simulation par défaut (affiche le top 10/10 calculé et le nombre de profils qui
+>   seraient remis à zéro, n'écrit rien), `--fix` explicite pour clôturer réellement.
+>   Workflow mis à jour (`node scripts/compute-classement-saison.js --fix`). Vérifié en
+>   e2e : nouvelle étape confirmant qu'un run sans `--fix` n'écrit ni `classement_saisons`
+>   ni `cloturee`.
+> - **Point 2** : une reconfiguration oubliée après clôture est silencieuse (indiscernable
+>   d'un début de saison normal, rattrapage impossible ensuite). Le bandeau d'admin sur
+>   `AdminSeasonConfig.tsx` existait déjà ; **ajouté** : `cloturee_at` (horodatage posé à
+>   la clôture, nettoyé via `deleteField()` à la reconfiguration) et un échec visible du
+>   workflow (`process.exitCode = 1`) au-delà de 7 jours (`RECONFIGURATION_GRACE_DAYS`)
+>   sans reconfiguration — vérifié manuellement contre l'émulateur (cloturee_at forcé à
+>   J-8, le script sort bien en erreur avec un message explicite).
+> - **Point 3** : vérification de la couverture du correctif `createdAt` — recherche
+>   exhaustive de tous les points d'écriture de `client_boulder_results` (agent dédié).
+>   **Confirmé propre** : les deux seuls sites d'écriture du projet entier
+>   (`handleValidateSuccess`/`handleRate` dans `ClientDaily.tsx`) préservent tous les deux
+>   `createdAt` correctement ; aucun écran admin, script de migration, ou autre chemin
+>   n'écrit cette collection. Rien à corriger.
+> - **Point mineur** : même fragilité `undefined`/Firestore que le bug e2e n°2, mais
+>   dans `AdminCompetitionRegistration.tsx` (ajout manuel d'un participant) — **corrigé**
+>   avec le même `?? null` sur les champs optionnels copiés depuis `users`. Vérifié au
+>   passage que le flux d'auto-inscription client (`ClientCompetitions.tsx`) n'a pas la
+>   même faille (il n'écrit ni `age` ni `gender`/`dateOfBirth`, seulement des champs déjà
+>   protégés par des replis `|| ''`).
+>
+> Revérifié : `npm run build`/`lint`/`test` (110 tests), e2e rejoué en entier
+> (**15/15 étapes**, incluant la nouvelle vérification de simulation par défaut).
+>
 > **À relire avant tout commit/déploiement.**
 >
 > Rappel utile (voir `CONCEPTION-selecteur-marge-compteur-incremental.md` §3) : en V2.26,

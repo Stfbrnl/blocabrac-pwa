@@ -28,4 +28,7 @@ jobs:
       - name: Clôture de la saison si sa fenêtre est dépassée
         env:
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
-        run: node scripts/compute-classement-saison.js
+        # ✅ --fix explicite (retour ClaudeNav 17/08/2026) : le script est en simulation
+        # par défaut, comme les deux autres scripts de ce projet — sans écriture ici, le
+        # cron ne clôturerait jamais rien.
+        run: node scripts/compute-classement-saison.js --fix

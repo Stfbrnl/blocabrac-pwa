@@ -6,12 +6,20 @@
 // codée en dur — le script doit donc la relire à chaque exécution, pas la déduire du
 // calendrier.
 //
-//   node compute-classement-saison.js            → clôture réellement si la fenêtre est
+//   node compute-classement-saison.js            → mode simulation (par défaut, comme
+//                                                    reconcile-classement-profiles.js et
+//                                                    cleanup-orphan-boulder-images.js) :
+//                                                    calcule et journalise le top 10/10 et
+//                                                    le nombre de profils qui seraient
+//                                                    remis à zéro, n'écrit jamais rien
+//   node compute-classement-saison.js --fix       → clôture réellement si la fenêtre est
 //                                                    dépassée et pas déjà clôturée ; ne
 //                                                    fait rien sinon (log explicite)
-//   node compute-classement-saison.js --dry-run   → calcule et journalise le top 10/10
-//                                                    sans rien écrire (débogage)
 //
+// ✅ Retour ClaudeNav (17/08/2026, RELECTURE-classement-saisonnier.md point 1) : c'est le
+// reset le plus destructeur des trois scripts de ce projet (irréversible, jamais rejoué
+// contre la prod), et c'était pourtant le seul sans simulation par défaut — asymétrie à
+// l'envers, corrigée en alignant sur la convention des deux autres scripts.
 // Contrairement à reconcile-classement-profiles.js, ce script ne recalcule PAS
 // season.score/season.colorCounts depuis client_boulder_results : le compteur
 // incrémental (ClientDaily.tsx) est réputé à jour toute l'année, ce script se contente
@@ -33,9 +41,10 @@ function readServiceAccount() {
 const app = initializeApp({ credential: cert(readServiceAccount()) });
 const db = getFirestore(app);
 
-const DRY_RUN = process.argv.includes('--dry-run');
+const FIX = process.argv.includes('--fix');
 const BATCH_SIZE = 400; // marge sous la limite de 500 écritures par batch Firestore
 const TOP_N = 10;
+const RECONFIGURATION_GRACE_DAYS = 7; // ✅ voir le commentaire au point d'usage ci-dessous
 
 // ✅ Genre normalisé le temps du tri seulement (même logique que
 // ClientClassement.tsx#normalizeGender) — les comptes sans genre renseigné, ou avec une
@@ -103,7 +112,25 @@ async function main() {
     return;
   }
   if (config.cloturee) {
-    console.log('Saison déjà clôturée, en attente de reconfiguration par l\'admin — rien à faire.');
+    // ✅ Retour ClaudeNav (17/08/2026, point 2) : un oubli de reconfiguration est
+    // silencieux — indiscernable d'un début de saison normal (tout le monde à zéro dans
+    // le classement de saison), et le rattrapage est impossible (la réconciliation
+    // recompute sur la fenêtre courante, pas sur l'historique). Un log qui passe au vert
+    // ne suffit pas : au-delà de RECONFIGURATION_GRACE_DAYS sans reconfiguration, le
+    // workflow doit échouer visiblement, pas juste l'écrire dans une sortie que personne
+    // ne relit.
+    const closedAt = config.cloturee_at ? new Date(config.cloturee_at) : null;
+    const daysSinceClosure = closedAt ? Math.floor((Date.now() - closedAt.getTime()) / 86400000) : null;
+    if (daysSinceClosure !== null && daysSinceClosure > RECONFIGURATION_GRACE_DAYS) {
+      console.error(
+        `🛑 Saison clôturée depuis ${daysSinceClosure} jours (le ${config.cloturee_at}) sans reconfiguration ` +
+        `de la fenêtre suivante par l'admin (seuil : ${RECONFIGURATION_GRACE_DAYS} jours). Le classement de ` +
+        `saison est bloqué à zéro pour tout le monde pendant ce temps. Reconfigurer via /admin/season-config.`
+      );
+      process.exitCode = 1; // ✅ Échec visible du workflow, pas un run vert qui masquerait l'oubli.
+      return;
+    }
+    console.log(`Saison déjà clôturée${daysSinceClosure !== null ? ` depuis ${daysSinceClosure} jour(s)` : ''}, en attente de reconfiguration par l'admin — rien à faire.`);
     return;
   }
 
@@ -145,9 +172,10 @@ async function main() {
     top_filles: withRank(topFilles).map((e) => ({ uid: e.uid, score: e.score, bouldersValidated: e.totalBoulders, rank: e.rank })),
   };
 
-  if (DRY_RUN) {
-    console.log(`[--dry-run] Archiverait classement_saisons/${saisonId} :`, JSON.stringify(archive, null, 2));
-    console.log('[--dry-run] Ne pose pas cloturee, ne remet rien à zéro.');
+  if (!FIX) {
+    console.log(`[simulation] Archiverait classement_saisons/${saisonId} :`, JSON.stringify(archive, null, 2));
+    console.log(`[simulation] Remettrait ${profiles.length} profil(s) à zéro pour la saison suivante (season.score/season.colorCounts).`);
+    console.log('[simulation] Ne pose pas cloturee. Relancez avec --fix pour clôturer réellement.');
     return;
   }
 
@@ -156,7 +184,7 @@ async function main() {
   // réelle, contrairement à une dérive du compteur incrémental (corrective par
   // construction). On s'arrête sans reset si l'une des deux écritures échoue.
   await db.collection('classement_saisons').doc(saisonId).set(archive);
-  await configRef.set({ cloturee: true }, { merge: true });
+  await configRef.set({ cloturee: true, cloturee_at: new Date().toISOString() }, { merge: true });
   console.log(`Archive écrite (classement_saisons/${saisonId}), cloturee posé à true.`);
 
   const allRefs = profiles.map((p) => db.collection('classement_profiles').doc(p.uid));

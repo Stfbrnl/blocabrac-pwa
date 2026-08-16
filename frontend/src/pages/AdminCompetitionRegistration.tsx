@@ -253,16 +253,20 @@ const AdminCompetitionRegistration: React.FC = () => {
       // (ClientCompetitions.tsx) — c'est le chemin attendu par
       // firestore.rules (isParticipationSubmitted) pour vérifier le
       // verrouillage sans requête.
+      // ✅ `?? null` (retour ClaudeNav sur CONCEPTION-classement-saisonnier.md, même
+      // bug trouvé par l'e2e dans AdminCompetitionManagement.tsx) : un `users.age`
+      // absent produit `undefined`, que Firestore refuse dans un `setDoc` — l'échec se
+      // manifeste au moment d'inscrire quelqu'un, donc en salle.
       await setDoc(doc(db, 'competition_participants', `${user.uid}_${selectedCompetition.id}`), {
         user_id: user.uid,
         competition_id: selectedCompetition.id,
-        email: user.email,
-        first_name: user.first_name,
-        last_name: user.last_name,
-        age: user.age,
-        dateOfBirth: user.dateOfBirth,
-        gender: user.gender,
-        level: user.level,
+        email: user.email ?? null,
+        first_name: user.first_name ?? null,
+        last_name: user.last_name ?? null,
+        age: user.age ?? null,
+        dateOfBirth: user.dateOfBirth ?? null,
+        gender: user.gender ?? null,
+        level: user.level ?? null,
         registered_at: new Date().toISOString(),
         is_client: user.roles?.includes('client') ?? true
       });

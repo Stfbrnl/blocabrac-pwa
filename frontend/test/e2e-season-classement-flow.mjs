@@ -186,8 +186,22 @@ async function main() {
     await db.collection('app_config').doc('classement_saison').set({ fin: isoDate(-1) }, { merge: true });
   });
 
-  await step('Script compute-classement-saison.js : archive + reset', async () => {
+  await step('Script compute-classement-saison.js sans --fix : simulation, aucune écriture', async () => {
+    // ✅ Retour ClaudeNav 17/08/2026 (point 1) : le script le plus destructeur du projet
+    // (reset irréversible) doit être en simulation PAR DÉFAUT, comme les deux autres —
+    // vérifié explicitement ici, pas seulement supposé.
     const output = runScript(join(REPO_ROOT, 'scripts/compute-classement-saison.js'));
+    assert(output.includes('[simulation]'), 'sans --fix, le script doit annoncer un mode simulation');
+    assert(output.includes('Remettrait 1 profil'), 'la simulation doit annoncer le nombre de profils qui seraient réinitialisés');
+
+    const seasonsSnapBefore = await db.collection('classement_saisons').get();
+    assert(seasonsSnapBefore.empty, 'la simulation ne doit rien écrire dans classement_saisons');
+    const configSnapBefore = await db.collection('app_config').doc('classement_saison').get();
+    assert(configSnapBefore.data().cloturee !== true, 'la simulation ne doit pas poser cloturee');
+  });
+
+  await step('Script compute-classement-saison.js --fix : archive + reset réels', async () => {
+    const output = runScript(join(REPO_ROOT, 'scripts/compute-classement-saison.js'), ['--fix']);
     console.log(output);
     assert(output.includes('Clôture de la saison'), 'le script doit déclencher une clôture réelle');
 
@@ -208,8 +222,8 @@ async function main() {
     assert(archive.top_garcons.length === 0, 'aucun garçon qualifié dans ce jeu de données');
   });
 
-  await step('Script compute-classement-saison.js : second run = no-op (déjà clôturée)', async () => {
-    const output = runScript(join(REPO_ROOT, 'scripts/compute-classement-saison.js'));
+  await step('Script compute-classement-saison.js --fix : second run = no-op (déjà clôturée)', async () => {
+    const output = runScript(join(REPO_ROOT, 'scripts/compute-classement-saison.js'), ['--fix']);
     assert(output.includes('déjà clôturée'), 'un second run ne doit rien refaire (garde-fou cloturee)');
     const seasonsSnap = await db.collection('classement_saisons').get();
     assert(seasonsSnap.size === 1, 'toujours une seule archive après un second run');
