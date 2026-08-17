@@ -38,6 +38,15 @@
 // --fix n'écrit que si la proportion de profils en écart reste sous le seuil. Seuil
 // hybride (pourcentage ET nombre absolu) — même leçon que le garde-fou de nettoyage :
 // à 12 comptes, UN SEUL écart fait déjà 8%, un pur seuil en % se déclencherait à tort.
+//
+// ✅ Le garde-fou ne compte QUE les "écarts réels" (retour de ClaudeNav, 17/08/2026,
+// SUIVI-date-de-naissance.md) : une valeur déjà écrite puis devenue fausse. Un profil
+// absent (jamais créé) ou un champ jamais encore écrit (backfill d'un champ neuf, comme
+// l'introduction de "ffmeCategory" qui a produit 100% de "drift" sans qu'aucune valeur
+// n'ait jamais été fausse) n'en fait plus partie — voir fieldDrift()/"wasAbsent" et le
+// tri "missingProfiles"/"toComplete"/"realDrifted" dans main(). Ces deux catégories sont
+// toujours corrigées par --fix, journalisées, mais ne pèsent plus sur le seuil : un
+// premier peuplement/backfill n'a plus jamais besoin de --force.
 const DRIFT_GUARD_RATIO = 0.3; // s'interrompt si plus de 30% des profils sont en écart...
 const DRIFT_GUARD_ABSOLUTE_MIN = 3; // ...ET qu'au moins 3 profils sont concernés
 
@@ -212,59 +221,81 @@ function colorCountsEqual(a, b) {
   return true;
 }
 
+// ✅ Retour de ClaudeNav (17/08/2026, SUIVI-date-de-naissance.md) : le garde-fou
+// anti-dérive comptait "champ jamais écrit" (backfill d'un champ neuf, ou profil
+// entier absent) exactement comme "champ écrit puis devenu faux" (vraie dérive) —
+// exactement ce que la réconciliation cherche à détecter. Introduire "ffmeCategory"
+// a ainsi déclenché 100% de "drift" et forcé un --force pour un cas parfaitement sain.
+// Chaque entrée de "drift" porte donc désormais "wasAbsent" : true si la valeur BRUTE
+// stockée (avant tout `|| defaut`) était `undefined` — jamais écrite, qu'elle manque
+// sur ce seul champ ou que le document entier n'existe pas encore (storedData = {} de
+// fetchAllDiffs pour un profil absent : tous les champs y sont undefined, donc
+// naturellement "wasAbsent"). Seul un champ dont la valeur BRUTE était déjà définie et
+// diffère de l'attendu est une vraie dérive — c'est UNIQUEMENT sur ce sous-ensemble que
+// se base le garde-fou (voir main()) : un profil purement "à compléter" ne le déclenche
+// plus jamais, quel que soit son nombre.
+//
+// ⚠️ Limite assumée, pas résolue ici : ce calcul ne distingue PAS "ce compte n'a jamais
+// eu de profil" de "ce compte avait un profil qui a disparu" (effacement en masse d'une
+// collection) — les deux se présentent identiquement comme storedData = {}. Détecter ce
+// second cas demanderait de comparer au run précédent (état persisté), pas seulement au
+// snapshot courant. Non fait ici, faute d'un tel état déjà en place pour cette
+// collection — à ajouter si ce risque devient concret (voir §2 du retour ClaudeNav).
+function fieldDrift(rawStored, storedNormalized, expected, equal = (a, b) => a === b) {
+  if (equal(storedNormalized, expected)) return null;
+  return { stored: storedNormalized, expected, wasAbsent: rawStored === undefined };
+}
+
 // ✅ Calcul PUR (aucune écriture) : compare stocké vs attendu, renvoie l'écart le cas
 // échéant. Séparé de l'écriture pour que le garde-fou puisse évaluer l'ampleur de la
 // dérive AVANT que quoi que ce soit ne soit modifié — voir main().
-async function diffOne(uid, storedData, colorById, seasonWindow, userGender, userDateOfBirth) {
+async function diffOne(uid, storedData, profileExists, colorById, seasonWindow, userGender, userDateOfBirth) {
   const expected = await computeExpectedProfile(uid, colorById, seasonWindow);
   const expectedFfmeCategory = computeFfmeCategory(userDateOfBirth);
-  const stored = {
-    score: storedData.score || 0,
-    bouldersValidated: storedData.bouldersValidated || 0,
-    bestColorRank: storedData.bestColorRank ?? -1,
-    colorCounts: storedData.colorCounts || {},
-    seasonScore: storedData.season?.score || 0,
-    seasonColorCounts: storedData.season?.colorCounts || {},
-    gender: storedData.gender || null,
-    ffmeCategory: storedData.ffmeCategory || null,
-  };
 
   const drift = {};
-  if (stored.score !== expected.score) drift.score = { stored: stored.score, expected: expected.score };
-  if (stored.bouldersValidated !== expected.bouldersValidated) {
-    drift.bouldersValidated = { stored: stored.bouldersValidated, expected: expected.bouldersValidated };
-  }
-  if (stored.bestColorRank !== expected.bestColorRank) {
-    drift.bestColorRank = { stored: stored.bestColorRank, expected: expected.bestColorRank };
-  }
-  if (!colorCountsEqual(stored.colorCounts, expected.colorCounts)) {
-    drift.colorCounts = { stored: stored.colorCounts, expected: expected.colorCounts };
-  }
+  const set = (key, entry) => { if (entry) drift[key] = entry; };
+
+  set('score', fieldDrift(storedData.score, storedData.score || 0, expected.score));
+  set('bouldersValidated', fieldDrift(
+    storedData.bouldersValidated, storedData.bouldersValidated || 0, expected.bouldersValidated
+  ));
+  set('bestColorRank', fieldDrift(storedData.bestColorRank, storedData.bestColorRank ?? -1, expected.bestColorRank));
+  set('colorCounts', fieldDrift(
+    storedData.colorCounts, storedData.colorCounts || {}, expected.colorCounts, colorCountsEqual
+  ));
   // ✅ Garde-fou §2 : seasonWindow est `null` si aucune fenêtre n'est configurée ou si
   // la saison vient d'être clôturée — dans ces deux cas, season.* n'est ni vérifié ni
   // corrigé, quel que soit son contenu stocké.
   if (seasonWindow) {
-    if (stored.seasonScore !== expected.seasonScore) {
-      drift.seasonScore = { stored: stored.seasonScore, expected: expected.seasonScore };
-    }
-    if (!colorCountsEqual(stored.seasonColorCounts, expected.seasonColorCounts)) {
-      drift.seasonColorCounts = { stored: stored.seasonColorCounts, expected: expected.seasonColorCounts };
-    }
+    set('seasonScore', fieldDrift(
+      storedData.season?.score, storedData.season?.score || 0, expected.seasonScore
+    ));
+    set('seasonColorCounts', fieldDrift(
+      storedData.season?.colorCounts, storedData.season?.colorCounts || {}, expected.seasonColorCounts, colorCountsEqual
+    ));
   }
-  if ((stored.gender || null) !== (userGender || null)) {
-    drift.gender = { stored: stored.gender, expected: userGender || null };
-  }
+  set('gender', fieldDrift(storedData.gender, storedData.gender || null, userGender || null));
   // ✅ Comme "gender" juste au-dessus, TOUJOURS vérifiée, jamais gelée par le garde-fou
   // `cloturee` de season.* : contrairement à season.score/colorCounts (des compteurs
   // qui n'ont de sens que bornés à une saison précise), ffmeCategory doit refléter la
   // saison COURANTE au moment où la réconciliation tourne, pas une saison qui vient de
   // se clore (décision explicite, SUIVI-date-de-naissance.md §3 / relecture ClaudeNav).
-  if ((stored.ffmeCategory || null) !== expectedFfmeCategory) {
-    drift.ffmeCategory = { stored: stored.ffmeCategory, expected: expectedFfmeCategory };
-  }
+  set('ffmeCategory', fieldDrift(storedData.ffmeCategory, storedData.ffmeCategory || null, expectedFfmeCategory));
 
-  if (Object.keys(drift).length === 0) return { uid, drifted: false };
-  return { uid, drifted: true, drift, expected: { ...expected, gender: userGender || null, ffmeCategory: expectedFfmeCategory } };
+  if (Object.keys(drift).length === 0) return { uid, existed: profileExists, drifted: false };
+  // ✅ Un profil ne compte pour le garde-fou (realDrift) QUE s'il porte au moins un
+  // champ dont la valeur brute était déjà présente et fausse — jamais pour un champ
+  // simplement absent (backfill), voir le commentaire de fieldDrift() ci-dessus.
+  const realDrift = Object.values(drift).some((entry) => !entry.wasAbsent);
+  return {
+    uid,
+    existed: profileExists,
+    drifted: true,
+    realDrift,
+    drift,
+    expected: { ...expected, gender: userGender || null, ffmeCategory: expectedFfmeCategory },
+  };
 }
 
 async function fetchAllDiffs(colorById, seasonWindow) {
@@ -279,6 +310,7 @@ async function fetchAllDiffs(colorById, seasonWindow) {
     results.push(await diffOne(
       SINGLE_UID,
       profileSnap.exists ? profileSnap.data() : {},
+      profileSnap.exists,
       colorById,
       seasonWindow,
       userSnap.data().gender,
@@ -305,6 +337,7 @@ async function fetchAllDiffs(colorById, seasonWindow) {
       results.push(await diffOne(
         userDoc.id,
         profileSnap.exists ? profileSnap.data() : {},
+        profileSnap.exists,
         colorById,
         seasonWindow,
         userDoc.data().gender,
@@ -332,16 +365,32 @@ async function main() {
   const diffs = await fetchAllDiffs(colorById, seasonWindow);
   const drifted = diffs.filter((d) => d.drifted);
   const checked = diffs.length;
+  // ✅ Retour de ClaudeNav (17/08/2026) : distinguer "profil absent" (aucun document
+  // classement_profiles pour ce uid), "à compléter" (document existant, mais un champ
+  // n'a encore jamais été écrit — cas d'un backfill de champ neuf comme ffmeCategory),
+  // et "écart réel" (une valeur déjà écrite diffère de l'attendu — la seule chose que
+  // ce script existe pour détecter). Les trois sont fixés de la même façon par --fix,
+  // mais seule la troisième catégorie doit peser sur le garde-fou ci-dessous.
+  const missingProfiles = drifted.filter((d) => !d.existed);
+  const toComplete = drifted.filter((d) => d.existed && !d.realDrift);
+  const realDrifted = drifted.filter((d) => d.realDrift);
 
-  console.log(`\n${checked} profil(s) vérifié(s), ${drifted.length} en écart.`);
+  console.log(
+    `\n${checked} profil(s) vérifié(s), ${drifted.length} à corriger ` +
+    `(${missingProfiles.length} profil(s) absent(s) à créer, ${toComplete.length} à compléter, ` +
+    `${realDrifted.length} en écart réel).`
+  );
 
   // ✅ Journalisé même si le garde-fou interrompt ensuite tout — c'est ce journal qui
   // permettra de trancher entre "vraie dérive" et "bug du script" (retour de ClaudeNav §A).
+  // "existed"/"realDrift" et le "wasAbsent" de chaque champ (voir fieldDrift()) sont
+  // conservés dans le journal pour que cette distinction reste visible après coup, pas
+  // seulement dans la sortie console de ce run.
   if (drifted.length > 0) {
     fs.mkdirSync(STATE_DIR, { recursive: true });
-    const log = drifted.map((d) => ({ uid: d.uid, drift: d.drift, fixedAt: null }));
+    const log = drifted.map((d) => ({ uid: d.uid, existed: d.existed, realDrift: d.realDrift, drift: d.drift, fixedAt: null }));
     fs.writeFileSync(LOG_PATH, JSON.stringify(log, null, 2));
-    console.log(`Détail des écarts journalisé dans ${LOG_PATH}`);
+    console.log(`Détail journalisé dans ${LOG_PATH}`);
   }
 
   if (!FIX) {
@@ -349,20 +398,27 @@ async function main() {
     return;
   }
 
-  // ✅ Le garde-fou lui-même : ne se déclenche que si SINGLE_UID n'est pas utilisé (un
-  // débogage ciblé sur un seul compte n'a pas de "proportion" à évaluer) et si --force
-  // n'a pas été passé explicitement.
-  const ratio = checked > 0 ? drifted.length / checked : 0;
+  // ✅ Le garde-fou lui-même : basé UNIQUEMENT sur les écarts réels (realDrifted), pas
+  // sur "drifted" — un profil absent ou un champ jamais encore écrit n'est pas une
+  // dérive, c'est le fonctionnement normal d'un premier peuplement/backfill, et ne doit
+  // plus jamais exiger --force (c'était le problème signalé : introduire ffmeCategory a
+  // mécaniquement produit 100% de "drift" alors qu'aucun champ n'avait été écrit puis
+  // corrompu). Ne se déclenche que si SINGLE_UID n'est pas utilisé (un débogage ciblé
+  // sur un seul compte n'a pas de "proportion" à évaluer) et si --force n'a pas été
+  // passé explicitement.
+  const ratio = checked > 0 ? realDrifted.length / checked : 0;
   const guardTriggered = !SINGLE_UID && !FORCE &&
-    ratio > DRIFT_GUARD_RATIO && drifted.length >= DRIFT_GUARD_ABSOLUTE_MIN;
+    ratio > DRIFT_GUARD_RATIO && realDrifted.length >= DRIFT_GUARD_ABSOLUTE_MIN;
 
   if (guardTriggered) {
     console.error(
-      `\n🛑 Garde-fou déclenché : ${drifted.length}/${checked} profils en écart ` +
-      `(${(ratio * 100).toFixed(1)}%, seuil ${DRIFT_GUARD_RATIO * 100}% ET ≥${DRIFT_GUARD_ABSOLUTE_MIN}). ` +
-      `Une réconciliation saine trouve zéro ou un écart isolé — en trouver une telle proportion ` +
-      `signifie probablement un bug du SCRIPT (ou une évolution du barème non répercutée ici), ` +
-      `pas une dérive légitime à corriger. AUCUNE écriture effectuée. ` +
+      `\n🛑 Garde-fou déclenché : ${realDrifted.length}/${checked} profils en écart RÉEL ` +
+      `(valeur déjà écrite et fausse — ${(ratio * 100).toFixed(1)}%, seuil ${DRIFT_GUARD_RATIO * 100}% ` +
+      `ET ≥${DRIFT_GUARD_ABSOLUTE_MIN}). Une réconciliation saine trouve zéro ou un écart isolé — en ` +
+      `trouver une telle proportion signifie probablement un bug du SCRIPT (ou une évolution du barème ` +
+      `non répercutée ici), pas une dérive légitime à corriger. AUCUNE écriture effectuée ` +
+      `(y compris les ${missingProfiles.length + toComplete.length} profil(s) à compléter, par prudence : ` +
+      `un run à --force confirmera l'ensemble d'un coup). ` +
       `Relancez avec --force si l'écart est confirmé légitime.`
     );
     process.exitCode = 1; // ✅ Échec visible du workflow, pas un run vert qui aurait refusé d'agir en silence.
@@ -388,9 +444,14 @@ async function main() {
   }
 
   if (drifted.length > 0) {
-    const log = drifted.map((d) => ({ uid: d.uid, drift: d.drift, fixedAt: new Date().toISOString() }));
+    const log = drifted.map((d) => ({
+      uid: d.uid, existed: d.existed, realDrift: d.realDrift, drift: d.drift, fixedAt: new Date().toISOString(),
+    }));
     fs.writeFileSync(LOG_PATH, JSON.stringify(log, null, 2));
-    console.log(`${drifted.length} profil(s) corrigé(s).`);
+    console.log(
+      `${drifted.length} profil(s) corrigé(s) ` +
+      `(${missingProfiles.length} créé(s), ${toComplete.length} complété(s), ${realDrifted.length} écart(s) réel(s)).`
+    );
   }
 }
 
