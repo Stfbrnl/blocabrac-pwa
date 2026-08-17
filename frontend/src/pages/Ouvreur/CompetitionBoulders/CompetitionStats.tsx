@@ -57,7 +57,7 @@ interface Participant {
   first_name: string;
   last_name: string;
   email: string;
-  age?: number;
+  legacyAge?: number;
   dateOfBirth?: string;
   gender?: string;
   level?: string;
@@ -65,7 +65,7 @@ interface Participant {
 
 interface User {
   uid: string;
-  age?: number;
+  legacyAge?: number;
   dateOfBirth?: string;
   gender?: string;
   first_name?: string;
@@ -90,7 +90,7 @@ const CompetitionStats: React.FC = () => {
         const snapshot = await getDocs(collection(db, 'users'));
         const usersData: User[] = snapshot.docs.map(doc => ({
           uid: doc.id,
-          age: doc.data().age,
+          legacyAge: doc.data().age,
           dateOfBirth: doc.data().dateOfBirth,
           gender: doc.data().gender,
           first_name: doc.data().first_name,
@@ -196,7 +196,7 @@ const CompetitionStats: React.FC = () => {
             first_name: user?.first_name || doc.data().first_name || '',
             last_name: user?.last_name || doc.data().last_name || '',
             email: user?.email || doc.data().email || '',
-            age: user?.age || doc.data().age,
+            legacyAge: user?.legacyAge || doc.data().age,
             dateOfBirth: user?.dateOfBirth || doc.data().dateOfBirth,
             gender: user?.gender || doc.data().gender,
             level: user?.level || doc.data().level
@@ -305,7 +305,7 @@ const CompetitionStats: React.FC = () => {
                           <TableCell>{item.totals.zones}</TableCell>
                           <TableCell>{item.totals.attemptsToTop}</TableCell>
                           <TableCell>{item.totals.attemptsToZone}</TableCell>
-                          <TableCell>{getFfmeCategory(getSeasonAge(item.participant.dateOfBirth, item.participant.age))}</TableCell>
+                          <TableCell>{getFfmeCategory(getSeasonAge(item.participant.dateOfBirth, item.participant.legacyAge))}</TableCell>
                           <TableCell>{item.participant.gender || 'Inconnu'}</TableCell>
                         </TableRow>
                       ))}
@@ -414,7 +414,7 @@ const CompetitionStats: React.FC = () => {
                           <TableCell>{item.participant.first_name} {item.participant.last_name}</TableCell>
                           <TableCell>{item.score}</TableCell>
                           <TableCell>{item.boulders}</TableCell>
-                          <TableCell>{getFfmeCategory(getSeasonAge(item.participant.dateOfBirth, item.participant.age))}</TableCell>
+                          <TableCell>{getFfmeCategory(getSeasonAge(item.participant.dateOfBirth, item.participant.legacyAge))}</TableCell>
                           <TableCell>{item.participant.gender || 'Inconnu'}</TableCell>
                         </TableRow>
                       ))}

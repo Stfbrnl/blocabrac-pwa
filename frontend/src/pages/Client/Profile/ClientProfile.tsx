@@ -20,6 +20,7 @@ import {
 } from '@mui/material';
 import { doc, getDoc, writeBatch } from 'firebase/firestore';
 import { colorGrades } from '../../../config/gymConfig';
+import { getSeasonAge, getFfmeCategory } from '../../../utils/ageCategory';
 
 // Tableau de correspondance code-couleur/cotations internationales
 const levelOptions = colorGrades.map(({ value, accountLabel }) => ({ value, label: accountLabel }));
@@ -30,7 +31,9 @@ const ClientProfile: React.FC = () => {
     first_name: string;
     last_name: string;
     email: string;
-    age?: number;
+    // ✅ Champ hérité, jamais lu ni écrit ici (voir AdminUsers.tsx pour le contexte) —
+    // conservé dans le type pour ne pas perdre de données si docSnap.data() le porte.
+    legacyAge?: number;
     dateOfBirth?: string;
     gender?: string;
     level?: string;
@@ -56,7 +59,9 @@ const ClientProfile: React.FC = () => {
             first_name: string;
             last_name: string;
             email: string;
-            age?: number;
+            // ✅ Champ hérité, jamais lu ni écrit ici (voir AdminUsers.tsx pour le contexte) —
+            // conservé dans le type pour ne pas perdre de données si docSnap.data() le porte.
+            legacyAge?: number;
             dateOfBirth?: string;
             gender?: string;
             level?: string;
@@ -95,13 +100,17 @@ const ClientProfile: React.FC = () => {
       // synchronisée en même temps que "users", sans étape de saisie en plus pour le
       // client — un client ne peut pas lire toute la collection "users" (règles
       // Firestore), d'où cette fiche allégée séparée.
+      // ✅ Fuite corrigée (SUIVI-date-de-naissance.md §3 / relecture ClaudeNav) :
+      // "classement_profiles" est lisible par tout compte connecté, donc on n'y écrit
+      // plus la date de naissance brute — seulement la catégorie FFME qui en est
+      // dérivée, seule donnée dont ClientClassement.tsx a réellement besoin.
       const batch = writeBatch(db);
       batch.update(doc(db, 'users', user.uid), updates);
       batch.set(doc(db, 'classement_profiles', user.uid), {
         first_name: userData.first_name,
         last_name: userData.last_name,
         gender: userData.gender,
-        dateOfBirth: userData.dateOfBirth,
+        ffmeCategory: getFfmeCategory(getSeasonAge(userData.dateOfBirth)),
         classementOptIn: userData.classementOptIn ?? false,
       }, { merge: true });
       await batch.commit();

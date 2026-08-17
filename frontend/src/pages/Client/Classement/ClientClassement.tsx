@@ -50,6 +50,13 @@ interface RankedUser {
   first_name?: string;
   last_name?: string;
   gender?: string;
+  // ✅ Catégorie FFME déjà dérivée, écrite par Register.tsx/ClientProfile.tsx/
+  // AdminUsers.tsx (SUIVI-date-de-naissance.md §3 / relecture ClaudeNav) : la date de
+  // naissance brute n'est plus stockée sur ce document largement lisible.
+  ffmeCategory?: string;
+  // ✅ Repli uniquement : un profil pas encore repassé par une écriture depuis ce
+  // correctif peut encore porter l'ancienne date de naissance brute (jusqu'à la
+  // réconciliation/migration) — voir calcul de "ageCategory" plus bas.
   dateOfBirth?: string;
   classementOptIn?: boolean;
   // ✅ Résumé déjà calculé par chaque client sur sa propre fiche (voir
@@ -117,8 +124,9 @@ const ClientClassement: React.FC = () => {
             summaryFromColorCounts(user.season?.colorCounts || {});
           const seasonBestColor = seasonBestColorRank >= 0 ? levelOrder[seasonBestColorRank] : null;
 
-          const seasonAge = getSeasonAge(user.dateOfBirth);
-          const ageCategory = getFfmeCategory(seasonAge);
+          // ✅ Champ dérivé prioritaire (voir RankedUser.ffmeCategory) ; repli sur le
+          // calcul depuis la date de naissance brute pour un profil pas encore migré.
+          const ageCategory = user.ffmeCategory ?? getFfmeCategory(getSeasonAge(user.dateOfBirth));
           const ageCategoryRank = FFME_AGE_BANDS.findIndex((band) => band.label === ageCategory);
 
           return {

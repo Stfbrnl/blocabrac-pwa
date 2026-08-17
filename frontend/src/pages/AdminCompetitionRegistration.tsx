@@ -20,7 +20,7 @@ interface User {
   first_name: string;
   last_name: string;
   roles: UserRole[];
-  age?: number;
+  legacyAge?: number;
   dateOfBirth?: string;
   gender?: string;
   level?: Level;
@@ -51,7 +51,7 @@ interface CompetitionParticipant {
   email: string;
   first_name: string;
   last_name: string;
-  age?: number;
+  legacyAge?: number;
   dateOfBirth?: string;
   gender?: string;
   level?: Level;
@@ -101,7 +101,7 @@ const AdminCompetitionRegistration: React.FC = () => {
             email: user?.email || doc.data().email || '',
             first_name: user?.first_name || doc.data().first_name || '',
             last_name: user?.last_name || doc.data().last_name || '',
-            age: user?.age,
+            legacyAge: user?.legacyAge,
             dateOfBirth: user?.dateOfBirth,
             gender: user?.gender,
             level: user?.level,
@@ -131,7 +131,7 @@ const AdminCompetitionRegistration: React.FC = () => {
           first_name: doc.data().first_name || '',
           last_name: doc.data().last_name || '',
           roles: doc.data().roles || [],
-          age: doc.data().age,
+          legacyAge: doc.data().age,
         dateOfBirth: doc.data().dateOfBirth,
           gender: doc.data().gender,
           level: doc.data().level,
@@ -207,7 +207,7 @@ const AdminCompetitionRegistration: React.FC = () => {
         first_name: doc.data().first_name || '',
         last_name: doc.data().last_name || '',
         roles: doc.data().roles || [],
-        age: doc.data().age,
+        legacyAge: doc.data().age,
         dateOfBirth: doc.data().dateOfBirth,
         gender: doc.data().gender,
         level: doc.data().level,
@@ -263,7 +263,7 @@ const AdminCompetitionRegistration: React.FC = () => {
         email: user.email ?? null,
         first_name: user.first_name ?? null,
         last_name: user.last_name ?? null,
-        age: user.age ?? null,
+        age: user.legacyAge ?? null,
         dateOfBirth: user.dateOfBirth ?? null,
         gender: user.gender ?? null,
         level: user.level ?? null,
@@ -403,7 +403,7 @@ const AdminCompetitionRegistration: React.FC = () => {
                         )}
 
                         <Typography variant="body2" sx={{ mb: 1 }}>
-                          Âge : {getSeasonAge(participant.dateOfBirth, participant.age) ?? 'N/A'} · Genre : {participant.gender || 'N/A'}
+                          Âge : {getSeasonAge(participant.dateOfBirth, participant.legacyAge) ?? 'N/A'} · Genre : {participant.gender || 'N/A'}
                         </Typography>
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                           Inscrit le {new Date(participant.registered_at).toLocaleString()}
@@ -467,7 +467,7 @@ const AdminCompetitionRegistration: React.FC = () => {
                               />
                             ) : 'N/A'}
                           </TableCell>
-                          <TableCell>{getSeasonAge(participant.dateOfBirth, participant.age) ?? 'N/A'}</TableCell>
+                          <TableCell>{getSeasonAge(participant.dateOfBirth, participant.legacyAge) ?? 'N/A'}</TableCell>
                           <TableCell>{participant.gender || 'N/A'}</TableCell>
                           <TableCell>
                             <Switch

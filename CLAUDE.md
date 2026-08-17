@@ -35,6 +35,10 @@ Every account has a role set (`admin`, `ouvreur`, `moniteur`, `client` — combi
 
 Every account is always guaranteed to have `client` in its roles (enforced in `AdminUsers.tsx` and mirrored server-side by `hasClientRole()` in rules) — the "client" area is not staff-exclusive-free, it hosts features (like "Potes de grimpe") open to everyone including staff.
 
+### `age` vs `dateOfBirth` — a deliberately accepted legacy field, not a `role`/`role`s-style divergence
+
+`users.dateOfBirth` (ISO date, collected at registration since V2.4x) is the only field any write path still populates; the older `users.age` (a number, frozen at whatever it was when entered — wrong as soon as the person has a birthday) is never written by current code anywhere in the app. `utils/ageCategory.ts`'s `getSeasonAge(dateOfBirth, legacyAge, referenceDate)` is the single place that derives an age — it prefers `dateOfBirth`, falling back to the legacy number only when a given account has never had a date entered. Every TypeScript `User`/`Participant`-shaped interface that reads this fallback names the field `legacyAge`, not `age` — the name itself is the warning not to write it, since it's read in repli only; the underlying Firestore field is still literally `age` (never renamed in the 11 legacy documents that still carry it, there is nothing to gain from a data migration that cannot reconstruct a birth date from a frozen age anyway). This is why it is *not* the same failure mode as the `role`/`roles` split above: that one had multiple write sites racing to keep two fields in sync; this one has exactly one direction of truth and zero remaining writers of the old field.
+
 ### Boulders: one collection, several lifecycles
 
 All climbing routes (daily wall routes and competition routes) live in a single `boulders` collection, discriminated by `type: 'daily' | 'competition'`:
@@ -79,6 +83,8 @@ A `courses` doc (called "séance" in the UI) goes through `scheduled → active 
 ### Cross-user visibility: the `classement_profiles` mirroring pattern
 
 Firestore rules only let a client read their own `users` doc — clients cannot list other clients' results directly. Anywhere the app needs to show one client data derived from another (leaderboard, friends' status), the *source* client mirrors a small summary onto a separate, broadly-readable doc keyed by their own uid (e.g. `classement_profiles/{uid}`), computed and written by themselves on their own activity. Reuse this pattern — do not try to grant broader read rules on `users` or per-user result collections to solve a "show me other users' data" need.
+
+⚠️ **Mirror only what the reader actually consumes, never a whole source field "because it's already there".** `classement_profiles` briefly carried the client's raw `dateOfBirth` (added alongside the field's introduction in `users`, mirrored by habit rather than by need) even though its only reader (`ClientClassement.tsx`) has always just needed a derived FFME age category, never the exact date — an unforced exposure of minors' birth dates to every authenticated account, found and fixed 2026-08-17 (`SUIVI-date-de-naissance.md`/`RETOUR-date-de-naissance-avant-modifs.md`, `HANDOFF-date-de-naissance-2026-08-17.md`). Fixed by writing the derived `ffmeCategory` string instead (still computed with `getFfmeCategory(getSeasonAge(...))`, just computed at write time rather than read time) and never writing `dateOfBirth` to this collection again — restricting the read rule was rejected, since the leaderboard's whole reason to exist is reading other clients' profiles. Before adding any new field to a mirrored doc, ask what the reader needs, not what the source doc happens to have.
 
 ### `classement_profiles`: incremental counter, never a full-history recompute
 

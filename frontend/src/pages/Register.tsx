@@ -17,6 +17,7 @@ import {
   MenuItem
 } from '@mui/material';
 import { colorGrades } from '../config/gymConfig';
+import { getSeasonAge, getFfmeCategory } from '../utils/ageCategory';
 
 // ✅ Tableau de correspondance code-couleur/cotations internationales
 const levelOptions = colorGrades.map(({ value, accountLabel }) => ({ value, label: accountLabel }));
@@ -80,11 +81,17 @@ export default function Register() {
         classementOptIn: false,
         createdAt: new Date().toISOString()
       });
+      // ✅ Fuite corrigée (SUIVI-date-de-naissance.md §3 / relecture ClaudeNav) :
+      // "classement_profiles" est lisible par tout compte connecté (règle nécessaire
+      // au classement, qui doit lire les profils d'autrui). Son seul lecteur
+      // (ClientClassement.tsx) ne se sert de la date de naissance que pour calculer une
+      // catégorie FFME — on stocke donc directement le dérivé (non identifiant) au lieu
+      // de la date brute, jamais écrite ici.
       batch.set(doc(db, 'classement_profiles', user.uid), {
         first_name: firstName,
         last_name: lastName,
         gender: gender,
-        dateOfBirth: dateOfBirth,
+        ffmeCategory: getFfmeCategory(getSeasonAge(dateOfBirth)),
         classementOptIn: false,
       });
       await batch.commit();

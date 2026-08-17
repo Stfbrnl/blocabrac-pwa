@@ -76,6 +76,33 @@ const LEVEL_ORDER = ['jaune', 'vert', 'bleu', 'violet', 'rouge', 'noir', 'blanc'
 const BASE_POINTS = { jaune: 25, vert: 50, bleu: 100, violet: 200, rouge: 400, noir: 600, blanc: 800, rose: 1000 };
 const DEDUCTIONS = { jaune: 10, vert: 10, bleu: 10, violet: 10, rouge: 20, noir: 20, blanc: 50, rose: 50 };
 
+// ✅ Réimplémentation fidèle de gymConfig.ts (ageBands) et utils/ageCategory.ts
+// (getSeasonAge/getFfmeCategory) — tenir synchronisée si les tranches FFME changent.
+// SUIVI-date-de-naissance.md §3 / relecture ClaudeNav (17/08/2026) : classement_profiles
+// ne stocke plus la date de naissance brute, seulement cette catégorie dérivée.
+const UNKNOWN_CATEGORY = 'Inconnu';
+const AGE_BANDS = [
+  { label: 'U8 (6-7 ans)', minAge: 6, maxAge: 7 },
+  { label: 'U10 (8-9 ans)', minAge: 8, maxAge: 9 },
+  { label: 'U12 (10-11 ans)', minAge: 10, maxAge: 11 },
+  { label: 'U14 (12-13 ans)', minAge: 12, maxAge: 13 },
+  { label: 'U16 (14-15 ans)', minAge: 14, maxAge: 15 },
+  { label: 'U18 (16-17 ans)', minAge: 16, maxAge: 17 },
+  { label: 'U20 (18-19 ans)', minAge: 18, maxAge: 19 },
+  { label: 'Séniors (20-39 ans)', minAge: 20, maxAge: 39 },
+  { label: 'Vétérans 1 (40-49 ans)', minAge: 40, maxAge: 49 },
+  { label: 'Vétérans 2 (50 ans et +)', minAge: 50 },
+];
+
+function computeFfmeCategory(dateOfBirth, referenceDate = new Date()) {
+  if (!dateOfBirth) return UNKNOWN_CATEGORY;
+  const birthYear = parseInt(String(dateOfBirth).slice(0, 4), 10);
+  if (Number.isNaN(birthYear)) return UNKNOWN_CATEGORY;
+  const seasonAge = referenceDate.getFullYear() - birthYear;
+  const band = AGE_BANDS.find((b) => seasonAge >= b.minAge && (b.maxAge === undefined || seasonAge <= b.maxAge));
+  return band ? band.label : UNKNOWN_CATEGORY;
+}
+
 // ✅ Classement de saison (CONCEPTION-classement-saisonnier.md, décision point 4) :
 // season.colorCounts/season.score et gender sont vérifiés au même titre que les
 // compteurs all-time ci-dessus, avec un garde-fou dédié — voir loadSeasonWindow()
@@ -188,8 +215,9 @@ function colorCountsEqual(a, b) {
 // ✅ Calcul PUR (aucune écriture) : compare stocké vs attendu, renvoie l'écart le cas
 // échéant. Séparé de l'écriture pour que le garde-fou puisse évaluer l'ampleur de la
 // dérive AVANT que quoi que ce soit ne soit modifié — voir main().
-async function diffOne(uid, storedData, colorById, seasonWindow, userGender) {
+async function diffOne(uid, storedData, colorById, seasonWindow, userGender, userDateOfBirth) {
   const expected = await computeExpectedProfile(uid, colorById, seasonWindow);
+  const expectedFfmeCategory = computeFfmeCategory(userDateOfBirth);
   const stored = {
     score: storedData.score || 0,
     bouldersValidated: storedData.bouldersValidated || 0,
@@ -198,6 +226,7 @@ async function diffOne(uid, storedData, colorById, seasonWindow, userGender) {
     seasonScore: storedData.season?.score || 0,
     seasonColorCounts: storedData.season?.colorCounts || {},
     gender: storedData.gender || null,
+    ffmeCategory: storedData.ffmeCategory || null,
   };
 
   const drift = {};
@@ -225,9 +254,17 @@ async function diffOne(uid, storedData, colorById, seasonWindow, userGender) {
   if ((stored.gender || null) !== (userGender || null)) {
     drift.gender = { stored: stored.gender, expected: userGender || null };
   }
+  // ✅ Comme "gender" juste au-dessus, TOUJOURS vérifiée, jamais gelée par le garde-fou
+  // `cloturee` de season.* : contrairement à season.score/colorCounts (des compteurs
+  // qui n'ont de sens que bornés à une saison précise), ffmeCategory doit refléter la
+  // saison COURANTE au moment où la réconciliation tourne, pas une saison qui vient de
+  // se clore (décision explicite, SUIVI-date-de-naissance.md §3 / relecture ClaudeNav).
+  if ((stored.ffmeCategory || null) !== expectedFfmeCategory) {
+    drift.ffmeCategory = { stored: stored.ffmeCategory, expected: expectedFfmeCategory };
+  }
 
   if (Object.keys(drift).length === 0) return { uid, drifted: false };
-  return { uid, drifted: true, drift, expected: { ...expected, gender: userGender || null } };
+  return { uid, drifted: true, drift, expected: { ...expected, gender: userGender || null, ffmeCategory: expectedFfmeCategory } };
 }
 
 async function fetchAllDiffs(colorById, seasonWindow) {
@@ -244,7 +281,8 @@ async function fetchAllDiffs(colorById, seasonWindow) {
       profileSnap.exists ? profileSnap.data() : {},
       colorById,
       seasonWindow,
-      userSnap.data().gender
+      userSnap.data().gender,
+      userSnap.data().dateOfBirth
     ));
     return results;
   }
@@ -269,7 +307,8 @@ async function fetchAllDiffs(colorById, seasonWindow) {
         profileSnap.exists ? profileSnap.data() : {},
         colorById,
         seasonWindow,
-        userDoc.data().gender
+        userDoc.data().gender,
+        userDoc.data().dateOfBirth
       ));
     }
     lastDoc = snapshot.docs[snapshot.docs.length - 1];
@@ -337,6 +376,7 @@ async function main() {
       bestColorRank: d.expected.bestColorRank,
       colorCounts: d.expected.colorCounts,
       gender: d.expected.gender,
+      ffmeCategory: d.expected.ffmeCategory,
     };
     // ✅ Garde-fou §2 : season.* n'est écrit que si une fenêtre de saison active a été
     // chargée — jamais touché sinon, même si un écart de gender/all-time est corrigé

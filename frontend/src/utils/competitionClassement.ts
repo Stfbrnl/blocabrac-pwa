@@ -12,7 +12,7 @@ export type { ScoringMode, CustomScoringTable };
 export interface ParticipantBase {
   user_id: string;
   dateOfBirth?: string;
-  age?: number;
+  legacyAge?: number;
   gender?: string;
 }
 
@@ -54,7 +54,7 @@ export interface CategoryGroup<T> {
 const groupByAge = <P extends ParticipantBase, T extends { participant: P }>(entries: T[]): CategoryGroup<T>[] => {
   const byAge: Record<string, T[]> = {};
   entries.forEach(entry => {
-    const ageCategory = getFfmeCategory(getSeasonAge(entry.participant.dateOfBirth, entry.participant.age));
+    const ageCategory = getFfmeCategory(getSeasonAge(entry.participant.dateOfBirth, entry.participant.legacyAge));
     if (!byAge[ageCategory]) byAge[ageCategory] = [];
     byAge[ageCategory].push(entry);
   });

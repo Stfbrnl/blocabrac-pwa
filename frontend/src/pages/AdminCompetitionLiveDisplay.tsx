@@ -230,7 +230,7 @@ const LiveCompetitionView: React.FC<{ competition: Competition }> = ({ competiti
         first_name: d.data().first_name || '',
         last_name: d.data().last_name || '',
         dateOfBirth: d.data().dateOfBirth,
-        age: d.data().age,
+        legacyAge: d.data().age,
         gender: d.data().gender,
         submitted: d.data().submitted || false,
       }));

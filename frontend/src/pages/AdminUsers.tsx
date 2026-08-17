@@ -14,7 +14,7 @@ import {
 } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, sendPasswordResetEmail, getAuth, signOut, connectAuthEmulator } from 'firebase/auth';
 import { initializeApp, deleteApp, FirebaseError } from 'firebase/app';
-import { getSeasonAge } from '../utils/ageCategory';
+import { getSeasonAge, getFfmeCategory } from '../utils/ageCategory';
 import { colorGrades } from '../config/gymConfig';
 
 // ✅ Rôles "staff" mirorés dans "staff_directory" (annuaire public lu par
@@ -37,7 +37,12 @@ interface User {
   first_name: string;
   last_name: string;
   roles: UserRole[];
-  age?: number;
+  // ✅ Champ hérité (SUIVI-date-de-naissance.md §1 / relecture ClaudeNav, 2026-08-17) :
+  // pré-existait à l'introduction de "dateOfBirth", jamais réécrit depuis. Lu en repli
+  // uniquement par getSeasonAge quand dateOfBirth est absent — ne jamais l'écrire. Le
+  // champ Firestore reste "age" (voir toutes les lectures ci-dessous), seul le nom
+  // TypeScript change, pour que ce statut soit visible sans relire un commentaire.
+  legacyAge?: number;
   dateOfBirth?: string;
   gender?: string;
   level?: string;
@@ -49,8 +54,11 @@ interface User {
   inscritAuxCompetitions?: boolean;
 }
 
+// ✅ "age" n'est plus une clé de User (renommé "legacyAge", voir plus bas) : c'est une
+// pseudo-clé de tri, traitée à part dans sortUsers (dérive l'âge via getSeasonAge, pour
+// trier sur l'âge réellement affiché plutôt que sur le seul champ hérité).
 type SortConfig = {
-  key: keyof User;
+  key: keyof User | 'age';
   direction: 'asc' | 'desc'; // ✅ Corrigé : 'asc' | 'desc' pour MUI v9
 };
 
@@ -76,7 +84,7 @@ const AdminUsers: React.FC = () => {
     first_name: '',
     last_name: '',
     roles: [],
-    age: undefined,
+    legacyAge: undefined,
     dateOfBirth: '',
     gender: '',
     level: '',
@@ -92,7 +100,7 @@ const AdminUsers: React.FC = () => {
     // et firestore.rules : tout compte doit porter ce rôle, les 3 autres
     // s'additionnant par-dessus).
     roles: ['client'],
-    age: undefined,
+    legacyAge: undefined,
     dateOfBirth: '',
     gender: '',
     level: '',
@@ -112,6 +120,16 @@ const AdminUsers: React.FC = () => {
     if (!sortConfig) return users;
 
     return [...users].sort((a, b) => {
+      // ✅ Bug corrigé (SUIVI-date-de-naissance.md §1 / relecture ClaudeNav) : trier
+      // sur l'âge dérivé (getSeasonAge, celui réellement affiché en colonne), pas sur
+      // le seul champ hérité "legacyAge" — souvent absent pour un compte récent, ce qui
+      // faussait l'ordre alors que l'affichage lui-même était correct.
+      if (sortConfig.key === 'age') {
+        const aAge = getSeasonAge(a.dateOfBirth, a.legacyAge) ?? -1;
+        const bAge = getSeasonAge(b.dateOfBirth, b.legacyAge) ?? -1;
+        return sortConfig.direction === 'asc' ? aAge - bAge : bAge - aAge;
+      }
+
       // Gérer les champs potentiellement undefined
       const aValue = a[sortConfig.key] || '';
       const bValue = b[sortConfig.key] || '';
@@ -144,7 +162,7 @@ const AdminUsers: React.FC = () => {
   };
 
   // ✅ Fonction pour changer le tri
-  const requestSort = (key: keyof User) => {
+  const requestSort = (key: keyof User | 'age') => {
     let direction: 'asc' | 'desc' = 'asc';
     if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
       direction = 'desc';
@@ -165,7 +183,7 @@ const AdminUsers: React.FC = () => {
             first_name: data.first_name || '',
             last_name: data.last_name || '',
             roles: data.roles || [],
-            age: data.age,
+            legacyAge: data.age,
             dateOfBirth: data.dateOfBirth,
             gender: data.gender,
             level: data.level,
@@ -209,11 +227,14 @@ const AdminUsers: React.FC = () => {
         inscritAuxCompetitions: editForm.inscritAuxCompetitions,
       });
       if (roles.includes('client')) {
+        // ✅ Fuite corrigée (SUIVI-date-de-naissance.md §3 / relecture ClaudeNav) :
+        // "classement_profiles" est lisible par tout compte connecté — on n'y écrit
+        // que la catégorie FFME dérivée, jamais la date de naissance brute.
         batch.set(doc(db, 'classement_profiles', selectedUser.uid), {
           first_name: editForm.first_name,
           last_name: editForm.last_name,
           gender: editForm.gender,
-          dateOfBirth: editForm.dateOfBirth,
+          ffmeCategory: getFfmeCategory(getSeasonAge(editForm.dateOfBirth)),
         }, { merge: true });
       }
       // ✅ Même logique que "classement_profiles" ci-dessus, pour l'annuaire public
@@ -238,7 +259,7 @@ const AdminUsers: React.FC = () => {
           first_name: data.first_name || '',
           last_name: data.last_name || '',
           roles: data.roles || [],
-          age: data.age,
+          legacyAge: data.age,
             dateOfBirth: data.dateOfBirth,
           gender: data.gender,
           level: data.level,
@@ -309,11 +330,13 @@ const AdminUsers: React.FC = () => {
         createdAt: new Date().toISOString()
       });
       if (createForm.roles.includes('client')) {
+        // ✅ Même correctif que handleUpdateUser ci-dessus : catégorie FFME dérivée,
+        // jamais la date de naissance brute, sur ce document largement lisible.
         createBatch.set(doc(db, 'classement_profiles', newUser.uid), {
           first_name: createForm.first_name,
           last_name: createForm.last_name,
           gender: createForm.gender,
-          dateOfBirth: createForm.dateOfBirth,
+          ffmeCategory: getFfmeCategory(getSeasonAge(createForm.dateOfBirth)),
           classementOptIn: false,
         });
       }
@@ -340,7 +363,7 @@ const AdminUsers: React.FC = () => {
           first_name: data.first_name || '',
           last_name: data.last_name || '',
           roles: data.roles || [],
-          age: data.age,
+          legacyAge: data.age,
             dateOfBirth: data.dateOfBirth,
           gender: data.gender,
           level: data.level,
@@ -388,7 +411,7 @@ const AdminUsers: React.FC = () => {
       // firestore.rules) : tout compte existant en a déjà un, mais on ne dépend
       // jamais uniquement des données déjà en base pour garantir l'invariant.
       roles: Array.from(new Set([...(user.roles || []), 'client'])) as UserRole[],
-      age: user.age,
+      legacyAge: user.legacyAge,
       dateOfBirth: user.dateOfBirth || '',
       gender: user.gender || '',
       level: user.level || '',
@@ -418,7 +441,7 @@ const AdminUsers: React.FC = () => {
           first_name: data.first_name || '',
           last_name: data.last_name || '',
           roles: data.roles || [],
-          age: data.age,
+          legacyAge: data.age,
             dateOfBirth: data.dateOfBirth,
           gender: data.gender,
           level: data.level,
@@ -470,7 +493,7 @@ const AdminUsers: React.FC = () => {
   };
 
   // ✅ Fonction pour obtenir l'icône de tri
-  const getSortIcon = (key: keyof User) => {
+  const getSortIcon = (key: keyof User | 'age') => {
     if (!sortConfig || sortConfig.key !== key) {
       return null;
     }
@@ -529,7 +552,7 @@ const AdminUsers: React.FC = () => {
                   labelId="mobile-sort-label"
                   label="Trier par"
                   value={sortConfig?.key ?? 'email'}
-                  onChange={(e) => requestSort(e.target.value as keyof User)}
+                  onChange={(e) => requestSort(e.target.value as keyof User | 'age')}
                 >
                   <MenuItem value="email">Email</MenuItem>
                   <MenuItem value="first_name">Prénom</MenuItem>
@@ -586,7 +609,7 @@ const AdminUsers: React.FC = () => {
                     )}
 
                     <Typography variant="body2" sx={{ mb: 1 }}>
-                      Âge : {getSeasonAge(user.dateOfBirth, user.age) ?? 'N/A'} · Genre : {user.gender || 'N/A'}
+                      Âge : {getSeasonAge(user.dateOfBirth, user.legacyAge) ?? 'N/A'} · Genre : {user.gender || 'N/A'}
                     </Typography>
 
                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
@@ -732,7 +755,7 @@ const AdminUsers: React.FC = () => {
                       </Box>
                     ) : 'N/A'}
                   </TableCell>
-                  <TableCell>{getSeasonAge(user.dateOfBirth, user.age) ?? 'N/A'}</TableCell>
+                  <TableCell>{getSeasonAge(user.dateOfBirth, user.legacyAge) ?? 'N/A'}</TableCell>
                   <TableCell>{user.gender || 'N/A'}</TableCell>
                   <TableCell>
                     {user.inscritAuxCours ? <Chip label="Oui" color="success" /> : <Chip label="Non" color="error" />}

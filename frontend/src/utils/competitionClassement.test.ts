@@ -12,8 +12,8 @@ interface TestParticipant extends ParticipantBase {
   first_name: string;
 }
 
-const alice: TestParticipant = { user_id: 'alice', first_name: 'Alice', gender: 'F', age: 12 };
-const bob: TestParticipant = { user_id: 'bob', first_name: 'Bob', gender: 'M', age: 30 };
+const alice: TestParticipant = { user_id: 'alice', first_name: 'Alice', gender: 'F', legacyAge: 12 };
+const bob: TestParticipant = { user_id: 'bob', first_name: 'Bob', gender: 'M', legacyAge: 30 };
 const participants = [alice, bob];
 
 const boulders = [
@@ -201,7 +201,7 @@ describe('getOfficialClassementByCategory', () => {
 });
 
 describe('rankOfficialEntries (§B.4 : égalités massives sur l\'écran live)', () => {
-  const carol: TestParticipant = { user_id: 'carol', first_name: 'Carol', gender: 'F', age: 20 };
+  const carol: TestParticipant = { user_id: 'carol', first_name: 'Carol', gender: 'F', legacyAge: 20 };
 
   it('renvoie un tableau vide sans entrée', () => {
     expect(rankOfficialEntries([])).toEqual([]);
