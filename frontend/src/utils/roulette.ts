@@ -34,10 +34,10 @@ export interface Proposal {
 export const CATALOG: Proposal[] = [
   // A — Socle (max-1, vérifiable)
   { id: 'A1', label: 'Ton prochain bloc : {couleur} n°{numéro} sur {mur}.', family: 'A', levelTarget: 'max-1', needsWall: false, extreme: false, childWallWarning: false },
-  { id: 'A2', label: "Un bloc que tu n'as jamais validé.", family: 'A', levelTarget: 'max-1', needsWall: false, extreme: false, childWallWarning: false },
+  { id: 'A2', label: "Un bloc que tu n'as pas encore fait aujourd'hui.", family: 'A', levelTarget: 'max-1', needsWall: false, extreme: false, childWallWarning: false },
   { id: 'A3', label: 'Deux blocs d\'affilée sur le même mur, sans t\'asseoir.', family: 'A', levelTarget: 'max-1', needsWall: false, extreme: false, childWallWarning: false },
   { id: 'A4', label: 'Trois blocs, trois murs différents.', family: 'A', levelTarget: 'max-1', needsWall: false, extreme: false, childWallWarning: false },
-  { id: 'A5', label: "Le plus grand numéro de {couleur} (ton niveau max-1) que tu n'as pas encore fait.", family: 'A', levelTarget: 'max-1', needsWall: false, extreme: false, childWallWarning: false },
+  { id: 'A5', label: "Le plus grand numéro de {couleur} (ton niveau max-1) que tu n'as pas encore fait aujourd'hui.", family: 'A', levelTarget: 'max-1', needsWall: false, extreme: false, childWallWarning: false },
   { id: 'A6', label: 'Un bloc posé cette semaine.', family: 'A', levelTarget: 'max-1', needsWall: false, extreme: false, childWallWarning: false },
 
   // B — Style (max-1, déclaratif)
