@@ -29,8 +29,15 @@ export interface Proposal {
 // source : A1 précise le mur (les numéros se répètent d'un mur à l'autre), A5 explicite qu'on
 // ne regarde que les blocs de la couleur cible, B7 autorise les prises d'un bloc voisin pour
 // rejoindre le départ assis, B13 remplace le contrôle 3s (déjà la norme) par une préhension à
-// trois doigts. "À faire relire par l'ouvreur/le gérant" pour le reste — texte volontairement
-// regroupé dans ce seul tableau pour rester facile à corriger après coup.
+// trois doigts. A2/A5 reformulées (retour ClaudeNav) pour ne jamais promettre plus que ce que
+// les données garantissent — voir `validatedBoulderIds` plus bas, limité à la session en cours.
+// "À faire relire par l'ouvreur/le gérant" pour le reste — texte volontairement regroupé dans
+// ce seul tableau pour rester facile à corriger après coup.
+//
+// ✅ Convention de rédaction : {couleur} désigne toujours un BLOC, jamais une personne — écrire
+// "un bloc {couleur}"/"d'un bloc {couleur}", jamais "un {couleur}"/"d'un {couleur}" tout court.
+// "d'un noir", pris isolément, prête à confusion. Corrigé sur E23-E26 et DEATH_PROPOSAL
+// (18/08/2026, retour utilisateur) — à respecter sur toute future entrée du catalogue.
 export const CATALOG: Proposal[] = [
   // A — Socle (max-1, vérifiable)
   { id: 'A1', label: 'Ton prochain bloc : {couleur} n°{numéro} sur {mur}.', family: 'A', levelTarget: 'max-1', needsWall: false, extreme: false, childWallWarning: false },
@@ -63,10 +70,10 @@ export const CATALOG: Proposal[] = [
   { id: 'D22', label: 'Le mur que tu n\'as pas touché depuis le plus longtemps.', family: 'D', levelTarget: 'max-1', needsWall: true, extreme: false, childWallWarning: false },
 
   // E — Progression (max+1, réussite partielle, déclaratif — jamais écrit en base)
-  { id: 'E23', label: 'Trouve un {couleur} et fais-en les trois premiers mouvements.', family: 'E', levelTarget: 'max+1', needsWall: false, extreme: false, childWallWarning: false },
-  { id: 'E24', label: 'Un {couleur} : réussis le départ et le premier mouvement, c\'est tout.', family: 'E', levelTarget: 'max+1', needsWall: false, extreme: false, childWallWarning: false },
-  { id: 'E25', label: 'Repère le mouvement dur d\'un {couleur} et réussis-le isolément.', family: 'E', levelTarget: 'max+1', needsWall: false, extreme: false, childWallWarning: false },
-  { id: 'E26', label: 'Un {couleur} : quatre mouvements n\'importe où dans le bloc.', family: 'E', levelTarget: 'max+1', needsWall: false, extreme: false, childWallWarning: false },
+  { id: 'E23', label: 'Trouve un bloc {couleur} et fais-en les trois premiers mouvements.', family: 'E', levelTarget: 'max+1', needsWall: false, extreme: false, childWallWarning: false },
+  { id: 'E24', label: 'Un bloc {couleur} : réussis le départ et le premier mouvement, c\'est tout.', family: 'E', levelTarget: 'max+1', needsWall: false, extreme: false, childWallWarning: false },
+  { id: 'E25', label: 'Repère le mouvement dur d\'un bloc {couleur} et réussis-le isolément.', family: 'E', levelTarget: 'max+1', needsWall: false, extreme: false, childWallWarning: false },
+  { id: 'E26', label: 'Un bloc {couleur} : quatre mouvements n\'importe où dans le bloc.', family: 'E', levelTarget: 'max+1', needsWall: false, extreme: false, childWallWarning: false },
 
   // F — Sans échec (vérifiable via le nombre d'essais)
   { id: 'F27', label: 'Flash : ce bloc au premier essai.', family: 'F', levelTarget: 'max-1', needsWall: false, extreme: false, childWallWarning: false },
@@ -86,7 +93,7 @@ export const CATALOG: Proposal[] = [
 // côté UI, `drawDeathProposal` ci-dessous.
 export const DEATH_PROPOSAL: Proposal = {
   id: 'DEATH',
-  label: 'Un {couleur}. En entier. Bonne chance.',
+  label: 'Un bloc {couleur}. En entier. Bonne chance.',
   family: 'E',
   levelTarget: 'max+1',
   needsWall: false,
