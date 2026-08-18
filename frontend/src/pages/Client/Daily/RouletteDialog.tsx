@@ -11,7 +11,8 @@ import {
 import { useTheme } from '@mui/material/styles';
 import CasinoIcon from '@mui/icons-material/Casino';
 import ReplayIcon from '@mui/icons-material/Replay';
-import type { DrawResult } from '../../../utils/roulette';
+import type { DrawResult, Family } from '../../../utils/roulette';
+import { colorGrades } from '../../../config/gymConfig';
 
 interface RouletteDialogProps {
   open: boolean;
@@ -20,6 +21,22 @@ interface RouletteDialogProps {
   onClose: () => void;
   onRelancer: () => void;
 }
+
+// ✅ Retour utilisateur (18/08/2026) : la famille affichée en lettre nue ("Famille F") ne
+// disait rien — soit l'expliciter, soit la retirer. Choix : l'expliciter partout (aide à
+// savoir si le bloc se répète/se vérifie), jamais de lettre seule à l'écran.
+const familyLabels: Record<Family, string> = {
+  A: 'Socle',
+  B: 'Style',
+  C: 'Chronométré',
+  D: 'Mur délaissé',
+  E: 'Progression (réussite partielle)',
+  F: 'Sans échec',
+  G: 'Créatif',
+};
+
+const colorHexByValue: Record<string, string> = Object.fromEntries(colorGrades.map((c) => [c.value, c.hex]));
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 // Substitue {couleur}/{mur}/{numéro} par les valeurs résolues du tirage.
 const renderLabel = (result: DrawResult): string => {
@@ -86,12 +103,25 @@ const RouletteDialog: React.FC<RouletteDialogProps> = ({ open, isDeath, result, 
           </Alert>
         ) : (
           <>
-            <Chip
-              label={result.proposal.family === 'E' ? 'Progression (réussite partielle)' : `Famille ${result.proposal.family}`}
-              size="small"
-              color={isDeath ? 'error' : 'primary'}
-              sx={{ mb: 2 }}
-            />
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
+              <Chip label={familyLabels[result.proposal.family]} size="small" color={isDeath ? 'error' : 'primary'} />
+              {/* ✅ Niveau visé toujours affiché explicitement (retour utilisateur 18/08/2026) :
+                  le texte de certaines propositions (ex. F29 "cinq blocs") ne précisait jamais
+                  la couleur/le niveau à respecter, rendant le défi trop facile à contourner
+                  (n'importe quel bloc facile comptait). resolvedColor est déjà la contrainte
+                  réellement appliquée par le tirage pour TOUTES les familles (voir
+                  utils/roulette.ts), donc l'afficher une seule fois ici couvre tous les cas
+                  plutôt que de retoucher chaque texte du catalogue un par un. */}
+              <Chip
+                label={`Niveau visé : ${capitalize(result.resolvedColor)}`}
+                size="small"
+                variant="outlined"
+                sx={{
+                  borderColor: colorHexByValue[result.resolvedColor],
+                  '& .MuiChip-label': { fontWeight: 600 },
+                }}
+              />
+            </Box>
             <Typography variant="h6" sx={{ mb: 1 }}>{renderLabel(result)}</Typography>
 
             {result.widened && (

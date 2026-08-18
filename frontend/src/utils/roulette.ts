@@ -71,7 +71,7 @@ export const CATALOG: Proposal[] = [
   // F — Sans échec (vérifiable via le nombre d'essais)
   { id: 'F27', label: 'Flash : ce bloc au premier essai.', family: 'F', levelTarget: 'max-1', needsWall: false, extreme: false, childWallWarning: false },
   { id: 'F28', label: 'Trois flashs d\'affilée, deux niveaux en dessous du tien.', family: 'F', levelTarget: 'max-1', needsWall: false, extreme: false, childWallWarning: false },
-  { id: 'F29', label: 'Cinq blocs, aucun échec autorisé. Un raté et le défi tombe.', family: 'F', levelTarget: 'max-1', needsWall: false, extreme: false, childWallWarning: false },
+  { id: 'F29', label: 'Cinq blocs de {couleur}, aucun échec autorisé. Un raté et le défi tombe.', family: 'F', levelTarget: 'max-1', needsWall: false, extreme: false, childWallWarning: false },
   { id: 'F30', label: 'Un bloc à ton niveau max, essais illimités, jusqu\'à le sortir.', family: 'F', levelTarget: 'max', needsWall: false, extreme: false, childWallWarning: false },
 
   // G — Créatif et traversées (déclaratif)
