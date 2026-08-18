@@ -11,6 +11,15 @@ export interface ChangelogEntry {
 // tout l'historique ici, l'historique complet vit dans les commits git.
 export const changelog: ChangelogEntry[] = [
   {
+    version: '2.44',
+    date: '2026-08-18',
+    title: 'Bloc Roulette',
+    items: [
+      'Un tirage de défi ludique sur "Mon Blocabrac quotidien" : un bloc précis, une contrainte de style, un chronométrage, une exploration des murs délaissés…',
+      'Le niveau proposé s\'ajuste au vôtre, avec une variante "Roulette de la mort" pour les envies de défi plus corsées.',
+    ],
+  },
+  {
     version: '2.13',
     date: '2026-07-23',
     title: 'Thème sombre, objectifs et partage de progression',

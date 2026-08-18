@@ -35,6 +35,17 @@ const sections: HelpSection[] = [
     ],
   },
   {
+    title: 'Bloc Roulette',
+    intro: 'Un tirage ludique pour varier votre séance, accessible depuis « Mon Blocabrac quotidien ».',
+    points: [
+      'Le bouton 🎲 « Bloc Roulette » tire un défi au hasard : un bloc précis, une contrainte de style, un chronométrage, une exploration des murs que vous fréquentez le moins…',
+      'Le niveau proposé s\'ajuste au vôtre : le plus souvent un cran en dessous de votre niveau maximum, parfois à votre niveau, plus rarement un cran au-dessus.',
+      'Sur un défi « un cran au-dessus », il ne s\'agit que d\'un essai partiel (quelques mouvements) — rien n\'est enregistré comme une validation, votre classement et vos statistiques ne bougent pas.',
+      '« Relancer » retire une nouvelle proposition ; « Fermer » referme la carte sans rien changer.',
+      'Le bouton séparé ☠️ « Roulette de la mort » propose un bloc entier, un cran au-dessus de votre niveau, pour les envies de défi plus corsées.',
+    ],
+  },
+  {
     title: 'Série, objectif de la semaine & partage',
     intro: 'Directement sur « Mon espace personnel », sous votre niveau et votre dernier badge.',
     points: [

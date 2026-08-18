@@ -262,8 +262,16 @@ const ClientScreen: React.FC = () => {
   return (
     <Container maxWidth="lg">
       <Paper sx={{ p: 3, mt: 3 }}>
-        <Box sx={{ position: 'relative' }}>
-          <Typography variant="h4" gutterBottom sx={{ textAlign: 'center' }}>
+        {/* ✅ Bug mobile corrigé (18/08/2026) : l'icône d'aide était positionnée en
+            absolu (top:0, right:0) par-dessus un titre centré en pleine largeur — sur
+            petit écran, le texte du titre arrivait jusque sous l'icône et le "?"
+            devenait illisible/impossible à taper, noyé dans le titre. Remplacé par une
+            mise en page flexbox : un spacer invisible de la même largeur que l'icône
+            équilibre le titre (qui reste visuellement centré) sans jamais chevaucher
+            le bouton, quelle que soit la largeur d'écran ou la longueur du texte. */}
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box sx={{ width: 40, flexShrink: 0 }} />
+          <Typography variant="h4" gutterBottom sx={{ textAlign: 'center', flex: 1 }}>
             Mon espace personnel
           </Typography>
           {/* ✅ Repère de version : déplacé dans la Navbar (visible sur tout l'appli,
@@ -273,7 +281,7 @@ const ClientScreen: React.FC = () => {
             <IconButton
               aria-label="Aide"
               onClick={() => navigate('/client/aide')}
-              sx={{ position: 'absolute', top: 0, right: 0 }}
+              sx={{ flexShrink: 0 }}
             >
               <HelpOutlineIcon />
             </IconButton>
