@@ -11,8 +11,18 @@ import {
   useMediaQuery
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
-import { walls as wallList, colorGrades, mysteryColorHexKey, mysteryColorHex, logoPath } from '../../../config/gymConfig';
+import { walls as wallList, colorGrades, mysteryColorHexKey, mysteryColorHex, logoPath, storageKeyPrefix } from '../../../config/gymConfig';
 import { getBoulderImageUrl } from '../../../services/imageStorage';
+import CasinoIcon from '@mui/icons-material/Casino';
+import type { Level } from '../../../utils/competitionEligibility';
+import { drawProposal, drawDeathProposal, type DrawResult, type WallCounts } from '../../../utils/roulette';
+import RouletteDialog from './RouletteDialog';
+
+// ✅ Bloc Roulette : clé localStorage de l'anti-lassitude (§1.5) — les ~10 derniers ids de
+// propositions tirées, exclus du tirage suivant. Préfixée comme les autres clés de la salle
+// (voir ThemeModeContext.tsx). Jamais dans Firestore : le tirage doit rester gratuit.
+const ROULETTE_RECENT_STORAGE_KEY = `${storageKeyPrefix}_roulette_recent`;
+const ROULETTE_RECENT_MAX = 10;
 
 const levelColors: Record<string, string> = {
   ...Object.fromEntries(colorGrades.map(({ value, hex }) => [value, hex])),
@@ -89,6 +99,14 @@ const ClientDaily: React.FC = () => {
   // pour retrouver son niveau sans avoir à ouvrir chaque mur un par un.
   const [levelFilter, setLevelFilter] = useState<string>('tous');
 
+  // ✅ Bloc Roulette : niveau et compteur par mur du grimpeur lui-même, lus une seule fois au
+  // montage (voir extension de `fetchUsers` ci-dessous — pas de lecture Firestore
+  // supplémentaire, le `getDoc(users/{uid})` existait déjà pour résoudre son propre nom).
+  const [selfProfile, setSelfProfile] = useState<{ level?: Level; wallCounts?: WallCounts }>({});
+  const [openRoulette, setOpenRoulette] = useState(false);
+  const [rouletteIsDeath, setRouletteIsDeath] = useState(false);
+  const [rouletteResult, setRouletteResult] = useState<DrawResult | null>(null);
+
   // ✅ Détection mobile pour passer les Dialogs en plein écran
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -139,6 +157,12 @@ const ClientDaily: React.FC = () => {
   const pendingSeasonScoreDeltaRef = useRef(0);
   const pendingSeasonColorDeltaRef = useRef<Map<string, number>>(new Map());
 
+  // ✅ Bloc Roulette / compteur par mur (§1.7.B) : deltas en attente pour `users/{uid}.wallCounts`,
+  // appliqués dans la MÊME transaction que le flush classement_profiles ci-dessous (deux
+  // documents, une seule transaction atomique) — jamais une écriture séparée, jamais de
+  // réconciliation dédiée (champ privé, enjeu purement ludique, décision actée).
+  const pendingWallDeltaRef = useRef<Map<string, number>>(new Map());
+
   // ✅ Fenêtre de saison, lue une seule fois au montage depuis `app_config/classement_saison`
   // (voir useEffect plus bas) — pas de lecture par validation, un doc de config ne le
   // justifie pas. `null` = pas encore configurée par l'admin (aucune validation ne compte
@@ -184,6 +208,9 @@ const ClientDaily: React.FC = () => {
             firstName: data.first_name || '',
             lastName: data.last_name || '',
           };
+          // ✅ Bloc Roulette : même lecture, pas de getDoc séparé — niveau et compteur par
+          // mur du grimpeur, nécessaires au tirage (utils/roulette.ts).
+          setSelfProfile({ level: data.level, wallCounts: data.wallCounts });
         }
       } catch (ownErr) {
         console.error('Erreur lors du chargement de son propre profil:', ownErr);
@@ -266,6 +293,75 @@ const ClientDaily: React.FC = () => {
     setOpenBoulderDialog(true);
   };
 
+  // ✅ Bloc Roulette : lecture/écriture localStorage isolées ici (pas dans utils/roulette.ts,
+  // qui reste un module pur) — anti-lassitude §1.5.
+  const getRecentRouletteIds = (): string[] => {
+    try {
+      const raw = window.localStorage.getItem(ROULETTE_RECENT_STORAGE_KEY);
+      return raw ? (JSON.parse(raw) as string[]) : [];
+    } catch {
+      return [];
+    }
+  };
+  const pushRecentRouletteId = (id: string) => {
+    try {
+      const recent = [id, ...getRecentRouletteIds().filter((existing) => existing !== id)].slice(0, ROULETTE_RECENT_MAX);
+      window.localStorage.setItem(ROULETTE_RECENT_STORAGE_KEY, JSON.stringify(recent));
+    } catch {
+      // ✅ localStorage indisponible (navigation privée stricte, quota) : l'anti-lassitude
+      // dégrade proprement, ce n'est pas une fonctionnalité critique.
+    }
+  };
+
+  // ✅ Blocs éligibles au tirage : uniquement les blocs actifs du jour, avec leur couleur et
+  // mur COURANTS (comme colorById/wallById) — aucune lecture Firestore supplémentaire, le
+  // module utils/roulette.ts est pur (voir son en-tête).
+  const rouletteBoulders = () => boulders.map((b) => ({
+    id: b.id,
+    color: b.color || b.difficulty || '',
+    wall: b.wall,
+    number: b.number,
+  }));
+
+  // ✅ "déjà validé" limité à la session en cours (successResults), pas l'historique complet
+  // — décision actée pour rester gratuit (aucune lecture Firestore au tirage).
+  const validatedBoulderIdsThisSession = () =>
+    new Set(Object.entries(successResults).filter(([, ok]) => ok).map(([id]) => id));
+
+  const handleOpenRoulette = () => {
+    const result = drawProposal({
+      boulders: rouletteBoulders(),
+      userLevel: selfProfile.level,
+      validatedBoulderIds: validatedBoulderIdsThisSession(),
+      wallCounts: selfProfile.wallCounts || {},
+      recentProposalIds: getRecentRouletteIds(),
+    });
+    pushRecentRouletteId(result.proposal.id);
+    setRouletteResult(result);
+    setRouletteIsDeath(false);
+    setOpenRoulette(true);
+  };
+
+  const handleOpenDeathRoulette = () => {
+    const result = drawDeathProposal({
+      boulders: rouletteBoulders(),
+      userLevel: selfProfile.level,
+      validatedBoulderIds: validatedBoulderIdsThisSession(),
+      wallCounts: selfProfile.wallCounts || {},
+    });
+    setRouletteResult(result);
+    setRouletteIsDeath(true);
+    setOpenRoulette(true);
+  };
+
+  const handleRelancerRoulette = () => {
+    if (rouletteIsDeath) {
+      handleOpenDeathRoulette();
+    } else {
+      handleOpenRoulette();
+    }
+  };
+
   const getFilteredBoulders = () => {
     if (levelFilter === 'tous') return [];
     return boulders.filter((b) => (b.color || b.difficulty) === levelFilter);
@@ -317,6 +413,13 @@ const ClientDaily: React.FC = () => {
     [boulders]
   );
 
+  // ✅ Bloc Roulette / compteur par mur (CONCEPTION-roulette-et-defis.md §1.7.B) : même
+  // principe que `colorById` — le mur COURANT du bloc, jamais un mur figé à la validation.
+  const wallById = useMemo(
+    () => new Map(boulders.map((b) => [b.id, b.wall])),
+    [boulders]
+  );
+
   // ✅ Classement en continu (ClientClassement.tsx) : un client ne peut pas lire les
   // résultats des AUTRES clients (règles Firestore), donc chaque client tient à jour
   // SON PROPRE résumé sur sa fiche "classement_profiles" à chaque validation — le
@@ -338,7 +441,8 @@ const ClientDaily: React.FC = () => {
     const colorDeltas = pendingColorDeltaRef.current;
     const seasonScoreDelta = pendingSeasonScoreDeltaRef.current;
     const seasonColorDeltas = pendingSeasonColorDeltaRef.current;
-    if (scoreDelta === 0 && colorDeltas.size === 0) return;
+    const wallDeltas = pendingWallDeltaRef.current;
+    if (scoreDelta === 0 && colorDeltas.size === 0 && wallDeltas.size === 0) return;
     // ✅ Capturé puis remis à zéro AVANT l'écriture (pas après) : un delta qui arrive
     // pendant la transaction doit s'accumuler dans un nouveau cycle, pas se perdre s'il
     // arrivait pendant l'await ci-dessous.
@@ -346,8 +450,12 @@ const ClientDaily: React.FC = () => {
     pendingColorDeltaRef.current = new Map();
     pendingSeasonScoreDeltaRef.current = 0;
     pendingSeasonColorDeltaRef.current = new Map();
+    pendingWallDeltaRef.current = new Map();
     try {
       const ref = doc(db, 'classement_profiles', user.uid);
+      // ✅ Bloc Roulette : users/{uid} touché dans la MÊME transaction (deux documents,
+      // atomique) pour tenir wallCounts à jour — voir pendingWallDeltaRef ci-dessus.
+      const userRef = doc(db, 'users', user.uid);
       await runTransaction(db, async (tx) => {
         const snap = await tx.get(ref);
         const data = snap.exists() ? snap.data() : {};
@@ -375,6 +483,15 @@ const ClientDaily: React.FC = () => {
             colorCounts: seasonColorCounts,
           },
         }, { merge: true });
+
+        if (wallDeltas.size > 0) {
+          const userSnap = await tx.get(userRef);
+          const wallCounts: WallCounts = { ...(userSnap.exists() ? (userSnap.data().wallCounts as WallCounts | undefined) : undefined) };
+          wallDeltas.forEach((delta, wall) => {
+            wallCounts[wall] = (wallCounts[wall] || 0) + delta;
+          });
+          tx.set(userRef, { wallCounts }, { merge: true });
+        }
       });
     } catch (err) {
       console.error('Erreur lors de la mise à jour du classement:', err);
@@ -387,6 +504,9 @@ const ClientDaily: React.FC = () => {
       pendingSeasonScoreDeltaRef.current += seasonScoreDelta;
       seasonColorDeltas.forEach((delta, color) => {
         pendingSeasonColorDeltaRef.current.set(color, (pendingSeasonColorDeltaRef.current.get(color) || 0) + delta);
+      });
+      wallDeltas.forEach((delta, wall) => {
+        pendingWallDeltaRef.current.set(wall, (pendingWallDeltaRef.current.get(wall) || 0) + delta);
       });
     }
   }, [user]);
@@ -441,7 +561,8 @@ const ClientDaily: React.FC = () => {
     color: string,
     previous: { attempts: number } | null,
     success: boolean,
-    resultAttempts: number
+    resultAttempts: number,
+    wall?: string
   ) => {
     const newState = success ? { attempts: resultAttempts } : null;
     const scoreDelta = scoreDeltaForValidation(
@@ -453,6 +574,11 @@ const ClientDaily: React.FC = () => {
     pendingScoreDeltaRef.current += scoreDelta;
     if (colorCountDelta !== 0) {
       pendingColorDeltaRef.current.set(color, (pendingColorDeltaRef.current.get(color) || 0) + colorCountDelta);
+      // ✅ Bloc Roulette : même delta (succès gagné/perdu) appliqué au compteur par mur — le
+      // mur COURANT du bloc (wallById), jamais un mur figé à la validation.
+      if (wall) {
+        pendingWallDeltaRef.current.set(wall, (pendingWallDeltaRef.current.get(wall) || 0) + colorCountDelta);
+      }
     }
 
     // ✅ Classement de saison : même delta que ci-dessus, accumulé séparément et
@@ -526,7 +652,7 @@ const ClientDaily: React.FC = () => {
       // ci-dessus avait échoué, aucune mutation du classement n'aurait eu lieu.
       if (classementColor) {
         const previousClassementState = previousResultState?.success ? { attempts: previousResultState.attempts } : null;
-        applyClassementDelta(classementColor, previousClassementState, success, candidate.attempts);
+        applyClassementDelta(classementColor, previousClassementState, success, candidate.attempts, wallById.get(boulderId));
       }
     } catch (err: unknown) {
       setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
@@ -576,7 +702,7 @@ const ClientDaily: React.FC = () => {
       cachePreviousResultState(boulderId, candidate.success, candidate.attempts, createdAt);
       if (classementColor) {
         const previousClassementState = previousResultState?.success ? { attempts: previousResultState.attempts } : null;
-        applyClassementDelta(classementColor, previousClassementState, candidate.success, candidate.attempts);
+        applyClassementDelta(classementColor, previousClassementState, candidate.success, candidate.attempts, wallById.get(boulderId));
       }
       setRatings(prev => ({ ...prev, [boulderId]: rating }));
       setComments(prev => ({ ...prev, [boulderId]: comment }));
@@ -631,6 +757,25 @@ const ClientDaily: React.FC = () => {
       <Typography variant="h4" sx={{ mt: 4, mb: 2 }}>Mon Blocabrac quotidien</Typography>
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
       {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
+
+      {/* ✅ Bloc Roulette (CONCEPTION-roulette-et-defis.md, Partie 1) : tirage 100% gratuit,
+          aucun appel Firestore déclenché par ces boutons ni par "relancer" — voir
+          handleOpenRoulette/handleOpenDeathRoulette et l'en-tête de utils/roulette.ts. */}
+      <Box sx={{ mb: 3, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+        <Button variant="contained" startIcon={<CasinoIcon />} onClick={handleOpenRoulette}>
+          Bloc Roulette
+        </Button>
+        <Button variant="outlined" color="error" onClick={handleOpenDeathRoulette}>
+          Roulette de la mort ☠️
+        </Button>
+      </Box>
+      <RouletteDialog
+        open={openRoulette}
+        isDeath={rouletteIsDeath}
+        result={rouletteResult}
+        onClose={() => setOpenRoulette(false)}
+        onRelancer={handleRelancerRoulette}
+      />
 
       <FormControl size="small" sx={{ mb: 3, minWidth: 220 }}>
         <InputLabel id="level-filter-label">Filtrer par niveau</InputLabel>

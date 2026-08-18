@@ -23,9 +23,13 @@ export const brandGreenDark = '#177038';
 export const logoPath = '/images/logo-blocabrac.png';
 export { default as logoAssetUrl } from '../assets/logo-blocabrac.png';
 
+// ✅ Ordre circulaire réel de la salle (validé avec l'utilisateur, CONCEPTION-roulette-et-defis.md
+// §1.7.A) — remplace l'ancien ordre (simple historique d'ajout des murs). Utilisé pour
+// l'affichage (ordre des boutons de sélection de mur) et par la famille "murs" de la Roulette
+// (utils/roulette.ts, ex. proposition #21 "cinq murs consécutifs dans l'ordre de la salle").
 export const walls: string[] = [
-  'Caverne des petits', "Réta d'initiation", 'Réta Adultes', 'Grande Face',
-  'Dalle', 'Dévers 15°', 'Dévers 30°', 'Dévers 40°', 'Grotte Adultes', 'Güllich'
+  'Grotte Adultes', 'Caverne des petits', 'Güllich', 'Réta Adultes', "Réta d'initiation",
+  'Grande Face', 'Dalle', 'Dévers 15°', 'Dévers 40°', 'Dévers 30°'
 ];
 
 export interface ColorGrade {
