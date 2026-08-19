@@ -19,14 +19,15 @@ export default defineConfig([
       globals: globals.browser,
     },
     rules: {
-      // ✅ Processus "erreurs avalées" (PROCESSUS-erreurs-avalees.md §1, V2.46) : détecte un
-      // `catch (err)` dont `err` n'est jamais lu — presque toujours le signe d'une erreur
-      // rattrapée puis ignorée. Mode RAPPORT (warn, pas error) tant que l'inventoire existant
-      // n'a pas été trié/traité (§1 du document) — passer en "error" ferait échouer le build
-      // avant ce tri, et la règle serait désactivée plutôt que respectée.
-      '@typescript-eslint/no-unused-vars': ['warn', { caughtErrors: 'all' }],
+      // ✅ Processus "erreurs avalées" (PROCESSUS-erreurs-avalees.md §1/§6, V2.46 → V2.49) :
+      // détecte un `catch (err)` dont `err` n'est jamais lu — presque toujours le signe d'une
+      // erreur rattrapée puis ignorée. Passé de "warn" (mode rapport) à "error" une fois
+      // l'inventaire existant confirmé vide (0 résultat, voir §1) — désormais bloquant : tout
+      // futur `catch` qui n'utilise pas son erreur fait échouer le build plutôt que d'être
+      // simplement signalé et oublié.
+      '@typescript-eslint/no-unused-vars': ['error', { caughtErrors: 'all' }],
       // ✅ Même processus : un `catch {}` vide est une erreur avalée sans même un log.
-      'no-empty': ['warn', { allowEmptyCatch: false }],
+      'no-empty': ['error', { allowEmptyCatch: false }],
     },
   },
 ])
