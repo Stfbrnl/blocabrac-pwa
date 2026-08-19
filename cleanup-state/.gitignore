@@ -1,0 +1,6 @@
+# ✅ PROCESSUS-erreurs-avalees.md / retour ClaudeNav (19/08/2026) : un run local d'un
+# script de maintenance contre l'émulateur (reconcile-classement-profiles.js notamment,
+# invoqué par test/e2e-season-classement-flow.mjs) écrit son journal sous un nom distinct
+# dès que FIRESTORE_EMULATOR_HOST est détecté — jamais le fichier de production ci-dessus.
+# Cette règle est le filet en plus de ce garde-fou côté script, pas à sa place.
+*.emulator.json

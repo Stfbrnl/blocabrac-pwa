@@ -439,14 +439,15 @@ const ClientCompetitions: React.FC = () => {
   // ✅ 1.2 — Écrit chaque validation dans Firestore (merge: true), en plus de
   // l'état React local qui pilote l'affichage immédiat. Ne pose created_at que
   // sur la première écriture du document (voir persistedBoulderIds).
-  // ✅ PROCESSUS-erreurs-avalees.md §3 (V2.48) : minuteur/pagehide/compteur d'échecs
-  // portés par `useDebouncedFlushQueue` (même hook que ClientDaily.tsx/ClientCourseSession.tsx)
-  // plutôt que réimplémentés ici — une clé par bloc (`boulderId`), fusion "remplacement"
-  // (`prev ?? incoming` : un enqueue plus récent gagne toujours sur une ré-accumulation
-  // après échec, jamais l'inverse — voir le contrat de `merge` dans useDebouncedFlushQueue.ts).
+  // ✅ PROCESSUS-erreurs-avalees.md §3 (V2.48, corrigé V2.50) : minuteur/pagehide/compteur
+  // d'échecs portés par `useDebouncedFlushQueue` (même hook que ClientDaily.tsx/
+  // ClientCourseSession.tsx) plutôt que réimplémentés ici — une clé par bloc (`boulderId`),
+  // fusion "remplacement" : `merge(older, newer)` renvoie toujours `newer`, la valeur la plus
+  // récente (voir le contrat détaillé — et le bug qu'un `prev ?? incoming` naïf introduisait
+  // sur un empilement de deux enqueue() rapprochés — dans useDebouncedFlushQueue.ts).
   const validationQueue = useDebouncedFlushQueue<ValidationResult>({
     debounceMs: DEBOUNCE_MS,
-    merge: (prev, incoming) => prev ?? incoming,
+    merge: (_older, newer) => newer,
     errorContext: (boulderId) => `Erreur lors de l'enregistrement du résultat du bloc ${boulderId}`,
     // ✅ Chantier écritures point 3 : rien à écrire si le résultat est identique à la
     // dernière valeur réellement persistée (voir lastPersistedRef) — un reclic sur

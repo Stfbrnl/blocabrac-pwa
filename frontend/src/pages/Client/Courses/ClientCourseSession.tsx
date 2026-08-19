@@ -263,7 +263,10 @@ const ClientCourseSession: React.FC = () => {
   // les deux flushent bien indépendamment sans code de liaison supplémentaire.
   const exerciseQueue = useDebouncedFlushQueue<ValidationResult>({
     debounceMs: DEBOUNCE_MS,
-    merge: (prev, incoming) => prev ?? incoming,
+    // ✅ Fusion "remplacement" : voir le contrat détaillé (et le bug corrigé en V2.50 par un
+    // `prev ?? incoming` naïf) dans useDebouncedFlushQueue.ts — `merge(older, newer)` renvoie
+    // toujours `newer`.
+    merge: (_older, newer) => newer,
     errorContext: (exerciseId) => `Erreur lors de l'enregistrement du résultat de l'exercice ${exerciseId}`,
     // ✅ Chantier écritures point 3 : rien à écrire si le résultat est identique à la
     // dernière valeur réellement persistée (voir lastPersistedExerciseRef).
@@ -292,6 +295,9 @@ const ClientCourseSession: React.FC = () => {
       persistedExerciseIds.current.add(exerciseId);
       lastPersistedExerciseRef.current[exerciseId] = result;
     },
+    // ✅ Seuil à 1 (pas 3, contrairement à ClientDaily.tsx) : cet écran prévenait déjà
+    // l'utilisateur dès le premier échec avant ce chantier (pas de tolérance aux coupures
+    // transitoires) — comportement préservé, pas aligné sur ClientDaily.
     failureThreshold: 1,
     onDurableFailure: () => setError("Erreur : le résultat de l'exercice n'a pas pu être enregistré. Réessaie."),
     onRecovered: () => setError(null),
@@ -305,7 +311,8 @@ const ClientCourseSession: React.FC = () => {
     miniCompetitionId: string; boulderColor: string; result: BoulderValidationResult;
   }>({
     debounceMs: DEBOUNCE_MS,
-    merge: (prev, incoming) => prev ?? incoming,
+    // ✅ Même fusion "remplacement" que exerciseQueue ci-dessus.
+    merge: (_older, newer) => newer,
     errorContext: (boulderId) => `Erreur lors de l'enregistrement du résultat du bloc ${boulderId} (mini-compétition)`,
     // ✅ Chantier écritures point 3 : même comparaison avant écriture que pour les
     // exercices (voir lastPersistedBoulderRef).
@@ -331,6 +338,7 @@ const ClientCourseSession: React.FC = () => {
       persistedBoulderResultIds.current.add(boulderId);
       lastPersistedBoulderRef.current[boulderId] = result;
     },
+    // ✅ Seuil à 1 — même raison que exerciseQueue ci-dessus.
     failureThreshold: 1,
     onDurableFailure: () => setError("Erreur : le résultat du bloc n'a pas pu être enregistré. Réessaie."),
     onRecovered: () => setError(null),

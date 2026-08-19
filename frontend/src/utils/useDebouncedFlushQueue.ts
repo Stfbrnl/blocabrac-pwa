@@ -9,19 +9,52 @@
 // d'échecs et remontée à l'appelant sont maintenant à l'intérieur, pas à réécrire à chaque
 // nouvel écran.
 //
-// Contrat de fusion : l'appelant fournit `merge(prev, incoming)`, appelée à la fois pour
-// accumuler deux `enqueue()` rapprochés ET pour ré-accumuler un payload resté en échec avec
-// un `enqueue()` survenu entre-temps (même chemin, une seule règle à tenir cohérente) :
-// - Delta cumulatif (ex. ClientDaily) : `merge` additionne — l'ordre n'importe pas.
-// - Remplacement (ex. validation d'un bloc de compétition, "la dernière valeur saisie
-//   gagne") : `merge` doit renvoyer `prev` s'il existe (un enqueue plus récent a déjà eu
-//   lieu depuis l'échec qu'on retente, il ne faut jamais le faire régresser vers une valeur
-//   plus ancienne) et sinon `incoming`.
+// ✅ Contrat de fusion, CORRIGÉ (retour ClaudeNav, V2.50) : `merge` reçoit désormais
+// `(older, newer)`, dans cet ordre STRICT d'ANCIENNETÉ — jamais "ce qui était déjà en file"
+// vs "ce qui arrive", qui n'a pas le même sens selon le chemin d'appel. Ce hook appelle
+// `merge` depuis DEUX chemins avec une relation de fraîcheur opposée l'un à l'autre :
+// - `enqueue()` : ce qui est déjà en file (`pendingRef`) est plus ANCIEN que le payload qui
+//   vient d'arriver — la fraîcheur va dans le même sens que l'ordre naturel des paramètres.
+// - le réessai après échec (dans `runPersist`) : le payload qui vient d'échouer est plus
+//   ANCIEN que ce qui a pu s'accumuler dans `pendingRef` PENDANT le `await` de la tentative
+//   ratée — la fraîcheur va dans le sens INVERSE de "ce qui était déjà là".
+// Un contrat `merge(prev, incoming)` naïf (comme la V2.48 initiale) mélangeait ces deux sens
+// sous un seul nom — correct pour un réessai (`prev ?? incoming` protège la valeur la plus
+// récente), silencieusement FAUX pour un empilement de deux `enqueue()` rapprochés (la
+// valeur la plus récente y est `incoming`, pas `prev` : "essais 2 puis 3 avant la fin du
+// debounce" aurait persisté 2, pas 3 — trouvé par relecture, jamais par les e2e, qui ne
+// posent jamais deux valeurs dans la même fenêtre de debounce). En imposant `(older, newer)`
+// aux DEUX sites d'appel plutôt qu'en laissant chacun interpréter ses propres arguments, le
+// même `merge` retombe juste dans les deux cas sans qu'aucun écran n'ait à raisonner sur le
+// contexte :
+// - Delta cumulatif (ex. ClientDaily) : `merge` additionne — commutatif, l'ordre n'a jamais
+//   eu d'importance ici, c'est justement pourquoi ce cas n'a pas révélé le bug.
+// - Remplacement (ex. validation d'un bloc de compétition/cours, "la dernière valeur saisie
+//   gagne") : `merge` renvoie simplement `newer`.
+// `combineByFreshness` (exportée, testée isolément) porte la seule partie non triviale : que
+// faire quand l'un des deux côtés est absent (rien n'était en file, ou rien de plus récent
+// n'est arrivé depuis l'échec) — dans ces deux cas il n'y a rien à arbitrer, la valeur
+// présente gagne par défaut, `merge` n'est même pas appelée.
 import { useCallback, useEffect, useRef } from 'react';
+
+// Combine deux valeurs dont on connaît l'ordre relatif d'ancienneté, en ne déléguant à
+// `merge` que le cas où les DEUX existent réellement (le seul qui demande un arbitrage) —
+// pure, sans aucune dépendance à React, donc testable sans monter le hook.
+export function combineByFreshness<T>(
+  older: T | undefined,
+  newer: T | undefined,
+  merge: (older: T, newer: T) => T
+): T | undefined {
+  if (older === undefined) return newer;
+  if (newer === undefined) return older;
+  return merge(older, newer);
+}
 
 export interface UseDebouncedFlushQueueOptions<T> {
   debounceMs: number;
-  merge: (prev: T | undefined, incoming: T) => T;
+  // Voir le contrat détaillé en tête de fichier — `older` est TOUJOURS antérieure à `newer`,
+  // quel que soit le chemin d'appel (enqueue empilé ou réessai après échec).
+  merge: (older: T, newer: T) => T;
   persist: (key: string, payload: T) => Promise<void>;
   // Au-delà de ce nombre d'échecs CONSÉCUTIFS (remis à zéro par tout succès), l'échec
   // n'est plus traité comme transitoire — voir §2 niveau 2 du même document.
@@ -72,9 +105,11 @@ export function useDebouncedFlushQueue<T>(options: UseDebouncedFlushQueueOptions
     } catch (err) {
       const ctx = latestOptionsRef.current.errorContext?.(key) ?? `Erreur lors de l'enregistrement (${key})`;
       console.error(`${ctx}:`, err);
-      // ✅ Ne jamais perdre silencieusement ce qui vient d'échouer — voir le contrat de
-      // `merge` en tête de fichier pour la sémantique exacte de ce ré-accumul.
-      pendingRef.current[key] = latestOptionsRef.current.merge(pendingRef.current[key], payload);
+      // ✅ Ne jamais perdre silencieusement ce qui vient d'échouer. `payload` (ce qui a
+      // échoué) est ANTÉRIEUR à tout ce qui a pu s'accumuler dans `pendingRef` PENDANT le
+      // `await` ci-dessus — donc `payload` est `older`, `pendingRef.current[key]` est `newer`
+      // (sens inverse de l'appel dans `enqueue` ci-dessous, voir le contrat en tête de fichier).
+      pendingRef.current[key] = combineByFreshness(payload, pendingRef.current[key], latestOptionsRef.current.merge)!;
       failureCountRef.current += 1;
       const threshold = latestOptionsRef.current.failureThreshold ?? 3;
       if (failureCountRef.current >= threshold) {
@@ -89,7 +124,9 @@ export function useDebouncedFlushQueue<T>(options: UseDebouncedFlushQueueOptions
   }, []);
 
   const enqueue = useCallback((key: string, payload: T) => {
-    pendingRef.current[key] = latestOptionsRef.current.merge(pendingRef.current[key], payload);
+    // ✅ Ce qui est déjà en file est ANTÉRIEUR (`older`) au payload qui vient d'arriver
+    // (`newer`) — sens direct, voir le contrat en tête de fichier.
+    pendingRef.current[key] = combineByFreshness(pendingRef.current[key], payload, latestOptionsRef.current.merge)!;
     if (timersRef.current[key]) clearTimeout(timersRef.current[key]);
     timersRef.current[key] = setTimeout(() => {
       delete timersRef.current[key];

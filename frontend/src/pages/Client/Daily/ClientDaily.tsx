@@ -176,6 +176,10 @@ const ClientDaily: React.FC = () => {
   const classementQueue = useDebouncedFlushQueue<ClassementFlushPending>({
     debounceMs: CLASSEMENT_DEBOUNCE_MS,
     merge: mergeClassementFlushPending,
+    // ✅ failureThreshold non précisé -> défaut du hook (3), volontairement plus tolérant
+    // que ClientCompetitions/ClientCourseSession (seuil 1) : un résumé dérivé peut se
+    // permettre d'attendre une coupure réseau transitoire avant d'alerter, contrairement à
+    // une saisie de compétition en direct où chaque échec doit remonter tout de suite.
     errorContext: () => 'Erreur lors de la mise à jour du classement',
     persist: async (_key, pending) => {
       if (!user) return;

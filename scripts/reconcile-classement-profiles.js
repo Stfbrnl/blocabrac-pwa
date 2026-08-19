@@ -57,7 +57,24 @@ const { getFirestore } = require('firebase-admin/firestore');
 
 const CREDENTIALS_DIR = path.join(__dirname, '../firestore-migration');
 const STATE_DIR = path.join(__dirname, '../cleanup-state');
-const LOG_PATH = path.join(STATE_DIR, 'classement-profiles-reconcile-log.json');
+// ✅ Retour ClaudeNav (19/08/2026, sur PROCESSUS-erreurs-avalees.md) : "la vigilance ne
+// suffira pas" — un lancement local de ce script contre l'émulateur (fait, entre autres,
+// par test/e2e-season-classement-flow.mjs) écrivait auparavant dans le MÊME fichier suivi
+// par git que le cron mensuel en prod, remplaçant silencieusement le journal réel par des
+// uids d'émulateur. Repéré une fois par relecture de `git status` avant un commit — pas un
+// garde-fou, juste de la chance. Le SDK Admin bascule automatiquement sur l'émulateur dès
+// que `FIRESTORE_EMULATOR_HOST` est présent (c'est exactement ce qui permet aux e2e/scripts
+// de seed de ce projet de fonctionner) ; ce même signal sert ici à dériver un chemin de
+// journal distinct, jamais suivi par git, plutôt que de compter sur la discipline de
+// l'exécutant.
+const IS_EMULATOR = !!process.env.FIRESTORE_EMULATOR_HOST;
+const LOG_PATH = path.join(
+  STATE_DIR,
+  IS_EMULATOR ? 'classement-profiles-reconcile-log.emulator.json' : 'classement-profiles-reconcile-log.json'
+);
+if (IS_EMULATOR) {
+  console.warn(`⚠️  FIRESTORE_EMULATOR_HOST détecté — journal écrit dans ${LOG_PATH} (jamais le journal de production).`);
+}
 
 // ✅ Même pattern que cleanup-orphan-boulder-images.js / rekey-competition-participants.js :
 // variable d'environnement en priorité (CI/exécution distante), sinon fichier local.

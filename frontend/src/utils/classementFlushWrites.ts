@@ -105,32 +105,34 @@ export const buildClassementFlushWrites = (
   return writes;
 };
 
-// ✅ Fusionne deux jeux de deltas en attente (utilisé par le compteur d'échecs du flush
-// débouncé — voir useDebouncedFlushQueue.ts — pour ré-accumuler un delta resté en échec avec
-// celui d'une validation survenue entre-temps). Chaque champ s'additionne indépendamment ;
-// jamais de "dernier gagne", contrairement à un remplacement de valeur.
+// ✅ Fusionne deux jeux de deltas en attente — fournie comme `merge(older, newer)` à
+// useDebouncedFlushQueue (voir son contrat détaillé) : additive et donc commutative, `older`/
+// `newer` n'ont pas besoin d'être distingués ici (c'est précisément pour ça que ce cas n'avait
+// pas révélé le bug d'ordre trouvé par ClaudeNav le 19/08 — seul un contrat "dernier gagne",
+// non commutatif, y est sensible). Les noms de paramètres suivent quand même la convention
+// `older`/`newer` du hook, par cohérence de lecture avec son propre contrat.
 export const mergeClassementFlushPending = (
-  prev: ClassementFlushPending | undefined,
-  incoming: ClassementFlushPending
+  older: ClassementFlushPending | undefined,
+  newer: ClassementFlushPending
 ): ClassementFlushPending => {
-  if (!prev) return incoming;
+  if (!older) return newer;
   const mergeMaps = (a: Map<string, number>, b: Map<string, number>): Map<string, number> => {
     const merged = new Map(a);
     b.forEach((delta, key) => merged.set(key, (merged.get(key) || 0) + delta));
     return merged;
   };
   return {
-    scoreDelta: prev.scoreDelta + incoming.scoreDelta,
-    colorDeltas: mergeMaps(prev.colorDeltas, incoming.colorDeltas),
-    seasonScoreDelta: prev.seasonScoreDelta + incoming.seasonScoreDelta,
-    seasonColorDeltas: mergeMaps(prev.seasonColorDeltas, incoming.seasonColorDeltas),
-    wallDeltas: mergeMaps(prev.wallDeltas, incoming.wallDeltas),
-    challengeDeltas: mergeMaps(prev.challengeDeltas, incoming.challengeDeltas),
+    scoreDelta: older.scoreDelta + newer.scoreDelta,
+    colorDeltas: mergeMaps(older.colorDeltas, newer.colorDeltas),
+    seasonScoreDelta: older.seasonScoreDelta + newer.seasonScoreDelta,
+    seasonColorDeltas: mergeMaps(older.seasonColorDeltas, newer.seasonColorDeltas),
+    wallDeltas: mergeMaps(older.wallDeltas, newer.wallDeltas),
+    challengeDeltas: mergeMaps(older.challengeDeltas, newer.challengeDeltas),
     // ✅ blocDesigneScores n'est pas un delta : un max composé, jamais une addition (même
-    // raison que dans buildClassementFlushWrites ci-dessus).
+    // raison que dans buildClassementFlushWrites ci-dessus) — un max est commutatif aussi.
     blocDesigneScores: (() => {
-      const merged = new Map(prev.blocDesigneScores);
-      incoming.blocDesigneScores.forEach((score, key) => merged.set(key, Math.max(merged.get(key) || 0, score)));
+      const merged = new Map(older.blocDesigneScores);
+      newer.blocDesigneScores.forEach((score, key) => merged.set(key, Math.max(merged.get(key) || 0, score)));
       return merged;
     })(),
   };
