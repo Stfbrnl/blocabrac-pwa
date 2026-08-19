@@ -182,6 +182,22 @@ const ClientDaily: React.FC = () => {
   const pendingChallengeDeltaRef = useRef<Map<string, number>>(new Map());
   const pendingBlocDesigneScoreRef = useRef<Map<string, number>>(new Map());
 
+  // ✅ Processus "erreurs avalées" (PROCESSUS-erreurs-avalees.md §2 niveau 2, V2.47) :
+  // le bug du 18-19/08 était un échec PERMANENT déguisé en réessai transitoire — la
+  // transaction ré-échouait identiquement à chaque flush, indéfiniment, sans que rien ne
+  // distingue ce cas d'une vraie coupure réseau (où réessayer en silence est le bon
+  // comportement). Ce compteur fait cette distinction : au-delà de
+  // CLASSEMENT_FLUSH_FAILURE_THRESHOLD échecs consécutifs, on arrête de laisser l'échec
+  // invisible (console.error explicite + message utilisateur), sans pour autant abandonner
+  // les deltas en attente — un flush réussi ultérieur (reconnexion réseau, correctif déployé)
+  // les applique normalement et remet le compteur à zéro.
+  const CLASSEMENT_FLUSH_FAILURE_THRESHOLD = 3;
+  const classementFlushFailureCountRef = useRef(0);
+  // ✅ true seulement quand le message d'erreur AFFICHÉ vient de cette escalade — permet
+  // au prochain flush réussi de l'effacer sans risquer d'écraser une erreur d'un autre
+  // chemin (signalement, notation...) qui partage le même état `error`.
+  const classementFlushDurableErrorRef = useRef(false);
+
   // ✅ Fenêtre de saison, lue une seule fois au montage depuis `app_config/classement_saison`
   // (voir useEffect plus bas) — pas de lecture par validation, un doc de config ne le
   // justifie pas. `null` = pas encore configurée par l'admin (aucune validation ne compte
@@ -576,8 +592,32 @@ const ClientDaily: React.FC = () => {
           }, { merge: true });
         });
       });
+      // ✅ Flush réussi : la classe de bug du 18-19/08 ne peut pas survivre à un succès
+      // (elle vient d'un échec déterministe, pas d'une vraie perte de données), donc un
+      // flush qui aboutit remet le compteur à zéro et efface un éventuel avertissement
+      // affiché par l'escalade ci-dessous.
+      classementFlushFailureCountRef.current = 0;
+      if (classementFlushDurableErrorRef.current) {
+        classementFlushDurableErrorRef.current = false;
+        setError(null);
+      }
     } catch (err) {
       console.error('Erreur lors de la mise à jour du classement:', err);
+      classementFlushFailureCountRef.current += 1;
+      // ✅ Niveau 2 (PROCESSUS-erreurs-avalees.md §2) : distingue un échec transitoire
+      // (réseau coupé — le réessai silencieux est le bon comportement, exactement ce que
+      // fait cette fonction depuis l'origine) d'un échec déterministe qui se répéterait
+      // indéfiniment sans jamais être vu (le bug réel du 18/08). Au-delà du seuil, on ne
+      // change rien au réessai lui-même (les deltas restent en file, un flush réussi les
+      // appliquera) mais on arrête que ce soit SILENCIEUX : log explicite + niveau 3.
+      if (classementFlushFailureCountRef.current >= CLASSEMENT_FLUSH_FAILURE_THRESHOLD) {
+        console.error(
+          `Échecs répétés (${classementFlushFailureCountRef.current}) de la mise à jour du classement — `
+          + 'probablement pas transitoire, voir PROCESSUS-erreurs-avalees.md.'
+        );
+        classementFlushDurableErrorRef.current = true;
+        setError("Ta progression (classement, murs, défis) n'arrive pas à s'enregistrer depuis plusieurs tentatives. Tes validations de blocs restent bien enregistrées — réessaie plus tard ou recharge la page.");
+      }
       // ✅ L'écriture a échoué : remettre les deltas en attente plutôt que les perdre
       // silencieusement (ils seront réappliqués au prochain flush réussi).
       pendingScoreDeltaRef.current += scoreDelta;

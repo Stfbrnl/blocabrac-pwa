@@ -293,6 +293,9 @@ const ClientCourseSession: React.FC = () => {
       persistedExerciseIds.current.add(exerciseId);
       lastPersistedExerciseRef.current[exerciseId] = result;
     } catch (err: unknown) {
+      // ✅ Processus "erreurs avalées" (PROCESSUS-erreurs-avalees.md §2 niveau 1, V2.47) :
+      // le message utilisateur (setError, déjà présent) ne remplace pas la trace console.
+      console.error(`Erreur lors de l'enregistrement du résultat de l'exercice ${exerciseId}:`, err);
       setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
@@ -327,6 +330,8 @@ const ClientCourseSession: React.FC = () => {
       persistedBoulderResultIds.current.add(boulderId);
       lastPersistedBoulderRef.current[boulderId] = result;
     } catch (err: unknown) {
+      // ✅ Processus "erreurs avalées" (PROCESSUS-erreurs-avalees.md §2 niveau 1, V2.47).
+      console.error(`Erreur lors de l'enregistrement du résultat du bloc ${boulderId} (mini-compétition):`, err);
       setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
     }
   };

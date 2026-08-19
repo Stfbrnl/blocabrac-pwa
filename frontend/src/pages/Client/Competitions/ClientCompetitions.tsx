@@ -484,6 +484,11 @@ const ClientCompetitions: React.FC = () => {
       persistedBoulderIds.current.add(boulderId);
       lastPersistedRef.current[boulderId] = result;
     } catch (err: unknown) {
+      // ✅ Processus "erreurs avalées" (PROCESSUS-erreurs-avalees.md §2 niveau 1, V2.47) :
+      // le message utilisateur (setError, déjà présent) ne remplace pas la trace console —
+      // elle seule apparaît dans une capture d'écran envoyée par un utilisateur qui décrit
+      // le problème sans savoir l'expliquer.
+      console.error(`Erreur lors de l'enregistrement du résultat du bloc ${boulderId}:`, err);
       setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
     }
   };

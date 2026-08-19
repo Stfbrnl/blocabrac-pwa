@@ -2,9 +2,21 @@
 // (le plus utilisé par les clients) : création par l'ouvreur -> validation/note/
 // signalement par le client -> stats + signalements côté ouvreur -> classement en
 // continu. Contre l'app + les émulateurs locaux, jamais la production.
+//
+// ✅ Mêle Playwright (UI) et firebase-admin (assertion backend directe sur
+// users.wallCounts) — PROCESSUS-erreurs-avalees.md §4 : "tout compteur incrémental
+// doit avoir une assertion e2e sur sa valeur résultante", wallCounts étant précisément
+// celui qui avait silencieusement cessé de s'écrire (bug de transaction V2.44→V2.46).
 import { chromium } from 'playwright';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import admin from 'firebase-admin';
+
+process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8080';
+process.env.FIREBASE_AUTH_EMULATOR_HOST = 'localhost:9099';
+admin.initializeApp({ projectId: 'blocabrac' });
+const adminAuth = admin.auth();
+const adminDb = admin.firestore();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const BASE_URL = 'http://localhost:5174';
@@ -126,7 +138,14 @@ async function main() {
     await clientP.screenshot({ path: '/tmp/daily-02-client-boulder-dialog.png', fullPage: true });
 
     await clientP.getByRole('button', { name: 'Enregistrer', exact: true }).click();
-    await clientP.waitForTimeout(500);
+    await clientP.waitForTimeout(800);
+  });
+
+  await step('Backend : users.wallCounts reflète la validation (compteur muet sans cette assertion)', async () => {
+    const { uid } = await adminAuth.getUserByEmail(CLIENT_EMAIL);
+    const userSnap = await adminDb.collection('users').doc(uid).get();
+    const wallCounts = userSnap.data()?.wallCounts;
+    assert(wallCounts?.[WALL] === 1, `wallCounts.${WALL} attendu 1, obtenu ${JSON.stringify(wallCounts)}`);
   });
 
   await step('Classement en continu : le client validé apparaît (opt-in)', async () => {
