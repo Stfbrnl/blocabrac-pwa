@@ -11,6 +11,15 @@ export interface ChangelogEntry {
 // tout l'historique ici, l'historique complet vit dans les commits git.
 export const changelog: ChangelogEntry[] = [
   {
+    version: '2.46',
+    date: '2026-08-19',
+    title: 'Défis entre potes',
+    items: [
+      'Lancez un défi à 2-6 potes de grimpe depuis "Potes de grimpe" : premier à atteindre un seuil, le plus de progrès sur une période, meilleur score sur un même bloc, ou défi déclaratif (traversée, bloc inventé…).',
+      'La progression se calcule automatiquement à partir de vos validations sur "Mon Blocabrac quotidien" — rien à faire de plus, sauf pour un défi déclaratif, à valider soi-même d\'un bouton "C\'est fait".',
+    ],
+  },
+  {
     version: '2.44',
     date: '2026-08-18',
     title: 'Bloc Roulette',
