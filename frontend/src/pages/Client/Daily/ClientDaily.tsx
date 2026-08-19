@@ -3,6 +3,8 @@ import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '../../../services/firebaseConfig';
 import { collection, query, where, getDocs, addDoc, setDoc, doc, getDoc, runTransaction } from 'firebase/firestore';
 import { summaryFromColorCounts, scoreDeltaForValidation, isWithinSeasonWindow, type ColorCounts } from '../../../utils/classementScore';
+import { calculatePoints } from '../../../utils/climbingPoints';
+import { getDocsCacheFirst } from '../../../utils/firestoreCacheFirst';
 import {
   Container, Typography, Box, Button, CircularProgress, Alert,
   Dialog, DialogTitle, DialogContent, DialogActions,
@@ -163,6 +165,23 @@ const ClientDaily: React.FC = () => {
   // réconciliation dédiée (champ privé, enjeu purement ludique, décision actée).
   const pendingWallDeltaRef = useRef<Map<string, number>>(new Map());
 
+  // ✅ Défis entre potes (CONCEPTION-roulette-et-defis.md, Partie 2, §2.4) : défis actifs de
+  // l'utilisateur, chargés UNE FOIS au montage (cache-first, jamais relus par validation —
+  // voir l'useEffect plus bas), gardés en mémoire. Deltas accumulés comme les compteurs
+  // ci-dessus, appliqués dans la MÊME transaction que le flush classement_profiles/wallCounts.
+  // "bloc_designe" est à part : ce n'est pas un delta cumulatif mais un meilleur score observé
+  // (voir applyClassementDelta et flushClassementWrite).
+  const activeChallengesRef = useRef<Array<{
+    id: string;
+    structure: 'seuil' | 'fenetre' | 'bloc_designe' | 'declaratif';
+    target_color?: string;
+    metric?: 'points' | 'blocs';
+    boulder_id?: string;
+    ends_at?: string;
+  }>>([]);
+  const pendingChallengeDeltaRef = useRef<Map<string, number>>(new Map());
+  const pendingBlocDesigneScoreRef = useRef<Map<string, number>>(new Map());
+
   // ✅ Fenêtre de saison, lue une seule fois au montage depuis `app_config/classement_saison`
   // (voir useEffect plus bas) — pas de lecture par validation, un doc de config ne le
   // justifie pas. `null` = pas encore configurée par l'admin (aucune validation ne compte
@@ -219,6 +238,36 @@ const ClientDaily: React.FC = () => {
     };
 
     fetchUsers();
+  }, [user, loadingAuth]);
+
+  // ✅ Défis entre potes : chargés une seule fois au montage (cache-first — voir
+  // `activeChallengesRef` ci-dessus), jamais relus à chaque validation. Ne charge que les
+  // défis "en_cours" : un défi terminé ne doit plus recevoir de deltas.
+  useEffect(() => {
+    if (!user || loadingAuth) return;
+    const fetchActiveChallenges = async () => {
+      try {
+        const snap = await getDocsCacheFirst(query(
+          collection(db, 'challenges'),
+          where('participants', 'array-contains', user.uid),
+          where('status', '==', 'en_cours')
+        ));
+        activeChallengesRef.current = snap.docs.map((challengeDoc) => {
+          const data = challengeDoc.data();
+          return {
+            id: challengeDoc.id,
+            structure: data.structure,
+            target_color: data.target_color,
+            metric: data.metric,
+            boulder_id: data.boulder_id,
+            ends_at: data.ends_at,
+          };
+        });
+      } catch (err) {
+        console.error('Erreur lors du chargement des défis actifs:', err);
+      }
+    };
+    fetchActiveChallenges();
   }, [user, loadingAuth]);
 
   // ✅ Classement de saison : fenêtre lue une seule fois au montage (voir
@@ -442,7 +491,10 @@ const ClientDaily: React.FC = () => {
     const seasonScoreDelta = pendingSeasonScoreDeltaRef.current;
     const seasonColorDeltas = pendingSeasonColorDeltaRef.current;
     const wallDeltas = pendingWallDeltaRef.current;
-    if (scoreDelta === 0 && colorDeltas.size === 0 && wallDeltas.size === 0) return;
+    const challengeDeltas = pendingChallengeDeltaRef.current;
+    const blocDesigneScores = pendingBlocDesigneScoreRef.current;
+    if (scoreDelta === 0 && colorDeltas.size === 0 && wallDeltas.size === 0
+        && challengeDeltas.size === 0 && blocDesigneScores.size === 0) return;
     // ✅ Capturé puis remis à zéro AVANT l'écriture (pas après) : un delta qui arrive
     // pendant la transaction doit s'accumuler dans un nouveau cycle, pas se perdre s'il
     // arrivait pendant l'await ci-dessous.
@@ -451,13 +503,29 @@ const ClientDaily: React.FC = () => {
     pendingSeasonScoreDeltaRef.current = 0;
     pendingSeasonColorDeltaRef.current = new Map();
     pendingWallDeltaRef.current = new Map();
+    pendingChallengeDeltaRef.current = new Map();
+    pendingBlocDesigneScoreRef.current = new Map();
     try {
       const ref = doc(db, 'classement_profiles', user.uid);
       // ✅ Bloc Roulette : users/{uid} touché dans la MÊME transaction (deux documents,
       // atomique) pour tenir wallCounts à jour — voir pendingWallDeltaRef ci-dessus.
       const userRef = doc(db, 'users', user.uid);
       await runTransaction(db, async (tx) => {
+        // ✅ Correctif (trouvé en écrivant l'e2e "Défis entre potes", 19/08/2026) : une
+        // transaction Firestore exige TOUTES ses lectures avant SA PREMIÈRE écriture, quel
+        // que soit le document visé — pas seulement pour un même document. Le code d'avant
+        // ce correctif lisait `userRef` (wallCounts) APRÈS avoir déjà écrit `ref`
+        // (classement_profiles), ce qui aurait dû faire échouer toute transaction avec un
+        // delta de mur — silencieusement avalé par le catch ci-dessous, donc jamais vu.
+        // Toutes les lectures sont maintenant regroupées avant la moindre écriture.
         const snap = await tx.get(ref);
+        const userSnap = wallDeltas.size > 0 ? await tx.get(userRef) : null;
+        const challengeIds = new Set<string>([...challengeDeltas.keys(), ...blocDesigneScores.keys()]);
+        const challengeSnaps = new Map<string, Awaited<ReturnType<typeof tx.get>>>();
+        for (const challengeId of challengeIds) {
+          challengeSnaps.set(challengeId, await tx.get(doc(db, 'challenges', challengeId)));
+        }
+
         const data = snap.exists() ? snap.data() : {};
         const colorCounts: ColorCounts = { ...(data.colorCounts as ColorCounts | undefined) };
         colorDeltas.forEach((delta, color) => {
@@ -484,14 +552,29 @@ const ClientDaily: React.FC = () => {
           },
         }, { merge: true });
 
-        if (wallDeltas.size > 0) {
-          const userSnap = await tx.get(userRef);
+        if (userSnap) {
           const wallCounts: WallCounts = { ...(userSnap.exists() ? (userSnap.data().wallCounts as WallCounts | undefined) : undefined) };
           wallDeltas.forEach((delta, wall) => {
             wallCounts[wall] = (wallCounts[wall] || 0) + delta;
           });
           tx.set(userRef, { wallCounts }, { merge: true });
         }
+
+        // ✅ Défis entre potes : "seuil"/"fenetre" appliquent un delta cumulatif ;
+        // "bloc_designe" écrit le MEILLEUR score observé (jamais un cumul — voir
+        // applyClassementDelta), donc un max plutôt qu'une addition.
+        challengeIds.forEach((challengeId) => {
+          const challengeSnap = challengeSnaps.get(challengeId);
+          if (!challengeSnap?.exists()) return;
+          const challengeData = challengeSnap.data() as { progress?: Record<string, { value?: number }> };
+          const currentValue = challengeData.progress?.[user.uid]?.value || 0;
+          let newValue = currentValue;
+          if (challengeDeltas.has(challengeId)) newValue = currentValue + (challengeDeltas.get(challengeId) || 0);
+          if (blocDesigneScores.has(challengeId)) newValue = Math.max(currentValue, blocDesigneScores.get(challengeId) || 0);
+          tx.set(doc(db, 'challenges', challengeId), {
+            progress: { [user.uid]: { value: newValue, updated_at: new Date().toISOString() } },
+          }, { merge: true });
+        });
       });
     } catch (err) {
       console.error('Erreur lors de la mise à jour du classement:', err);
@@ -507,6 +590,16 @@ const ClientDaily: React.FC = () => {
       });
       wallDeltas.forEach((delta, wall) => {
         pendingWallDeltaRef.current.set(wall, (pendingWallDeltaRef.current.get(wall) || 0) + delta);
+      });
+      challengeDeltas.forEach((delta, challengeId) => {
+        pendingChallengeDeltaRef.current.set(challengeId, (pendingChallengeDeltaRef.current.get(challengeId) || 0) + delta);
+      });
+      blocDesigneScores.forEach((score, challengeId) => {
+        // ✅ Repli symétrique : reprend le max entre ce qui était déjà en attente et ce
+        // score, jamais une simple ré-affectation qui perdrait un score déjà accumulé
+        // par une autre validation entre-temps.
+        const existing = pendingBlocDesigneScoreRef.current.get(challengeId) || 0;
+        pendingBlocDesigneScoreRef.current.set(challengeId, Math.max(existing, score));
       });
     }
   }, [user]);
@@ -562,7 +655,8 @@ const ClientDaily: React.FC = () => {
     previous: { attempts: number } | null,
     success: boolean,
     resultAttempts: number,
-    wall?: string
+    wall?: string,
+    boulderId?: string
   ) => {
     const newState = success ? { attempts: resultAttempts } : null;
     const scoreDelta = scoreDeltaForValidation(
@@ -591,6 +685,37 @@ const ClientDaily: React.FC = () => {
         pendingSeasonColorDeltaRef.current.set(color, (pendingSeasonColorDeltaRef.current.get(color) || 0) + colorCountDelta);
       }
     }
+
+    // ✅ Défis entre potes (CONCEPTION-roulette-et-defis.md §2.2/§2.4) : même transition
+    // succès/échec, répercutée sur chaque défi actif concerné — jamais de relecture des
+    // autres participants, jamais de recalcul depuis l'historique. "seuil" ne compte que la
+    // couleur ciblée ; "fenetre" ignore la couleur (métrique "blocs") ou réutilise le même
+    // scoreDelta que le classement (métrique "points"), et seulement si la fenêtre n'est pas
+    // encore terminée ; "bloc_designe" ne regarde que CE bloc précis et ne retient que le
+    // meilleur score (jamais un cumul, voir flushClassementWrite).
+    const nowISO = new Date().toISOString();
+    activeChallengesRef.current.forEach((challenge) => {
+      if (challenge.structure === 'seuil') {
+        if (challenge.target_color === color && colorCountDelta !== 0) {
+          pendingChallengeDeltaRef.current.set(
+            challenge.id, (pendingChallengeDeltaRef.current.get(challenge.id) || 0) + colorCountDelta
+          );
+        }
+      } else if (challenge.structure === 'fenetre') {
+        if (!challenge.ends_at || nowISO <= challenge.ends_at) {
+          const delta = challenge.metric === 'points' ? scoreDelta : colorCountDelta;
+          if (delta !== 0) {
+            pendingChallengeDeltaRef.current.set(
+              challenge.id, (pendingChallengeDeltaRef.current.get(challenge.id) || 0) + delta
+            );
+          }
+        }
+      } else if (challenge.structure === 'bloc_designe' && boulderId && challenge.boulder_id === boulderId && success) {
+        const points = calculatePoints(color, resultAttempts, true);
+        const previousBest = pendingBlocDesigneScoreRef.current.get(challenge.id) || 0;
+        if (points > previousBest) pendingBlocDesigneScoreRef.current.set(challenge.id, points);
+      }
+    });
 
     if (classementWriteTimer.current) clearTimeout(classementWriteTimer.current);
     classementWriteTimer.current = setTimeout(() => { flushClassementWrite(); }, CLASSEMENT_DEBOUNCE_MS);
@@ -652,7 +777,7 @@ const ClientDaily: React.FC = () => {
       // ci-dessus avait échoué, aucune mutation du classement n'aurait eu lieu.
       if (classementColor) {
         const previousClassementState = previousResultState?.success ? { attempts: previousResultState.attempts } : null;
-        applyClassementDelta(classementColor, previousClassementState, success, candidate.attempts, wallById.get(boulderId));
+        applyClassementDelta(classementColor, previousClassementState, success, candidate.attempts, wallById.get(boulderId), boulderId);
       }
     } catch (err: unknown) {
       setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
@@ -702,7 +827,7 @@ const ClientDaily: React.FC = () => {
       cachePreviousResultState(boulderId, candidate.success, candidate.attempts, createdAt);
       if (classementColor) {
         const previousClassementState = previousResultState?.success ? { attempts: previousResultState.attempts } : null;
-        applyClassementDelta(classementColor, previousClassementState, candidate.success, candidate.attempts, wallById.get(boulderId));
+        applyClassementDelta(classementColor, previousClassementState, candidate.success, candidate.attempts, wallById.get(boulderId), boulderId);
       }
       setRatings(prev => ({ ...prev, [boulderId]: rating }));
       setComments(prev => ({ ...prev, [boulderId]: comment }));
