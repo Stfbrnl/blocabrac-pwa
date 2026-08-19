@@ -1,10 +1,16 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '../../../services/firebaseConfig';
-import { collection, query, where, getDocs, addDoc, setDoc, doc, getDoc, runTransaction } from 'firebase/firestore';
-import { summaryFromColorCounts, scoreDeltaForValidation, isWithinSeasonWindow, type ColorCounts } from '../../../utils/classementScore';
+import { collection, query, where, getDocs, addDoc, setDoc, doc, getDoc } from 'firebase/firestore';
+import { scoreDeltaForValidation, isWithinSeasonWindow } from '../../../utils/classementScore';
 import { calculatePoints } from '../../../utils/climbingPoints';
 import { getDocsCacheFirst } from '../../../utils/firestoreCacheFirst';
+import { useDebouncedFlushQueue } from '../../../utils/useDebouncedFlushQueue';
+import { runReadThenWriteTransaction } from '../../../utils/firestoreTransaction';
+import {
+  buildClassementFlushWrites, mergeClassementFlushPending, emptyClassementFlushPending,
+  type ClassementFlushPending,
+} from '../../../utils/classementFlushWrites';
 import {
   Container, Typography, Box, Button, CircularProgress, Alert,
   Dialog, DialogTitle, DialogContent, DialogActions,
@@ -139,38 +145,25 @@ const ClientDaily: React.FC = () => {
   // réécrit à chaque édition, cf. RELECTURE-classement-saisonnier.md §1).
   const previousStateCacheRef = useRef<Map<string, { attempts: number; success: boolean; createdAt: string } | null>>(new Map());
 
-  // ✅ Chantier écritures point 5 (repris ici) : classement_profiles est un résumé
-  // dérivé, pas la donnée source — pas besoin d'être exact à la seconde près. Les
-  // deltas de score/couleur sont accumulés en mémoire et appliqués en une seule
-  // transaction Firestore après un debounce, avec flush sur fermeture de la modale de
-  // détail et sur "pagehide" (mêmes précautions que le point 4 côté compétition/cours)
-  // — le résultat du bloc lui-même (client_boulder_results) continue d'être écrit
-  // immédiatement.
+  // ✅ Chantier écritures point 5 : classement_profiles est un résumé dérivé, pas la
+  // donnée source — pas besoin d'être exact à la seconde près. Les deltas sont accumulés
+  // en mémoire et appliqués en une seule transaction Firestore après un debounce, avec
+  // flush sur fermeture de la modale de détail et sur "pagehide" — le résultat du bloc
+  // lui-même (client_boulder_results) continue d'être écrit immédiatement.
+  //
+  // ✅ PROCESSUS-erreurs-avalees.md §3 (V2.48) : le minuteur/pagehide/compteur d'échecs
+  // qui vivaient ici en refs éparpillées sont maintenant portés par `useDebouncedFlushQueue`
+  // (générique, réutilisé par ClientCompetitions.tsx/ClientCourseSession.tsx) — une seule
+  // clé ('classement'), un seul payload `ClassementFlushPending` fusionné par addition (voir
+  // `mergeClassementFlushPending`). `persist` ci-dessous construit les écritures via la
+  // fonction PURE `buildClassementFlushWrites`, appliquées par `runReadThenWriteTransaction`
+  // qui impose par sa signature l'ordre lectures-puis-écritures — la classe de bug trouvée le
+  // 19/08 (lecture après écriture, silencieusement avalée) ne peut plus se reproduire ici.
   const CLASSEMENT_DEBOUNCE_MS = 3000;
-  const classementWriteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingScoreDeltaRef = useRef(0);
-  const pendingColorDeltaRef = useRef<Map<string, number>>(new Map());
-
-  // ✅ Classement de saison (CONCEPTION-classement-saisonnier.md) : deltas en attente
-  // pour `season.score`/`season.colorCounts`, un sous-ensemble des deltas all-time
-  // ci-dessus — appliqués uniquement si la validation a lieu dans la fenêtre de saison
-  // (voir `applyClassementDelta`). Écrits dans la MÊME transaction que les champs
-  // all-time (voir `flushClassementWrite`), jamais une écriture séparée.
-  const pendingSeasonScoreDeltaRef = useRef(0);
-  const pendingSeasonColorDeltaRef = useRef<Map<string, number>>(new Map());
-
-  // ✅ Bloc Roulette / compteur par mur (§1.7.B) : deltas en attente pour `users/{uid}.wallCounts`,
-  // appliqués dans la MÊME transaction que le flush classement_profiles ci-dessous (deux
-  // documents, une seule transaction atomique) — jamais une écriture séparée, jamais de
-  // réconciliation dédiée (champ privé, enjeu purement ludique, décision actée).
-  const pendingWallDeltaRef = useRef<Map<string, number>>(new Map());
 
   // ✅ Défis entre potes (CONCEPTION-roulette-et-defis.md, Partie 2, §2.4) : défis actifs de
   // l'utilisateur, chargés UNE FOIS au montage (cache-first, jamais relus par validation —
-  // voir l'useEffect plus bas), gardés en mémoire. Deltas accumulés comme les compteurs
-  // ci-dessus, appliqués dans la MÊME transaction que le flush classement_profiles/wallCounts.
-  // "bloc_designe" est à part : ce n'est pas un delta cumulatif mais un meilleur score observé
-  // (voir applyClassementDelta et flushClassementWrite).
+  // voir l'useEffect plus bas), gardés en mémoire.
   const activeChallengesRef = useRef<Array<{
     id: string;
     structure: 'seuil' | 'fenetre' | 'bloc_designe' | 'declaratif';
@@ -179,24 +172,40 @@ const ClientDaily: React.FC = () => {
     boulder_id?: string;
     ends_at?: string;
   }>>([]);
-  const pendingChallengeDeltaRef = useRef<Map<string, number>>(new Map());
-  const pendingBlocDesigneScoreRef = useRef<Map<string, number>>(new Map());
 
-  // ✅ Processus "erreurs avalées" (PROCESSUS-erreurs-avalees.md §2 niveau 2, V2.47) :
-  // le bug du 18-19/08 était un échec PERMANENT déguisé en réessai transitoire — la
-  // transaction ré-échouait identiquement à chaque flush, indéfiniment, sans que rien ne
-  // distingue ce cas d'une vraie coupure réseau (où réessayer en silence est le bon
-  // comportement). Ce compteur fait cette distinction : au-delà de
-  // CLASSEMENT_FLUSH_FAILURE_THRESHOLD échecs consécutifs, on arrête de laisser l'échec
-  // invisible (console.error explicite + message utilisateur), sans pour autant abandonner
-  // les deltas en attente — un flush réussi ultérieur (reconnexion réseau, correctif déployé)
-  // les applique normalement et remet le compteur à zéro.
-  const CLASSEMENT_FLUSH_FAILURE_THRESHOLD = 3;
-  const classementFlushFailureCountRef = useRef(0);
-  // ✅ true seulement quand le message d'erreur AFFICHÉ vient de cette escalade — permet
-  // au prochain flush réussi de l'effacer sans risquer d'écraser une erreur d'un autre
-  // chemin (signalement, notation...) qui partage le même état `error`.
-  const classementFlushDurableErrorRef = useRef(false);
+  const classementQueue = useDebouncedFlushQueue<ClassementFlushPending>({
+    debounceMs: CLASSEMENT_DEBOUNCE_MS,
+    merge: mergeClassementFlushPending,
+    errorContext: () => 'Erreur lors de la mise à jour du classement',
+    persist: async (_key, pending) => {
+      if (!user) return;
+      const classementProfileRef = doc(db, 'classement_profiles', user.uid);
+      const userRef = doc(db, 'users', user.uid);
+      const challengeIds = new Set<string>([...pending.challengeDeltas.keys(), ...pending.blocDesigneScores.keys()]);
+      const challengeRefs = new Map(Array.from(challengeIds, (id) => [id, doc(db, 'challenges', id)]));
+
+      const reads: Record<string, ReturnType<typeof doc>> = { classementProfile: classementProfileRef };
+      if (pending.wallDeltas.size > 0) reads.user = userRef;
+      challengeRefs.forEach((ref, id) => { reads[`challenge:${id}`] = ref; });
+
+      await runReadThenWriteTransaction(db, reads, (readData) => buildClassementFlushWrites(
+        user.uid,
+        pending,
+        {
+          classementProfile: readData.classementProfile,
+          user: readData.user,
+          challenges: new Map(Array.from(challengeIds, (id) => [id, readData[`challenge:${id}`]])),
+        },
+        { classementProfileRef, userRef, challengeRefs }
+      ));
+    },
+    // ✅ Niveau 3 (PROCESSUS-erreurs-avalees.md §2) : réutilise l'état error/Alert déjà
+    // présent sur cet écran plutôt qu'un nouveau Snackbar.
+    onDurableFailure: () => {
+      setError("Ta progression (classement, murs, défis) n'arrive pas à s'enregistrer depuis plusieurs tentatives. Tes validations de blocs restent bien enregistrées — réessaie plus tard ou recharge la page.");
+    },
+    onRecovered: () => setError(null),
+  });
 
   // ✅ Fenêtre de saison, lue une seule fois au montage depuis `app_config/classement_saison`
   // (voir useEffect plus bas) — pas de lecture par validation, un doc de config ne le
@@ -485,174 +494,6 @@ const ClientDaily: React.FC = () => {
     [boulders]
   );
 
-  // ✅ Classement en continu (ClientClassement.tsx) : un client ne peut pas lire les
-  // résultats des AUTRES clients (règles Firestore), donc chaque client tient à jour
-  // SON PROPRE résumé sur sa fiche "classement_profiles" à chaque validation — le
-  // classement se contente ensuite de lire ces résumés déjà calculés.
-  //
-  // ✅ Compteur incrémental (CONCEPTION-selecteur-marge-compteur-incremental.md §3,
-  // remplace l'ancien recalcul complet depuis successfulAttemptsRef) : cette fonction
-  // applique les deltas accumulés (pendingScoreDeltaRef/pendingColorDeltaRef) dans une
-  // transaction Firestore — jamais de lecture de l'historique complet. bouldersValidated
-  // et bestColorRank sont dérivés de colorCounts APRÈS application des deltas (jamais
-  // incrémentés indépendamment), pour n'avoir qu'une seule source de vérité.
-  const flushClassementWrite = React.useCallback(async () => {
-    if (classementWriteTimer.current) {
-      clearTimeout(classementWriteTimer.current);
-      classementWriteTimer.current = null;
-    }
-    if (!user) return;
-    const scoreDelta = pendingScoreDeltaRef.current;
-    const colorDeltas = pendingColorDeltaRef.current;
-    const seasonScoreDelta = pendingSeasonScoreDeltaRef.current;
-    const seasonColorDeltas = pendingSeasonColorDeltaRef.current;
-    const wallDeltas = pendingWallDeltaRef.current;
-    const challengeDeltas = pendingChallengeDeltaRef.current;
-    const blocDesigneScores = pendingBlocDesigneScoreRef.current;
-    if (scoreDelta === 0 && colorDeltas.size === 0 && wallDeltas.size === 0
-        && challengeDeltas.size === 0 && blocDesigneScores.size === 0) return;
-    // ✅ Capturé puis remis à zéro AVANT l'écriture (pas après) : un delta qui arrive
-    // pendant la transaction doit s'accumuler dans un nouveau cycle, pas se perdre s'il
-    // arrivait pendant l'await ci-dessous.
-    pendingScoreDeltaRef.current = 0;
-    pendingColorDeltaRef.current = new Map();
-    pendingSeasonScoreDeltaRef.current = 0;
-    pendingSeasonColorDeltaRef.current = new Map();
-    pendingWallDeltaRef.current = new Map();
-    pendingChallengeDeltaRef.current = new Map();
-    pendingBlocDesigneScoreRef.current = new Map();
-    try {
-      const ref = doc(db, 'classement_profiles', user.uid);
-      // ✅ Bloc Roulette : users/{uid} touché dans la MÊME transaction (deux documents,
-      // atomique) pour tenir wallCounts à jour — voir pendingWallDeltaRef ci-dessus.
-      const userRef = doc(db, 'users', user.uid);
-      await runTransaction(db, async (tx) => {
-        // ✅ Correctif (trouvé en écrivant l'e2e "Défis entre potes", 19/08/2026) : une
-        // transaction Firestore exige TOUTES ses lectures avant SA PREMIÈRE écriture, quel
-        // que soit le document visé — pas seulement pour un même document. Le code d'avant
-        // ce correctif lisait `userRef` (wallCounts) APRÈS avoir déjà écrit `ref`
-        // (classement_profiles), ce qui aurait dû faire échouer toute transaction avec un
-        // delta de mur — silencieusement avalé par le catch ci-dessous, donc jamais vu.
-        // Toutes les lectures sont maintenant regroupées avant la moindre écriture.
-        const snap = await tx.get(ref);
-        const userSnap = wallDeltas.size > 0 ? await tx.get(userRef) : null;
-        const challengeIds = new Set<string>([...challengeDeltas.keys(), ...blocDesigneScores.keys()]);
-        const challengeSnaps = new Map<string, Awaited<ReturnType<typeof tx.get>>>();
-        for (const challengeId of challengeIds) {
-          challengeSnaps.set(challengeId, await tx.get(doc(db, 'challenges', challengeId)));
-        }
-
-        const data = snap.exists() ? snap.data() : {};
-        const colorCounts: ColorCounts = { ...(data.colorCounts as ColorCounts | undefined) };
-        colorDeltas.forEach((delta, color) => {
-          colorCounts[color as keyof ColorCounts] = ((colorCounts[color as keyof ColorCounts] as number) || 0) + delta;
-        });
-        const { bouldersValidated, bestColorRank } = summaryFromColorCounts(colorCounts);
-
-        // ✅ Classement de saison : même mécanique, champs distincts (season.*), écrits
-        // dans la même transaction — jamais d'écriture séparée qui pourrait diverger.
-        const seasonData = (data.season || {}) as { colorCounts?: ColorCounts; score?: number };
-        const seasonColorCounts: ColorCounts = { ...seasonData.colorCounts };
-        seasonColorDeltas.forEach((delta, color) => {
-          seasonColorCounts[color as keyof ColorCounts] = ((seasonColorCounts[color as keyof ColorCounts] as number) || 0) + delta;
-        });
-
-        tx.set(ref, {
-          score: (data.score || 0) + scoreDelta,
-          bouldersValidated,
-          bestColorRank,
-          colorCounts,
-          season: {
-            score: (seasonData.score || 0) + seasonScoreDelta,
-            colorCounts: seasonColorCounts,
-          },
-        }, { merge: true });
-
-        if (userSnap) {
-          const wallCounts: WallCounts = { ...(userSnap.exists() ? (userSnap.data().wallCounts as WallCounts | undefined) : undefined) };
-          wallDeltas.forEach((delta, wall) => {
-            wallCounts[wall] = (wallCounts[wall] || 0) + delta;
-          });
-          tx.set(userRef, { wallCounts }, { merge: true });
-        }
-
-        // ✅ Défis entre potes : "seuil"/"fenetre" appliquent un delta cumulatif ;
-        // "bloc_designe" écrit le MEILLEUR score observé (jamais un cumul — voir
-        // applyClassementDelta), donc un max plutôt qu'une addition.
-        challengeIds.forEach((challengeId) => {
-          const challengeSnap = challengeSnaps.get(challengeId);
-          if (!challengeSnap?.exists()) return;
-          const challengeData = challengeSnap.data() as { progress?: Record<string, { value?: number }> };
-          const currentValue = challengeData.progress?.[user.uid]?.value || 0;
-          let newValue = currentValue;
-          if (challengeDeltas.has(challengeId)) newValue = currentValue + (challengeDeltas.get(challengeId) || 0);
-          if (blocDesigneScores.has(challengeId)) newValue = Math.max(currentValue, blocDesigneScores.get(challengeId) || 0);
-          tx.set(doc(db, 'challenges', challengeId), {
-            progress: { [user.uid]: { value: newValue, updated_at: new Date().toISOString() } },
-          }, { merge: true });
-        });
-      });
-      // ✅ Flush réussi : la classe de bug du 18-19/08 ne peut pas survivre à un succès
-      // (elle vient d'un échec déterministe, pas d'une vraie perte de données), donc un
-      // flush qui aboutit remet le compteur à zéro et efface un éventuel avertissement
-      // affiché par l'escalade ci-dessous.
-      classementFlushFailureCountRef.current = 0;
-      if (classementFlushDurableErrorRef.current) {
-        classementFlushDurableErrorRef.current = false;
-        setError(null);
-      }
-    } catch (err) {
-      console.error('Erreur lors de la mise à jour du classement:', err);
-      classementFlushFailureCountRef.current += 1;
-      // ✅ Niveau 2 (PROCESSUS-erreurs-avalees.md §2) : distingue un échec transitoire
-      // (réseau coupé — le réessai silencieux est le bon comportement, exactement ce que
-      // fait cette fonction depuis l'origine) d'un échec déterministe qui se répéterait
-      // indéfiniment sans jamais être vu (le bug réel du 18/08). Au-delà du seuil, on ne
-      // change rien au réessai lui-même (les deltas restent en file, un flush réussi les
-      // appliquera) mais on arrête que ce soit SILENCIEUX : log explicite + niveau 3.
-      if (classementFlushFailureCountRef.current >= CLASSEMENT_FLUSH_FAILURE_THRESHOLD) {
-        console.error(
-          `Échecs répétés (${classementFlushFailureCountRef.current}) de la mise à jour du classement — `
-          + 'probablement pas transitoire, voir PROCESSUS-erreurs-avalees.md.'
-        );
-        classementFlushDurableErrorRef.current = true;
-        setError("Ta progression (classement, murs, défis) n'arrive pas à s'enregistrer depuis plusieurs tentatives. Tes validations de blocs restent bien enregistrées — réessaie plus tard ou recharge la page.");
-      }
-      // ✅ L'écriture a échoué : remettre les deltas en attente plutôt que les perdre
-      // silencieusement (ils seront réappliqués au prochain flush réussi).
-      pendingScoreDeltaRef.current += scoreDelta;
-      colorDeltas.forEach((delta, color) => {
-        pendingColorDeltaRef.current.set(color, (pendingColorDeltaRef.current.get(color) || 0) + delta);
-      });
-      pendingSeasonScoreDeltaRef.current += seasonScoreDelta;
-      seasonColorDeltas.forEach((delta, color) => {
-        pendingSeasonColorDeltaRef.current.set(color, (pendingSeasonColorDeltaRef.current.get(color) || 0) + delta);
-      });
-      wallDeltas.forEach((delta, wall) => {
-        pendingWallDeltaRef.current.set(wall, (pendingWallDeltaRef.current.get(wall) || 0) + delta);
-      });
-      challengeDeltas.forEach((delta, challengeId) => {
-        pendingChallengeDeltaRef.current.set(challengeId, (pendingChallengeDeltaRef.current.get(challengeId) || 0) + delta);
-      });
-      blocDesigneScores.forEach((score, challengeId) => {
-        // ✅ Repli symétrique : reprend le max entre ce qui était déjà en attente et ce
-        // score, jamais une simple ré-affectation qui perdrait un score déjà accumulé
-        // par une autre validation entre-temps.
-        const existing = pendingBlocDesigneScoreRef.current.get(challengeId) || 0;
-        pendingBlocDesigneScoreRef.current.set(challengeId, Math.max(existing, score));
-      });
-    }
-  }, [user]);
-
-  // ✅ Flush sur "pagehide" (mêmes précautions que le point 4 côté compétition
-  // / cours) : sans ça, une validation juste avant fermeture de l'onglet
-  // perdrait sa mise à jour de classement (le résultat du bloc, lui, est déjà
-  // en base — seul le résumé dérivé serait en retard).
-  useEffect(() => {
-    window.addEventListener('pagehide', flushClassementWrite);
-    return () => window.removeEventListener('pagehide', flushClassementWrite);
-  }, [flushClassementWrite]);
-
   // ✅ Phase 1/2 (lecture pure, aucune mutation) : résout l'ancien état de CE bloc,
   // lu une seule fois par session (pas l'historique entier) via un getDoc() ciblé sur
   // l'ID déterministe du résultat. Appelée AVANT l'écrasement de client_boulder_results
@@ -686,10 +527,12 @@ const ClientDaily: React.FC = () => {
     }
   };
 
-  // ✅ Mutation : appelée seulement après le succès du setDoc de l'appelant. Accumule
-  // le delta de classement dans les refs "pending" et planifie le flush débounced. Ne
-  // touche plus au cache de l'état précédent (voir `cachePreviousResultState`
-  // ci-dessous, appelé séparément par l'appelant pour couvrir aussi le cas sans couleur).
+  // ✅ Mutation : appelée seulement après le succès du setDoc de l'appelant. Construit le
+  // delta de cette validation et le confie à la file débouncée (voir `classementQueue`
+  // ci-dessus) — `enqueue` fusionne (additionne) avec un éventuel delta déjà en attente et
+  // (re)planifie le flush. Ne touche plus au cache de l'état précédent (voir
+  // `cachePreviousResultState` ci-dessous, appelé séparément par l'appelant pour couvrir
+  // aussi le cas sans couleur).
   const applyClassementDelta = (
     color: string,
     previous: { attempts: number } | null,
@@ -705,14 +548,13 @@ const ClientDaily: React.FC = () => {
       newState?.attempts ?? null
     );
     const colorCountDelta = (newState ? 1 : 0) - (previous ? 1 : 0);
-    pendingScoreDeltaRef.current += scoreDelta;
+    const delta = emptyClassementFlushPending();
+    delta.scoreDelta = scoreDelta;
     if (colorCountDelta !== 0) {
-      pendingColorDeltaRef.current.set(color, (pendingColorDeltaRef.current.get(color) || 0) + colorCountDelta);
+      delta.colorDeltas.set(color, colorCountDelta);
       // ✅ Bloc Roulette : même delta (succès gagné/perdu) appliqué au compteur par mur — le
       // mur COURANT du bloc (wallById), jamais un mur figé à la validation.
-      if (wall) {
-        pendingWallDeltaRef.current.set(wall, (pendingWallDeltaRef.current.get(wall) || 0) + colorCountDelta);
-      }
+      if (wall) delta.wallDeltas.set(wall, colorCountDelta);
     }
 
     // ✅ Classement de saison : même delta que ci-dessus, accumulé séparément et
@@ -720,10 +562,8 @@ const ClientDaily: React.FC = () => {
     // fenêtre (été, ou aucune saison configurée), seuls les champs all-time bougent.
     const seasonWindow = seasonWindowRef.current;
     if (seasonWindow && isWithinSeasonWindow(new Date().toISOString(), seasonWindow.debut, seasonWindow.fin)) {
-      pendingSeasonScoreDeltaRef.current += scoreDelta;
-      if (colorCountDelta !== 0) {
-        pendingSeasonColorDeltaRef.current.set(color, (pendingSeasonColorDeltaRef.current.get(color) || 0) + colorCountDelta);
-      }
+      delta.seasonScoreDelta = scoreDelta;
+      if (colorCountDelta !== 0) delta.seasonColorDeltas.set(color, colorCountDelta);
     }
 
     // ✅ Défis entre potes (CONCEPTION-roulette-et-defis.md §2.2/§2.4) : même transition
@@ -732,33 +572,28 @@ const ClientDaily: React.FC = () => {
     // couleur ciblée ; "fenetre" ignore la couleur (métrique "blocs") ou réutilise le même
     // scoreDelta que le classement (métrique "points"), et seulement si la fenêtre n'est pas
     // encore terminée ; "bloc_designe" ne regarde que CE bloc précis et ne retient que le
-    // meilleur score (jamais un cumul, voir flushClassementWrite).
+    // meilleur score (jamais un cumul, voir buildClassementFlushWrites).
     const nowISO = new Date().toISOString();
     activeChallengesRef.current.forEach((challenge) => {
       if (challenge.structure === 'seuil') {
         if (challenge.target_color === color && colorCountDelta !== 0) {
-          pendingChallengeDeltaRef.current.set(
-            challenge.id, (pendingChallengeDeltaRef.current.get(challenge.id) || 0) + colorCountDelta
-          );
+          delta.challengeDeltas.set(challenge.id, (delta.challengeDeltas.get(challenge.id) || 0) + colorCountDelta);
         }
       } else if (challenge.structure === 'fenetre') {
         if (!challenge.ends_at || nowISO <= challenge.ends_at) {
-          const delta = challenge.metric === 'points' ? scoreDelta : colorCountDelta;
-          if (delta !== 0) {
-            pendingChallengeDeltaRef.current.set(
-              challenge.id, (pendingChallengeDeltaRef.current.get(challenge.id) || 0) + delta
-            );
+          const challengeDelta = challenge.metric === 'points' ? scoreDelta : colorCountDelta;
+          if (challengeDelta !== 0) {
+            delta.challengeDeltas.set(challenge.id, (delta.challengeDeltas.get(challenge.id) || 0) + challengeDelta);
           }
         }
       } else if (challenge.structure === 'bloc_designe' && boulderId && challenge.boulder_id === boulderId && success) {
         const points = calculatePoints(color, resultAttempts, true);
-        const previousBest = pendingBlocDesigneScoreRef.current.get(challenge.id) || 0;
-        if (points > previousBest) pendingBlocDesigneScoreRef.current.set(challenge.id, points);
+        const previousBest = delta.blocDesigneScores.get(challenge.id) || 0;
+        if (points > previousBest) delta.blocDesigneScores.set(challenge.id, points);
       }
     });
 
-    if (classementWriteTimer.current) clearTimeout(classementWriteTimer.current);
-    classementWriteTimer.current = setTimeout(() => { flushClassementWrite(); }, CLASSEMENT_DEBOUNCE_MS);
+    classementQueue.enqueue('classement', delta);
   };
 
   // ✅ Met à jour le cache de session avec l'état réellement écrit — appelée
@@ -1026,7 +861,7 @@ const ClientDaily: React.FC = () => {
       {/* Modale 2 : Détails d'un bloc — plein écran sur mobile */}
       <Dialog
         open={openBoulderDialog}
-        onClose={() => { flushClassementWrite(); setOpenBoulderDialog(false); }}
+        onClose={() => { classementQueue.flushAll(); setOpenBoulderDialog(false); }}
         maxWidth="sm"
         fullWidth
         fullScreen={isMobile}
@@ -1202,12 +1037,12 @@ const ClientDaily: React.FC = () => {
               </Button>
             </DialogContent>
             <DialogActions>
-              <Button onClick={() => { flushClassementWrite(); setOpenBoulderDialog(false); }}>Annuler</Button>
+              <Button onClick={() => { classementQueue.flushAll(); setOpenBoulderDialog(false); }}>Annuler</Button>
               <Button
                 variant="contained"
                 onClick={async () => {
                   await handleRate(selectedBoulder.id, ratings[selectedBoulder.id] || 0, comments[selectedBoulder.id] || '');
-                  await flushClassementWrite();
+                  classementQueue.flushAll();
                   setOpenBoulderDialog(false);
                 }}
               >

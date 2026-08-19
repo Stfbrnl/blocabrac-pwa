@@ -5,6 +5,7 @@ import {
   collection, query, where, getDocs, doc, updateDoc, getDoc, setDoc, increment
 } from 'firebase/firestore';
 import { getDocsCacheFirst } from '../../../utils/firestoreCacheFirst';
+import { useDebouncedFlushQueue } from '../../../utils/useDebouncedFlushQueue';
 import {
   Container, Typography, Box, Button, CircularProgress, Alert,
   Dialog, DialogTitle, DialogContent, DialogActions,
@@ -112,20 +113,11 @@ const ClientCompetitions: React.FC = () => {
   // ✅ Chantier écritures point 4 : 2500ms (au lieu de 800ms) — un grimpeur qui
   // ajuste son nombre d'essais en plusieurs clics successifs déclenchait une
   // écriture intermédiaire à chaque pause dépassant 800ms. Sûr uniquement parce
-  // que les trois conditions du suivi sont tenues ci-dessous : flush à la
-  // fermeture de la modale, flush sur "pagehide", et le clic Réussi/Échoué
-  // reste immédiat (jamais debouncé, voir handleValidateBoulder).
+  // que les trois conditions du suivi sont tenues (flush à la fermeture de la
+  // modale, flush sur "pagehide", clic Réussi/Échoué toujours immédiat) — les
+  // trois sont maintenant portées par `useDebouncedFlushQueue` (voir plus bas),
+  // pas par du code ad hoc sur cet écran.
   const DEBOUNCE_MS = 2500;
-  // ✅ Debounce des champs à saisie répétée (essais, note, cotation proposée) :
-  // évite une écriture Firestore à chaque interaction avec un Select/Rating.
-  // Le clic Réussi/Échoué, lui, écrit immédiatement (voir persistResult).
-  // Stocke aussi le résultat en attente (pas seulement le timer) pour pouvoir
-  // le flusher immédiatement (voir flushPendingResults) sans attendre le délai.
-  const debounceEntries = useRef<Record<string, {
-    timer: ReturnType<typeof setTimeout>;
-    boulderId: string;
-    result: ValidationResult;
-  }>>({});
   // ✅ Ids des blocs déjà persistés (chargés au 1.3 ou écrits cette session) :
   // permet de ne poser created_at qu'une seule fois par document.
   const persistedBoulderIds = useRef<Set<string>>(new Set());
@@ -447,25 +439,33 @@ const ClientCompetitions: React.FC = () => {
   // ✅ 1.2 — Écrit chaque validation dans Firestore (merge: true), en plus de
   // l'état React local qui pilote l'affichage immédiat. Ne pose created_at que
   // sur la première écriture du document (voir persistedBoulderIds).
-  // ✅ Chantier écritures point 3 : rien à écrire si le résultat est identique
-  // à la dernière valeur réellement persistée (voir lastPersistedRef) — un
-  // reclic sur "Réussi" déjà actif, ou une resélection du même nombre
-  // d'essais, ne déclenche plus d'écriture Firestore.
-  const persistResult = async (boulderId: string, result: ValidationResult) => {
-    if (!user || !selectedCompetition) return;
-    const last = lastPersistedRef.current[boulderId];
-    if (last &&
-        last.success === result.success &&
-        last.attempts === result.attempts &&
-        last.rating === result.rating &&
-        last.proposedDifficulty === result.proposedDifficulty &&
-        last.zone === result.zone &&
-        last.attemptsToZone === result.attemptsToZone) {
-      return;
-    }
-    const resultId = `${user.uid}_${boulderId}_${selectedCompetition.id}`;
-    const isFirstWrite = !persistedBoulderIds.current.has(boulderId);
-    try {
+  // ✅ PROCESSUS-erreurs-avalees.md §3 (V2.48) : minuteur/pagehide/compteur d'échecs
+  // portés par `useDebouncedFlushQueue` (même hook que ClientDaily.tsx/ClientCourseSession.tsx)
+  // plutôt que réimplémentés ici — une clé par bloc (`boulderId`), fusion "remplacement"
+  // (`prev ?? incoming` : un enqueue plus récent gagne toujours sur une ré-accumulation
+  // après échec, jamais l'inverse — voir le contrat de `merge` dans useDebouncedFlushQueue.ts).
+  const validationQueue = useDebouncedFlushQueue<ValidationResult>({
+    debounceMs: DEBOUNCE_MS,
+    merge: (prev, incoming) => prev ?? incoming,
+    errorContext: (boulderId) => `Erreur lors de l'enregistrement du résultat du bloc ${boulderId}`,
+    // ✅ Chantier écritures point 3 : rien à écrire si le résultat est identique à la
+    // dernière valeur réellement persistée (voir lastPersistedRef) — un reclic sur
+    // "Réussi" déjà actif, ou une resélection du même nombre d'essais, ne déclenche
+    // plus d'écriture Firestore.
+    persist: async (boulderId, result) => {
+      if (!user || !selectedCompetition) return;
+      const last = lastPersistedRef.current[boulderId];
+      if (last &&
+          last.success === result.success &&
+          last.attempts === result.attempts &&
+          last.rating === result.rating &&
+          last.proposedDifficulty === result.proposedDifficulty &&
+          last.zone === result.zone &&
+          last.attemptsToZone === result.attemptsToZone) {
+        return;
+      }
+      const resultId = `${user.uid}_${boulderId}_${selectedCompetition.id}`;
+      const isFirstWrite = !persistedBoulderIds.current.has(boulderId);
       await setDoc(doc(db, 'competition_results', resultId), {
         user_id: user.uid,
         competition_id: selectedCompetition.id,
@@ -483,48 +483,16 @@ const ClientCompetitions: React.FC = () => {
       }, { merge: true });
       persistedBoulderIds.current.add(boulderId);
       lastPersistedRef.current[boulderId] = result;
-    } catch (err: unknown) {
-      // ✅ Processus "erreurs avalées" (PROCESSUS-erreurs-avalees.md §2 niveau 1, V2.47) :
-      // le message utilisateur (setError, déjà présent) ne remplace pas la trace console —
-      // elle seule apparaît dans une capture d'écran envoyée par un utilisateur qui décrit
-      // le problème sans savoir l'expliquer.
-      console.error(`Erreur lors de l'enregistrement du résultat du bloc ${boulderId}:`, err);
-      setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  };
-
-  // ✅ Chantier écritures point 4 : vide immédiatement les écritures en
-  // attente de debounce (sans attendre les 2500ms), appelé à la fermeture de
-  // la modale et sur "pagehide" — l'une des trois conditions impératives pour
-  // pouvoir allonger le debounce sans réintroduire la perte de données que le
-  // chantier 1 avait corrigée.
-  const flushPendingResults = () => {
-    Object.values(debounceEntries.current).forEach(({ timer, boulderId, result }) => {
-      clearTimeout(timer);
-      persistResult(boulderId, result);
-    });
-    debounceEntries.current = {};
-  };
-
-  // ✅ flushPendingResults ferme sur `persistResult`, qui ferme lui-même sur
-  // `user`/`selectedCompetition` — les deux sont redéfinis à chaque rendu. Un
-  // effet à dépendances vides n'enregistrerait le listener qu'une fois, figé
-  // sur la fermeture du tout premier rendu (user encore `null` avant que
-  // l'authentification ne se résolve) : la ref, tenue à jour à chaque rendu,
-  // garantit que "pagehide" appelle toujours la version la plus récente.
-  const flushPendingResultsRef = useRef(flushPendingResults);
-  useEffect(() => {
-    // Pas de tableau de dépendances : tenue à jour après CHAQUE rendu (mais
-    // en dehors du rendu lui-même, une mutation de ref pendant le rendu étant
-    // interdite).
-    flushPendingResultsRef.current = flushPendingResults;
+    },
+    // ✅ Niveau 3 (PROCESSUS-erreurs-avalees.md §2) : dès le 1er échec (comme avant ce
+    // chantier — cet écran prévenait déjà immédiatement, contrairement à ClientDaily.tsx
+    // qui tolère des coupures transitoires avant d'alerter). `onRecovered` est nouveau
+    // (l'ancien code ne réeffaçait jamais l'erreur) — amélioration sans risque : un
+    // message d'échec qui traîne après résolution n'aidait personne.
+    failureThreshold: 1,
+    onDurableFailure: () => setError('Erreur : le résultat n\'a pas pu être enregistré. Réessaie.'),
+    onRecovered: () => setError(null),
   });
-
-  useEffect(() => {
-    const handler = () => flushPendingResultsRef.current();
-    window.addEventListener('pagehide', handler);
-    return () => window.removeEventListener('pagehide', handler);
-  }, []);
 
   // ✅ Accepte une mise à jour PARTIELLE (fusionnée avec le résultat courant) plutôt
   // que la liste complète des champs en paramètres positionnels — l'ajout de
@@ -546,22 +514,11 @@ const ClientCompetitions: React.FC = () => {
     if (immediate) {
       // ✅ Réussi/Échoué : écriture immédiate, jamais de debounce — c'est
       // l'information qu'on ne veut jamais perdre.
-      if (debounceEntries.current[boulderId]) {
-        clearTimeout(debounceEntries.current[boulderId].timer);
-        delete debounceEntries.current[boulderId];
-      }
-      persistResult(boulderId, result);
+      validationQueue.writeNow(boulderId, result);
     } else {
       // ✅ Essais / note / cotation proposée : debounce (voir DEBOUNCE_MS) pour
       // éviter une écriture à chaque interaction avec un Select.
-      if (debounceEntries.current[boulderId]) {
-        clearTimeout(debounceEntries.current[boulderId].timer);
-      }
-      const timer = setTimeout(() => {
-        persistResult(boulderId, result);
-        delete debounceEntries.current[boulderId];
-      }, DEBOUNCE_MS);
-      debounceEntries.current[boulderId] = { timer, boulderId, result };
+      validationQueue.enqueue(boulderId, result);
     }
   };
 
@@ -744,7 +701,7 @@ const ClientCompetitions: React.FC = () => {
       {/* Modale 2: Validation des blocs de compétition — plein écran sur mobile */}
       <Dialog
         open={openValidationDialog}
-        onClose={() => { flushPendingResults(); setOpenValidationDialog(false); }}
+        onClose={() => { validationQueue.flushAll(); setOpenValidationDialog(false); }}
         maxWidth="lg"
         fullWidth
         fullScreen={isMobile}
@@ -906,7 +863,7 @@ const ClientCompetitions: React.FC = () => {
               </Box>
             </DialogContent>
             <DialogActions>
-              <Button onClick={() => { flushPendingResults(); setOpenValidationDialog(false); }}>Fermer</Button>
+              <Button onClick={() => { validationQueue.flushAll(); setOpenValidationDialog(false); }}>Fermer</Button>
               {!isLocked && (
                 <Button
                   variant="contained"
