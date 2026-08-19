@@ -37,6 +37,17 @@
 // présente gagne par défaut, `merge` n'est même pas appelée.
 import { useCallback, useEffect, useRef } from 'react';
 
+// ⚠️ Exportée UNIQUEMENT pour son fichier de test (`useDebouncedFlushQueue.test.ts`) —
+// jamais destinée à être importée depuis un écran. Un nom de paramètre (`older`/`newer`)
+// reste positionnel : rien n'empêche techniquement un futur appelant d'inverser l'ordre,
+// exactement le bug corrigé en V2.50 (retour ClaudeNav). La vraie protection n'est pas le
+// nom, c'est qu'aucun code hors de ce module ne décide jamais cet ordre lui-même — un
+// écran qui a besoin d'une file débouncée passe TOUJOURS par `useDebouncedFlushQueue`
+// (`enqueue`/`writeNow`/`flushAll`), jamais par `combineByFreshness` directement. Si un
+// jour un écran réimplémente sa propre file au lieu d'utiliser celle-ci, c'est le
+// problème que le §3 de PROCESSUS-erreurs-avalees.md voulait éliminer — pas un signe qu'il
+// faut exporter cette fonction plus largement pour l'aider à le faire.
+//
 // Combine deux valeurs dont on connaît l'ordre relatif d'ancienneté, en ne déléguant à
 // `merge` que le cas où les DEUX existent réellement (le seul qui demande un arbitrage) —
 // pure, sans aucune dépendance à React, donc testable sans monter le hook.

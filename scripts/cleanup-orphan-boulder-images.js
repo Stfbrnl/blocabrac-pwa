@@ -63,9 +63,22 @@ function readServiceAccount() {
 // firestore-migration/) : le garde-fou anti-chute a besoin que l'état survive d'une
 // exécution à l'autre, y compris depuis une machine CI vierge à chaque run (la
 // GitHub Action commit ce fichier après chaque exécution — voir le workflow).
+//
+// ✅ Retour ClaudeNav (19/08/2026, PROCESSUS-erreurs-avalees.md, étendu depuis
+// reconcile-classement-profiles.js) : le risque est ici PLUS grave que pour ce
+// dernier — `state.json` alimente directement le garde-fou anti-chute (comparaison au
+// run précédent). Un run local contre l'émulateur y écrirait un nombre de références
+// sans rapport avec la production ; le cron du mois suivant comparerait la vraie prod
+// à ce chiffre fantôme, avec un sens d'erreur imprévisible (arrêt sans raison, ou pire,
+// garde-fou qui laisse passer une vraie chute). Même parade : chemin dérivé de
+// `FIRESTORE_EMULATOR_HOST`, jamais le fichier de production quand elle est présente.
+const IS_EMULATOR = !!process.env.FIRESTORE_EMULATOR_HOST;
 const STATE_DIR = path.join(__dirname, '../cleanup-state');
-const STATE_PATH = path.join(STATE_DIR, 'state.json');
-const LOG_PATH = path.join(STATE_DIR, 'orphan-images-log.json');
+const STATE_PATH = path.join(STATE_DIR, IS_EMULATOR ? 'state.emulator.json' : 'state.json');
+const LOG_PATH = path.join(STATE_DIR, IS_EMULATOR ? 'orphan-images-log.emulator.json' : 'orphan-images-log.json');
+if (IS_EMULATOR) {
+  console.warn(`⚠️  FIRESTORE_EMULATOR_HOST détecté — état/journal écrits sous *.emulator.json (jamais les fichiers de production).`);
+}
 const CREDENTIALS_PATH = path.join(CREDENTIALS_DIR, 'cloudinary-admin-credentials.json');
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 const DROP_GUARD_RATIO = 0.8; // se déclenche si les références tombent sous 80 % du run précédent...
