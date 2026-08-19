@@ -424,3 +424,147 @@ describe('climbing_status / next_sessions : visibles seulement par les amis acce
     await assertFails(getDoc(doc(otherDb, 'climbing_status', CLIENT_UID)));
   });
 });
+
+// ✅ Défis entre potes (CONCEPTION-roulette-et-defis.md, Partie 2, V2.46) : lecture réservée
+// aux participants, écriture d'un participant limitée à sa propre clé dans `progress`, clôture
+// ouverte à n'importe quel participant (décision utilisateur du 19/08/2026).
+describe('challenges : défis entre potes', () => {
+  const baseChallenge = {
+    created_by: CLIENT_UID,
+    structure: 'seuil',
+    catalog_id: null,
+    title: 'Premier à 5 rouges',
+    participants: [CLIENT_UID, OTHER_CLIENT_UID],
+    progress: {
+      [CLIENT_UID]: { value: 0, updated_at: new Date().toISOString() },
+      [OTHER_CLIENT_UID]: { value: 0, updated_at: new Date().toISOString() },
+    },
+    status: 'en_cours',
+    winner_uid: null,
+    created_at: new Date().toISOString(),
+    target_count: 5,
+    target_color: 'rouge',
+  };
+
+  it('le créateur peut créer un défi où il figure parmi les participants', async () => {
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertSucceeds(setDoc(doc(clientDb, 'challenges', 'defi-1'), baseChallenge));
+  });
+
+  it('impossible de créer un défi au nom de quelqu\'un d\'autre (created_by usurpé)', async () => {
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertFails(setDoc(doc(clientDb, 'challenges', 'defi-1'), {
+      ...baseChallenge, created_by: OTHER_CLIENT_UID,
+    }));
+  });
+
+  it('impossible de créer un défi sans figurer soi-même dans les participants', async () => {
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertFails(setDoc(doc(clientDb, 'challenges', 'defi-1'), {
+      ...baseChallenge, created_by: CLIENT_UID, participants: [OTHER_CLIENT_UID, 'client-3'],
+    }));
+  });
+
+  it('impossible de créer un défi à un seul participant (plancher 2)', async () => {
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertFails(setDoc(doc(clientDb, 'challenges', 'defi-1'), {
+      ...baseChallenge, participants: [CLIENT_UID], progress: { [CLIENT_UID]: { value: 0, updated_at: new Date().toISOString() } },
+    }));
+  });
+
+  it('impossible de créer un défi à plus de 6 participants (plafond)', async () => {
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    const participants = [CLIENT_UID, 'c2', 'c3', 'c4', 'c5', 'c6', 'c7'];
+    await assertFails(setDoc(doc(clientDb, 'challenges', 'defi-1'), {
+      ...baseChallenge, participants,
+    }));
+  });
+
+  it('un tiers non participant ne peut pas lire le défi', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'users', 'client-3'), { roles: ['client'] });
+      await setDoc(doc(context.firestore(), 'challenges', 'defi-1'), baseChallenge);
+    });
+    const thirdDb = testEnv.authenticatedContext('client-3').firestore();
+    await assertFails(getDoc(doc(thirdDb, 'challenges', 'defi-1')));
+  });
+
+  it('un participant peut lire le défi', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'challenges', 'defi-1'), baseChallenge);
+    });
+    const otherDb = testEnv.authenticatedContext(OTHER_CLIENT_UID).firestore();
+    await assertSucceeds(getDoc(doc(otherDb, 'challenges', 'defi-1')));
+  });
+
+  it('un participant peut mettre à jour sa propre progression', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'challenges', 'defi-1'), baseChallenge);
+    });
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertSucceeds(updateDoc(doc(clientDb, 'challenges', 'defi-1'), {
+      [`progress.${CLIENT_UID}`]: { value: 1, updated_at: new Date().toISOString() },
+    }));
+  });
+
+  it('un participant ne peut pas modifier la ligne de progression d\'un autre', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'challenges', 'defi-1'), baseChallenge);
+    });
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertFails(updateDoc(doc(clientDb, 'challenges', 'defi-1'), {
+      [`progress.${OTHER_CLIENT_UID}`]: { value: 99, updated_at: new Date().toISOString() },
+    }));
+  });
+
+  it('un participant ne peut pas modifier sa progression ET un autre champ dans la même écriture', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'challenges', 'defi-1'), baseChallenge);
+    });
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertFails(updateDoc(doc(clientDb, 'challenges', 'defi-1'), {
+      [`progress.${CLIENT_UID}`]: { value: 1, updated_at: new Date().toISOString() },
+      title: 'Titre modifié',
+    }));
+  });
+
+  it('un non-participant ne peut pas écrire dans le défi', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'users', 'client-3'), { roles: ['client'] });
+      await setDoc(doc(context.firestore(), 'challenges', 'defi-1'), baseChallenge);
+    });
+    const thirdDb = testEnv.authenticatedContext('client-3').firestore();
+    await assertFails(updateDoc(doc(thirdDb, 'challenges', 'defi-1'), {
+      [`progress.${CLIENT_UID}`]: { value: 1, updated_at: new Date().toISOString() },
+    }));
+  });
+
+  it('n\'importe quel participant peut clore un défi et figer le vainqueur', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'challenges', 'defi-1'), {
+        ...baseChallenge,
+        progress: {
+          [CLIENT_UID]: { value: 5, updated_at: new Date().toISOString() },
+          [OTHER_CLIENT_UID]: { value: 2, updated_at: new Date().toISOString() },
+        },
+      });
+    });
+    // Le participant qui clôture n'est pas forcément le vainqueur.
+    const otherDb = testEnv.authenticatedContext(OTHER_CLIENT_UID).firestore();
+    await assertSucceeds(updateDoc(doc(otherDb, 'challenges', 'defi-1'), {
+      status: 'termine', winner_uid: CLIENT_UID,
+    }));
+  });
+
+  it('impossible de rouvrir un défi déjà terminé', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'challenges', 'defi-1'), {
+        ...baseChallenge, status: 'termine', winner_uid: CLIENT_UID,
+      });
+    });
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertFails(updateDoc(doc(clientDb, 'challenges', 'defi-1'), {
+      status: 'en_cours', winner_uid: null,
+    }));
+  });
+});
