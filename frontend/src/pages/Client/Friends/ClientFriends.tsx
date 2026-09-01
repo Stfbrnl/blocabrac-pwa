@@ -17,8 +17,16 @@ import {
 import { levelOrder } from '../../../utils/competitionEligibility';
 import {
   resolveSeuilWinner, resolveFenetreWinner, resolveBlocDesigneWinner, resolveDeclaratifCompletion,
+  SEUIL_TARGET_MAX, SEUIL_TARGET_MAX_MINUS_1,
   type ChallengeStructure, type ChallengeProgress,
 } from '../../../utils/challenges';
+
+// Libellé lisible d'une cible de défi "seuil" : une couleur brute, ou un jeton de niveau relatif.
+const describeSeuilTarget = (target: string | undefined): string => {
+  if (target === SEUIL_TARGET_MAX) return 'de ton niveau max';
+  if (target === SEUIL_TARGET_MAX_MINUS_1) return 'de ton niveau max −1';
+  return target || '';
+};
 
 const CLIMBING_STATUS_STALE_HOURS = 3;
 const DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
@@ -132,7 +140,7 @@ const ClientFriends: React.FC = () => {
   const [newTitle, setNewTitle] = useState('');
   const [newParticipants, setNewParticipants] = useState<string[]>([]);
   const [newTargetColor, setNewTargetColor] = useState('rouge');
-  const [newTargetCount, setNewTargetCount] = useState(5);
+  const [newTargetCount, setNewTargetCount] = useState('5');
   const [newMetric, setNewMetric] = useState<'points' | 'blocs'>('blocs');
   const [newEndsAt, setNewEndsAt] = useState('');
   const [newBoulderId, setNewBoulderId] = useState('');
@@ -345,7 +353,7 @@ const ClientFriends: React.FC = () => {
     setNewTitle('');
     setNewParticipants([]);
     setNewTargetColor('rouge');
-    setNewTargetCount(5);
+    setNewTargetCount('5');
     setNewMetric('blocs');
     setNewEndsAt('');
     setNewBoulderId('');
@@ -390,7 +398,7 @@ const ClientFriends: React.FC = () => {
       created_at: now,
     };
     if (newStructure === 'seuil') {
-      payload.target_count = newTargetCount;
+      payload.target_count = Math.max(1, parseInt(newTargetCount, 10) || 1);
       payload.target_color = newTargetColor;
     } else if (newStructure === 'fenetre') {
       payload.metric = newMetric;
@@ -708,7 +716,7 @@ const ClientFriends: React.FC = () => {
                       </Box>
                       {challenge.structure === 'seuil' && (
                         <Typography variant="body2" color="text.secondary">
-                          Premier à {challenge.target_count} blocs {challenge.target_color}
+                          Premier à {challenge.target_count} blocs {describeSeuilTarget(challenge.target_color)}
                         </Typography>
                       )}
                       {challenge.structure === 'fenetre' && (
@@ -818,12 +826,16 @@ const ClientFriends: React.FC = () => {
                 type="number"
                 label="Nombre de blocs"
                 value={newTargetCount}
-                onChange={(e) => setNewTargetCount(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                onChange={(e) => setNewTargetCount(e.target.value)}
+                onBlur={() => setNewTargetCount((v) => String(Math.max(1, parseInt(v, 10) || 1)))}
+                slotProps={{ htmlInput: { min: 1 } }}
                 sx={{ width: 160 }}
               />
-              <FormControl sx={{ minWidth: 160 }}>
-                <InputLabel id="target-color-label">Couleur</InputLabel>
-                <Select labelId="target-color-label" label="Couleur" value={newTargetColor} onChange={(e) => setNewTargetColor(e.target.value)}>
+              <FormControl sx={{ minWidth: 180 }}>
+                <InputLabel id="target-color-label">Couleur / niveau</InputLabel>
+                <Select labelId="target-color-label" label="Couleur / niveau" value={newTargetColor} onChange={(e) => setNewTargetColor(e.target.value)}>
+                  <MenuItem value={SEUIL_TARGET_MAX}>Mon niveau max</MenuItem>
+                  <MenuItem value={SEUIL_TARGET_MAX_MINUS_1}>Mon niveau max −1</MenuItem>
                   {levelOrder.map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
                 </Select>
               </FormControl>

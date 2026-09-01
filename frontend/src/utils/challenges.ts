@@ -8,6 +8,34 @@
 
 export type ChallengeStructure = 'seuil' | 'fenetre' | 'bloc_designe' | 'declaratif';
 
+// ✅ Défi "seuil" (amélioration V2.53) : au lieu d'une couleur fixe, la cible peut être
+// relative au niveau de CHAQUE participant, pour qu'un défi entre grimpeurs de niveaux
+// différents reste équitable. Ces jetons sont stockés tels quels dans `target_color` et
+// résolus par participant, au moment d'appliquer le delta, via `resolveSeuilTargetColor`.
+export const SEUIL_TARGET_MAX = '__niveau_max__';
+export const SEUIL_TARGET_MAX_MINUS_1 = '__niveau_max_moins_1__';
+
+// Résout la couleur effectivement comptée pour un participant donné :
+// - une couleur "normale" est renvoyée telle quelle ;
+// - `SEUIL_TARGET_MAX` -> la couleur du niveau courant du grimpeur ;
+// - `SEUIL_TARGET_MAX_MINUS_1` -> la couleur juste en dessous (plancher : reste au niveau
+//   courant si le grimpeur est déjà au plus bas).
+// Renvoie `null` si la cible est relative mais que le niveau du grimpeur est inconnu.
+// `levelOrderAsc` est fourni par l'appelant (utils/competitionEligibility.ts `levelOrder`) —
+// ce module pur ne connaît pas l'ordre des couleurs.
+export const resolveSeuilTargetColor = (
+  target: string,
+  userLevel: string | undefined,
+  levelOrderAsc: readonly string[],
+): string | null => {
+  if (target !== SEUIL_TARGET_MAX && target !== SEUIL_TARGET_MAX_MINUS_1) return target;
+  if (!userLevel) return null;
+  const i = levelOrderAsc.indexOf(userLevel);
+  if (i < 0) return null;
+  if (target === SEUIL_TARGET_MAX) return userLevel;
+  return i > 0 ? levelOrderAsc[i - 1] : userLevel;
+};
+
 export interface ChallengeProgressEntry {
   value: number;
   updated_at: string; // ISO — sert au départage d'égalité (le plus ancien gagne)

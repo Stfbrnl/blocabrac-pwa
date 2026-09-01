@@ -568,3 +568,78 @@ describe('challenges : défis entre potes', () => {
     }));
   });
 });
+
+describe('client_badges : auto-attribution des badges couleur par le client', () => {
+  beforeEach(async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await setDoc(doc(db, 'badges', 'badge-auto'), {
+        name: 'Duke of the Bloc', type: 'automatic',
+        color: 'rouge', criteria: { color: 'rouge', count: '1' },
+      });
+      await setDoc(doc(db, 'badges', 'badge-manuel'), {
+        name: 'Débutant', type: 'manual', criteria: 'Participe à 5 séances',
+      });
+    });
+  });
+
+  const autoPayload = (uid: string, badgeId: string) => ({
+    userId: uid,
+    badgeId,
+    awardedAt: new Date().toISOString(),
+    awardedBy: 'auto',
+    awardedByName: 'Attribution automatique',
+  });
+
+  it('le client peut s\'auto-attribuer un badge type:automatic (ID canonique)', async () => {
+    const db = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertSucceeds(setDoc(
+      doc(db, 'client_badges', `${CLIENT_UID}_badge-auto`),
+      autoPayload(CLIENT_UID, 'badge-auto'),
+    ));
+  });
+
+  it('refuse un badge type:manual', async () => {
+    const db = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertFails(setDoc(
+      doc(db, 'client_badges', `${CLIENT_UID}_badge-manuel`),
+      autoPayload(CLIENT_UID, 'badge-manuel'),
+    ));
+  });
+
+  it('refuse un badge inexistant', async () => {
+    const db = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertFails(setDoc(
+      doc(db, 'client_badges', `${CLIENT_UID}_badge-fantome`),
+      autoPayload(CLIENT_UID, 'badge-fantome'),
+    ));
+  });
+
+  it('refuse l\'auto-attribution pour un autre uid', async () => {
+    const db = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertFails(setDoc(
+      doc(db, 'client_badges', `${OTHER_CLIENT_UID}_badge-auto`),
+      autoPayload(OTHER_CLIENT_UID, 'badge-auto'),
+    ));
+  });
+
+  it('refuse un ID de document non canonique', async () => {
+    const db = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertFails(setDoc(
+      doc(db, 'client_badges', `${CLIENT_UID}_badge-auto_${Date.now()}`),
+      autoPayload(CLIENT_UID, 'badge-auto'),
+    ));
+  });
+
+  it('un badge auto-attribué reste non modifiable et non supprimable', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), 'client_badges', `${CLIENT_UID}_badge-auto`),
+        autoPayload(CLIENT_UID, 'badge-auto'),
+      );
+    });
+    const db = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertFails(updateDoc(doc(db, 'client_badges', `${CLIENT_UID}_badge-auto`), { awardedByName: 'Piraté' }));
+    await assertFails(deleteDoc(doc(db, 'client_badges', `${CLIENT_UID}_badge-auto`)));
+  });
+});

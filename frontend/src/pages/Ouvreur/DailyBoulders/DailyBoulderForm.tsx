@@ -12,7 +12,14 @@ import {
 } from 'firebase/firestore';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '../../../services/firebaseConfig';
-import { colorGrades, difficultyTypes, difficultyLevels, mysteryGrade } from '../../../config/gymConfig';
+import { colorGrades, difficultyTypes, difficultyLevels, mysteryGrade, mysteryColorHex } from '../../../config/gymConfig';
+
+// Pastille couleur de la liste des blocs existants : repérage visuel rapide quand un mur
+// n'a qu'une photo et que seuls les points de départ/arrivée changent (demande V2.53).
+const boulderColorHex = (color?: string): string => {
+  if (!color || color === 'mystere') return mysteryColorHex;
+  return colorGrades.find((c) => c.value === color)?.hex || mysteryColorHex;
+};
 import { uploadBoulderImage, getBoulderImageUrl } from '../../../services/imageStorage';
 
 interface RelativeHold {
@@ -678,7 +685,20 @@ export default function DailyBoulderForm(): JSX.Element {
         <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 2 }}>
           {boulders.map((boulder: Boulder) => (
             <Paper key={boulder.id} sx={{ p: 2 }}>
-              <Typography variant="subtitle1">
+              <Typography variant="subtitle1" sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
+                <Box
+                  component="span"
+                  sx={{
+                    width: 16,
+                    height: 16,
+                    borderRadius: '50%',
+                    backgroundColor: boulderColorHex(boulder.color),
+                    border: '1px solid rgba(0,0,0,0.35)',
+                    display: 'inline-block',
+                    mr: 1,
+                    flexShrink: 0,
+                  }}
+                />
                 Bloc n°{boulder.number || '?'} - {boulder.color === 'mystere' ? 'Bloc Mystère' : boulder.color || 'Non spécifiée'}
                 {boulder.difficulty_level && boulder.color !== 'mystere' && (
                   <Chip

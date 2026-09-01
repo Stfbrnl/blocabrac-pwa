@@ -10,6 +10,8 @@ import {
   doc,
   deleteDoc,
   updateDoc,
+  setDoc,
+  serverTimestamp,
   DocumentData,
   Timestamp,
 } from 'firebase/firestore';
@@ -406,7 +408,47 @@ const ClientStats: React.FC = () => {
             (r): r is ClientBadge => r !== null
           )
         );
-        setClientBadges(clientBadgesList);
+        // ✅ Attribution automatique des badges "couleur" (V2.53) : le catalogue `badges`
+        // contient des badges `type:"automatic"` (ex. « Duke of the Bloc » = réussir un bloc
+        // rouge) qu'aucun code n'attribuait jusqu'ici — seuls les moniteurs créaient des
+        // `client_badges` à la main. On les attribue ici, au chargement de « Mes stats »,
+        // dès que le critère est rempli (mêmes helpers que l'activation grisé/coloré :
+        // `computeBadgeActive` sur les blocs validés encore présents en salle). ID de doc
+        // déterministe `${uid}_${badgeId}` -> aucun doublon au rechargement. Règle Firestore :
+        // un client ne peut créer que ses propres badges `type:"automatic"` (voir firestore.rules).
+        const ownedBadgeIds = new Set(
+          clientBadgesSnapshot.docs.map((d) => d.data().badgeId).filter((id): id is string => !!id)
+        );
+        const catalogSnapshot = await getDocs(collection(db, 'badges'));
+        const awardedNow: ClientBadge[] = [];
+        for (const catalogDoc of catalogSnapshot.docs) {
+          const data = catalogDoc.data();
+          if (data.type !== 'automatic' || ownedBadgeIds.has(catalogDoc.id)) continue;
+          const criteria: Badge = {
+            id: catalogDoc.id,
+            name: data.name || 'Badge',
+            feminineName: data.feminineName,
+            description: data.description || '',
+            color: data.color,
+            criteria: data.criteria,
+          };
+          if (!computeBadgeActive(criteria, validatedExistingByColorLocal, inventoryByColor)) continue;
+          try {
+            await setDoc(doc(db, 'client_badges', `${user.uid}_${catalogDoc.id}`), {
+              userId: user.uid,
+              badgeId: catalogDoc.id,
+              awardedAt: serverTimestamp(),
+              awardedBy: 'auto',
+              awardedByName: 'Attribution automatique',
+            });
+            awardedNow.push({ badge: criteria, awardedAt: new Date(), awardedByName: 'Attribution automatique' });
+          } catch (badgeErr: unknown) {
+            console.error(`Attribution automatique du badge ${catalogDoc.id} impossible :`, badgeErr);
+          }
+        }
+
+        const allClientBadges = [...clientBadgesList, ...awardedNow];
+        setClientBadges(allClientBadges);
 
         // ✅ Synchronisation automatique du niveau du client d'après ses badges actifs :
         // le niveau devient la couleur du badge le plus élevé qui n'est pas grisé.
@@ -415,7 +457,7 @@ const ClientStats: React.FC = () => {
         // manuellement (profil du client ou administration).
         // Si un admin a verrouillé le niveau (levelOverride), on ne le touche jamais.
         if (!userData?.levelOverride) {
-          const activeBadgeColors = clientBadgesList
+          const activeBadgeColors = allClientBadges
             .filter((cb) => computeBadgeActive(cb.badge, validatedExistingByColorLocal, inventoryByColor))
             .map((cb) => cb.badge.criteria?.color || cb.badge.color)
             .filter((color): color is string => !!color && colorOrder.includes(color));

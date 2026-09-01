@@ -22,7 +22,8 @@ import { useTheme } from '@mui/material/styles';
 import { walls as wallList, colorGrades, mysteryColorHexKey, mysteryColorHex, logoPath, storageKeyPrefix } from '../../../config/gymConfig';
 import { getBoulderImageUrl } from '../../../services/imageStorage';
 import CasinoIcon from '@mui/icons-material/Casino';
-import type { Level } from '../../../utils/competitionEligibility';
+import { levelOrder, type Level } from '../../../utils/competitionEligibility';
+import { resolveSeuilTargetColor } from '../../../utils/challenges';
 import { drawProposal, drawDeathProposal, type DrawResult, type WallCounts } from '../../../utils/roulette';
 import RouletteDialog from './RouletteDialog';
 
@@ -463,8 +464,25 @@ const ClientDaily: React.FC = () => {
               {boulder.wall}
             </Typography>
           )}
-          <Typography variant="body2" sx={{ textAlign: 'center' }}>
+          <Typography variant="body2" sx={{ textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: 0.5 }}>
             Bloc n°{boulder.number}
+            {!isMysteryBoulder(boulder) && (boulder.color || boulder.difficulty) && (
+              <>
+                {' — '}
+                <Box
+                  component="span"
+                  sx={{
+                    width: 12,
+                    height: 12,
+                    borderRadius: '50%',
+                    display: 'inline-block',
+                    backgroundColor: levelColors[boulder.color || boulder.difficulty || ''] || '#CCCCCC',
+                    border: '1px solid rgba(0,0,0,0.35)',
+                  }}
+                />
+                {boulder.color || boulder.difficulty}
+              </>
+            )}
             {isMysteryBoulder(boulder) && (
               <Chip label="Mystère" size="small" sx={{ ml: 1, backgroundColor: levelColors.mystère }} />
             )}
@@ -580,7 +598,10 @@ const ClientDaily: React.FC = () => {
     const nowISO = new Date().toISOString();
     activeChallengesRef.current.forEach((challenge) => {
       if (challenge.structure === 'seuil') {
-        if (challenge.target_color === color && colorCountDelta !== 0) {
+        // ✅ V2.53 : la cible peut être une couleur fixe OU un jeton relatif au niveau du
+        // grimpeur (résolu ici, par participant, jamais figé à la création du défi).
+        const effectiveTarget = resolveSeuilTargetColor(challenge.target_color ?? '', selfProfile.level, levelOrder);
+        if (effectiveTarget && effectiveTarget === color && colorCountDelta !== 0) {
           delta.challengeDeltas.set(challenge.id, (delta.challengeDeltas.get(challenge.id) || 0) + colorCountDelta);
         }
       } else if (challenge.structure === 'fenetre') {

@@ -273,7 +273,16 @@ service cloud.firestore {
       allow create: if request.auth != null &&
                       (isUserRole("admin") ||
                        isUserRole("moniteur") ||
-                       isUserRole("ouvreur"));
+                       isUserRole("ouvreur") ||
+                       // Auto-attribution des badges "couleur" par le client lui-même
+                       // (ClientStats.tsx, V2.53) : uniquement ses propres badges, uniquement
+                       // ceux flaggés type:"automatic" dans le catalogue, avec l'ID canonique.
+                       (request.resource.data.userId == request.auth.uid &&
+                        request.resource.data.awardedBy == "auto" &&
+                        clientBadgeId == request.auth.uid + "_" + request.resource.data.badgeId &&
+                        request.resource.data.keys().hasOnly(["userId", "badgeId", "awardedAt", "awardedBy", "awardedByName"]) &&
+                        exists(/databases/$(database)/documents/badges/$(request.resource.data.badgeId)) &&
+                        get(/databases/$(database)/documents/badges/$(request.resource.data.badgeId)).data.type == "automatic"));
       allow update, delete: if false; // Interdit la modification/suppression des badges attribués
     }
 

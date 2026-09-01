@@ -77,7 +77,7 @@ const sections: HelpSection[] = [
     points: [
       'Filtrez vos blocs validés par période et consultez leur répartition par couleur.',
       'Retrouvez le détail de vos blocs et, si vous suivez des cours, de vos séances.',
-      'Consultez vos badges obtenus au fil du temps.',
+      'Consultez vos badges obtenus au fil du temps. Les badges « couleur » (réussir un bloc rouge, violet, noir…) sont attribués automatiquement dès que le critère est rempli, à l\'ouverture de cette page ; les autres badges et les diplômes sont décernés par un moniteur.',
       "Votre niveau actuel (visible sur « Mon espace personnel ») est mis à jour automatiquement à partir de vos résultats — vous n'avez rien à saisir vous-même.",
     ],
   },
@@ -110,6 +110,7 @@ const sections: HelpSection[] = [
       'Activez « Je suis en train de grimper » pour que vos potes de grimpe voient que vous êtes à la salle en ce moment (visible quelques heures, puis désactivé automatiquement).',
       'Renseignez votre prochaine session (jour + créneau horaire) pour que vos potes puissent s\'organiser avec vous.',
       'Plus bas, « Lancer un défi » propose quatre formats : premier à atteindre un seuil (ex. 5 blocs rouges), le plus de progrès sur une période, le meilleur score sur un même bloc, ou un défi déclaratif (traversée, bloc inventé...) validé d\'un simple bouton « C\'est fait ».',
+      'Pour un défi « premier à atteindre un seuil », la cible peut être une couleur précise ou, pour rester équitable entre grimpeurs de niveaux différents, « mon niveau max » ou « mon niveau max −1 » : chacun compte alors les blocs de sa propre couleur.',
       'Un défi se lance uniquement entre potes déjà acceptés (2 à 6 participants) ; les autres découvrent le défi la prochaine fois qu\'ils ouvrent cette page — il n\'y a pas de notification.',
       'La progression se calcule à partir de vos validations sur « Mon Blocabrac quotidien », sans rien à faire de plus (sauf pour un défi déclaratif, à valider soi-même).',
     ],

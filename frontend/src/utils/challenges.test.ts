@@ -6,8 +6,37 @@ import {
   resolveDeclaratifCompletion,
   progressDeltaForValidation,
   progressDeltaForRemoval,
+  resolveSeuilTargetColor,
+  SEUIL_TARGET_MAX,
+  SEUIL_TARGET_MAX_MINUS_1,
   type ChallengeProgress,
 } from './challenges';
+
+const LEVELS = ['jaune', 'vert', 'bleu', 'violet', 'rouge', 'noir', 'blanc', 'rose'] as const;
+
+describe('resolveSeuilTargetColor', () => {
+  it('renvoie une couleur fixe telle quelle, sans regarder le niveau', () => {
+    expect(resolveSeuilTargetColor('rouge', undefined, LEVELS)).toBe('rouge');
+    expect(resolveSeuilTargetColor('bleu', 'jaune', LEVELS)).toBe('bleu');
+  });
+
+  it('SEUIL_TARGET_MAX -> couleur du niveau courant du grimpeur', () => {
+    expect(resolveSeuilTargetColor(SEUIL_TARGET_MAX, 'violet', LEVELS)).toBe('violet');
+  });
+
+  it('SEUIL_TARGET_MAX_MINUS_1 -> couleur juste en dessous', () => {
+    expect(resolveSeuilTargetColor(SEUIL_TARGET_MAX_MINUS_1, 'violet', LEVELS)).toBe('bleu');
+  });
+
+  it('SEUIL_TARGET_MAX_MINUS_1 au niveau le plus bas -> reste au niveau courant', () => {
+    expect(resolveSeuilTargetColor(SEUIL_TARGET_MAX_MINUS_1, 'jaune', LEVELS)).toBe('jaune');
+  });
+
+  it('cible relative mais niveau inconnu/absent -> null', () => {
+    expect(resolveSeuilTargetColor(SEUIL_TARGET_MAX, undefined, LEVELS)).toBeNull();
+    expect(resolveSeuilTargetColor(SEUIL_TARGET_MAX, 'mauve', LEVELS)).toBeNull();
+  });
+});
 
 describe('resolveSeuilWinner', () => {
   it("ne renvoie personne tant que le seuil n'est atteint par personne", () => {
