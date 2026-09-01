@@ -1,7 +1,7 @@
 {
   "name": "frontend",
   "private": true,
-  "version": "2.53.1",
+  "version": "2.53.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:rules": "cd .. && npx --yes firebase-tools emulators:exec --only firestore,auth \"cd frontend && npx vitest run --config vitest.rules.config.ts\""
+    "test:rules": "cd .. && npx --yes firebase-tools emulators:exec --only firestore,auth \"cd frontend && npx vitest run --config vitest.rules.config.ts\"",
+    "topo": "node scripts/regen-topo.cjs"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

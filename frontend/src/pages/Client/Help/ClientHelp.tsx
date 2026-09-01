@@ -26,7 +26,7 @@ const sections: HelpSection[] = [
     title: 'Mon Blocabrac quotidien',
     intro: "Les blocs disponibles aujourd'hui sur chaque mur de la salle.",
     points: [
-      'Choisissez un mur pour voir la liste des blocs qui y sont ouverts.',
+      'Choisissez un mur pour voir la liste des blocs qui y sont ouverts : chaque bloc est identifié par son numéro et sa couleur (utile quand un mur n\'a qu\'une photo commune et que seuls les points de départ et d\'arrivée changent).',
       'Ou utilisez le filtre « Filtrer par niveau » pour retrouver un niveau donné sur tous les murs à la fois, sans les ouvrir un par un.',
       "Ouvrez un bloc pour voir sa photo, son niveau et les conseils éventuels de l'ouvreur.",
       'Indiquez si vous l\'avez réussi ou échoué, et le nombre d\'essais.',

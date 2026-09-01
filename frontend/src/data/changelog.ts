@@ -11,6 +11,17 @@ export interface ChangelogEntry {
 // tout l'historique ici, l'historique complet vit dans les commits git.
 export const changelog: ChangelogEntry[] = [
   {
+    version: '2.53',
+    date: '2026-09-01',
+    title: 'Badges automatiques, défis et repérage des blocs',
+    items: [
+      'Les badges "couleur" (réussir un bloc rouge, violet, noir…) s\'obtiennent maintenant automatiquement dès que le critère est rempli, en ouvrant "Mes statistiques".',
+      'Dans le menu des blocs d\'un mur, chaque bloc affiche sa couleur à côté de son numéro.',
+      'Défi "premier à un seuil" : la cible peut être "mon niveau max" ou "mon niveau max −1" — chacun compte alors les blocs de sa propre couleur, pour un défi équitable entre grimpeurs de niveaux différents.',
+      'Le créateur d\'un défi peut le supprimer à tout moment.',
+    ],
+  },
+  {
     version: '2.52',
     date: '2026-09-01',
     title: 'Objectifs de la semaine cumulables',
