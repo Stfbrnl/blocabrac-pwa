@@ -436,6 +436,22 @@ const ClientFriends: React.FC = () => {
     }
   };
 
+  // ✅ Suppression d'un défi par son créateur (V2.53) : utile pour retirer un défi de test.
+  // Firestore n'autorise `delete` qu'au `created_by`. ClientDaily.tsx charge les défis actifs
+  // une seule fois au montage et `buildClassementFlushWrites` ignore un défi disparu
+  // (`if (!challengeData || !challengeRef) return;`) — une suppression en cours de route est
+  // donc sans danger pour la transaction de validation.
+  const deleteChallenge = async (challengeId: string) => {
+    if (!window.confirm('Supprimer définitivement ce défi pour tous les participants ?')) return;
+    try {
+      await deleteDoc(doc(db, 'challenges', challengeId));
+      await fetchAll();
+    } catch (err) {
+      console.error('Erreur lors de la suppression du défi :', err);
+      setError('Impossible de supprimer ce défi.');
+    }
+  };
+
   const closeChallenge = async (challengeId: string, winnerUid: string | null) => {
     try {
       await updateDoc(doc(db, 'challenges', challengeId), { status: 'termine', winner_uid: winnerUid });
@@ -789,6 +805,14 @@ const ClientFriends: React.FC = () => {
                               Clôturer{computedWinnerUids.length === 1 ? ` (victoire de ${nameFor(computedWinnerUids[0])})` : ' (égalité)'}
                             </Button>
                           )}
+                        </Box>
+                      )}
+
+                      {challenge.created_by === user?.uid && (
+                        <Box sx={{ mt: 1 }}>
+                          <Button size="small" color="error" onClick={() => deleteChallenge(challenge.id)}>
+                            Supprimer ce défi
+                          </Button>
                         </Box>
                       )}
                     </ListItem>

@@ -542,6 +542,11 @@ service cloud.firestore {
                          resource.data.status == 'en_cours' &&
                          request.resource.data.status == 'termine')
                       );
+
+      // Suppression : réservée au créateur (retirer un défi de test / abandonné),
+      // quel que soit le statut. ClientFriends.tsx demande confirmation ; ClientDaily.tsx
+      // ignore proprement un défi disparu dans sa transaction de validation.
+      allow delete: if request.auth != null && resource.data.created_by == request.auth.uid;
     }
 
     // ========== 18. Par défaut ==========

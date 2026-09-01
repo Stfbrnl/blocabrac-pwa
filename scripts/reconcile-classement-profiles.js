@@ -53,7 +53,7 @@ const DRIFT_GUARD_ABSOLUTE_MIN = 3; // ...ET qu'au moins 3 profils sont concern�
 const path = require('path');
 const fs = require('fs');
 const { initializeApp, cert } = require('firebase-admin/app');
-const { getFirestore } = require('firebase-admin/firestore');
+const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 
 const CREDENTIALS_DIR = path.join(__dirname, '../firestore-migration');
 const STATE_DIR = path.join(__dirname, '../cleanup-state');
@@ -263,6 +263,21 @@ function fieldDrift(rawStored, storedNormalized, expected, equal = (a, b) => a =
   return { stored: storedNormalized, expected, wasAbsent: rawStored === undefined };
 }
 
+// ✅ `set(update, { merge: true })` FUSIONNE les maps sans jamais retirer de clé : une
+// clé de `colorCounts` devenue orpheline (ex. un bloc recoloré `"noire"` -> `"noir"`, ou
+// une couleur non canonique) survivait indéfiniment au recalage, et la réconciliation
+// signalait le même profil en écart à chaque passe (constaté le 01/09/2026 sur le profil
+// d'Alice Morel). On produit donc, pour `colorCounts`, un objet qui porte l'attendu ET un
+// `FieldValue.delete()` explicite pour chaque clé présente dans le stocké mais absente de
+// l'attendu — seul moyen de supprimer une clé de map à travers un `set merge`.
+function colorCountsWriteValue(storedColorCounts, expectedColorCounts) {
+  const value = { ...expectedColorCounts };
+  for (const key of Object.keys(storedColorCounts || {})) {
+    if (!(key in value)) value[key] = FieldValue.delete();
+  }
+  return value;
+}
+
 // ✅ Calcul PUR (aucune écriture) : compare stocké vs attendu, renvoie l'écart le cas
 // échéant. Séparé de l'écriture pour que le garde-fou puisse évaluer l'ampleur de la
 // dérive AVANT que quoi que ce soit ne soit modifié — voir main().
@@ -447,7 +462,7 @@ async function main() {
       score: d.expected.score,
       bouldersValidated: d.expected.bouldersValidated,
       bestColorRank: d.expected.bestColorRank,
-      colorCounts: d.expected.colorCounts,
+      colorCounts: colorCountsWriteValue(d.drift.colorCounts?.stored, d.expected.colorCounts),
       gender: d.expected.gender,
       ffmeCategory: d.expected.ffmeCategory,
     };
@@ -455,7 +470,10 @@ async function main() {
     // chargée — jamais touché sinon, même si un écart de gender/all-time est corrigé
     // sur le même profil dans cette même passe.
     if (seasonWindow) {
-      update.season = { score: d.expected.seasonScore, colorCounts: d.expected.seasonColorCounts };
+      update.season = {
+        score: d.expected.seasonScore,
+        colorCounts: colorCountsWriteValue(d.drift.seasonColorCounts?.stored, d.expected.seasonColorCounts),
+      };
     }
     await db.collection('classement_profiles').doc(d.uid).set(update, { merge: true });
   }

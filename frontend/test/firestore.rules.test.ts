@@ -567,6 +567,28 @@ describe('challenges : défis entre potes', () => {
       status: 'en_cours', winner_uid: null,
     }));
   });
+
+  it('le créateur peut supprimer son défi', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'challenges', 'defi-1'), baseChallenge);
+    });
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertSucceeds(deleteDoc(doc(clientDb, 'challenges', 'defi-1')));
+  });
+
+  it('un participant non créateur ne peut pas supprimer le défi', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'challenges', 'defi-1'), {
+        ...baseChallenge, participants: [CLIENT_UID, OTHER_CLIENT_UID],
+        progress: {
+          [CLIENT_UID]: { value: 0, updated_at: new Date().toISOString() },
+          [OTHER_CLIENT_UID]: { value: 0, updated_at: new Date().toISOString() },
+        },
+      });
+    });
+    const otherDb = testEnv.authenticatedContext(OTHER_CLIENT_UID).firestore();
+    await assertFails(deleteDoc(doc(otherDb, 'challenges', 'defi-1')));
+  });
 });
 
 describe('client_badges : auto-attribution des badges couleur par le client', () => {
