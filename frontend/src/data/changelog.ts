@@ -11,6 +11,15 @@ export interface ChangelogEntry {
 // tout l'historique ici, l'historique complet vit dans les commits git.
 export const changelog: ChangelogEntry[] = [
   {
+    version: '2.52',
+    date: '2026-09-01',
+    title: 'Objectifs de la semaine cumulables',
+    items: [
+      'L\'objectif de la semaine se compose maintenant de plusieurs objectifs cumulés : un nombre de blocs d\'une couleur donnée (ex. 2 rouges et 3 noirs), un bloc précis (ex. le bloc n°6 de la Dalle), ou un nombre de blocs tous niveaux confondus.',
+      'La progression de chaque objectif s\'affiche séparément sur "Mon espace personnel".',
+    ],
+  },
+  {
     version: '2.46',
     date: '2026-08-19',
     title: 'Défis entre potes',

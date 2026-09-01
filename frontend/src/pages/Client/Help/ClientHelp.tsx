@@ -35,6 +35,15 @@ const sections: HelpSection[] = [
     ],
   },
   {
+    title: 'Signaler un problème sur un bloc',
+    intro: 'Depuis la fiche d\'un bloc, en bas de la fenêtre de détail.',
+    points: [
+      'Choisissez un type de signalement : prise défaillante, morphologie, bloc trop difficile ou trop simple, ou autre.',
+      'Ajoutez un commentaire libre pour préciser (ex. « prise cassée », « problème de sécurité »).',
+      'Le bouton « Signaler un problème » transmet directement l\'information à l\'équipe d\'ouvreurs.',
+    ],
+  },
+  {
     title: 'Bloc Roulette',
     intro: 'Un tirage ludique pour varier votre séance, accessible depuis « Mon Blocabrac quotidien ».',
     points: [
@@ -46,11 +55,11 @@ const sections: HelpSection[] = [
     ],
   },
   {
-    title: 'Série, objectif de la semaine & partage',
+    title: 'Série, objectifs de la semaine & partage',
     intro: 'Directement sur « Mon espace personnel », sous votre niveau et votre dernier badge.',
     points: [
       'Votre série (🔥) se met à jour automatiquement dès que vous validez un bloc réussi ; elle n\'est perdue qu\'après 9 jours sans validation, pas de quoi paniquer si vous manquez une séance.',
-      'Vous pouvez définir un objectif personnel (un nombre de blocs à valider cette semaine), modifiable ou supprimable à tout moment.',
+      'Vous pouvez cumuler plusieurs objectifs personnels pour la semaine : un nombre de blocs d\'une couleur donnée (ex. 2 rouges et 3 noirs), un bloc précis (ex. le bloc n°6 de la Dalle), ou un nombre de blocs tous niveaux confondus — chacun modifiable ou supprimable à tout moment.',
       'Le bouton « Partager ma progression » génère une image avec votre niveau, votre dernier badge et votre série, à télécharger ou partager directement depuis votre téléphone.',
     ],
   },
@@ -79,6 +88,8 @@ const sections: HelpSection[] = [
       'Basé sur les blocs quotidiens validés, hors compétition.',
       "Seuls les grimpeurs ayant activé l'option apparaissent — vous n'y êtes pas inclus par défaut.",
       'Pour apparaître (ou non) dans ce classement, rendez-vous dans « Modifier mes informations » et cochez la case « Apparaître dans le classement des grimpeurs ».',
+      'Deux vues au choix : le classement général (cumulé depuis la création de votre compte, jamais remis à zéro) et le classement de la saison en cours (remis à zéro à chaque nouvelle saison).',
+      'Le classement de saison détermine les qualifiés pour la Finale de fin de saison — désactiver votre apparition au classement vous retire aussi de cette qualification.',
     ],
   },
   {

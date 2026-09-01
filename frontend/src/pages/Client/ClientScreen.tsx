@@ -18,20 +18,36 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  TextField
+  TextField,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Stack
 } from '@mui/material';
+import type { SelectChangeEvent } from '@mui/material';
 import {
   HelpOutlined as HelpOutlineIcon,
   LocalFireDepartment as LocalFireDepartmentIcon,
   Edit as EditIcon,
   Share as ShareIcon,
-  Download as DownloadIcon
+  Download as DownloadIcon,
+  Close as CloseIcon
 } from '@mui/icons-material';
-import { doc, getDoc, setDoc, collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteField, collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
 import * as html2canvas from 'html2canvas';
 import AnnouncementBanner from '../../components/AnnouncementBanner';
 import WhatsNewPanel from '../../components/WhatsNewPanel';
 import { computeStreakDays, getStartOfWeek } from '../../utils/streak';
+import { getDocsCacheFirst } from '../../utils/firestoreCacheFirst';
+import {
+  computeWeeklyGoalProgress,
+  legacyGoalToItems,
+  upsertGoalItem,
+  MAX_WEEKLY_GOAL_ITEMS,
+  type WeeklyGoalItem,
+  type WeeklyValidation,
+} from '../../utils/weeklyGoal';
 import { colorGrades, logoPath, gymName, brandGreen, brandGreenDark } from '../../config/gymConfig';
 
 // Tableau de correspondance code-couleur/cotations (cohérent avec ClientProfile.tsx, AdminUsers.tsx...)
@@ -54,11 +70,21 @@ interface LastBadge {
   awardedAt: Date;
 }
 
+interface ActiveBoulderOption {
+  id: string;
+  label: string;
+  color?: string;
+}
+
 interface ClientUserData {
   level?: string;
   inscritAuxCours?: boolean;
   first_name?: string;
+  // weeklyGoalTarget : ancien champ (un simple nombre, "tous niveaux confondus"),
+  // conservé en lecture seule pour les comptes n'ayant jamais rouvert ce nouvel
+  // écran — voir legacyGoalToItems dans utils/weeklyGoal.ts. Plus jamais écrit.
   weeklyGoalTarget?: number | null;
+  weeklyGoalItems?: WeeklyGoalItem[] | null;
 }
 
 const ClientScreen: React.FC = () => {
@@ -68,9 +94,16 @@ const ClientScreen: React.FC = () => {
   const [nextCompetition, setNextCompetition] = React.useState<NextCompetition | null>(null);
   const [lastBadge, setLastBadge] = React.useState<LastBadge | null>(null);
   const [streak, setStreak] = React.useState(0);
-  const [weeklyCount, setWeeklyCount] = React.useState(0);
+  const [weekValidations, setWeekValidations] = React.useState<WeeklyValidation[]>([]);
   const [goalDialogOpen, setGoalDialogOpen] = React.useState(false);
-  const [goalInput, setGoalInput] = React.useState('');
+  const [draftItems, setDraftItems] = React.useState<WeeklyGoalItem[]>([]);
+  const [newItemType, setNewItemType] = React.useState<'color' | 'boulder' | 'all'>('color');
+  const [newColor, setNewColor] = React.useState('rouge');
+  const [newColorTarget, setNewColorTarget] = React.useState('3');
+  const [newAllTarget, setNewAllTarget] = React.useState('5');
+  const [newBoulderId, setNewBoulderId] = React.useState('');
+  const [activeBoulders, setActiveBoulders] = React.useState<ActiveBoulderOption[] | null>(null);
+  const loadingBouldersRef = React.useRef(false);
   const [shareDialogOpen, setShareDialogOpen] = React.useState(false);
   const cardRef = React.useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
@@ -158,10 +191,13 @@ const ClientScreen: React.FC = () => {
     fetchSummary();
   }, [user]);
 
-  // ✅ Série de jours consécutifs + progression de l'objectif hebdomadaire, calculées
+  // ✅ Série de jours consécutifs + validations de la semaine en cours, calculées
   // côté client à partir des mêmes validations que le classement (client_boulder_results,
   // déjà lisible par son propriétaire d'après les règles Firestore) : pas de nouvelle
-  // collection ni de champ dénormalisé à maintenir en plus.
+  // collection ni de champ dénormalisé à maintenir en plus. On garde ici le boulderId
+  // de chaque validation (plus seulement sa date) : nécessaire pour évaluer un
+  // objectif "couleur" ou "bloc précis" (voir utils/weeklyGoal.ts), pas seulement
+  // l'ancien total tous niveaux confondus.
   React.useEffect(() => {
     if (!user) return;
 
@@ -174,14 +210,17 @@ const ClientScreen: React.FC = () => {
             where('success', '==', true)
           )
         );
-        const dates = snapshot.docs
-          .map((d) => d.data().createdAt)
-          .filter((iso): iso is string => Boolean(iso))
-          .map((iso) => new Date(iso));
+        const validations = snapshot.docs
+          .map((d) => {
+            const data = d.data();
+            const createdAt = data.createdAt ? new Date(data.createdAt) : null;
+            return createdAt ? { boulderId: data.boulderId as string, createdAt } : null;
+          })
+          .filter((v): v is WeeklyValidation => v !== null);
 
-        setStreak(computeStreakDays(dates));
+        setStreak(computeStreakDays(validations.map((v) => v.createdAt)));
         const weekStart = getStartOfWeek();
-        setWeeklyCount(dates.filter((d) => d >= weekStart).length);
+        setWeekValidations(validations.filter((v) => v.createdAt >= weekStart));
       } catch (err) {
         console.error('Erreur lors du calcul de la série :', err);
       }
@@ -190,25 +229,144 @@ const ClientScreen: React.FC = () => {
     fetchValidations();
   }, [user]);
 
+  // Objectifs effectifs : ceux du nouveau champ, ou à défaut la conversion de
+  // l'ancien champ numérique (voir ClientUserData.weeklyGoalTarget ci-dessus).
+  const weeklyGoalItems = React.useMemo(
+    () => userData?.weeklyGoalItems ?? legacyGoalToItems(userData?.weeklyGoalTarget),
+    [userData]
+  );
+
+  const colorById = React.useMemo(() => {
+    const map = new Map<string, string>();
+    (activeBoulders || []).forEach((b) => { if (b.color) map.set(b.id, b.color); });
+    return map;
+  }, [activeBoulders]);
+
+  const goalProgress = React.useMemo(
+    () => computeWeeklyGoalProgress(weeklyGoalItems, weekValidations, colorById),
+    [weeklyGoalItems, weekValidations, colorById]
+  );
+
+  // Requête seule (pas de setState ici) : réutilisée par les deux points d'appel
+  // ci-dessous, chacun responsable de son propre setState — un objectif "couleur"
+  // a besoin de connaître la couleur actuelle des blocs pour calculer sa
+  // progression, et le dialogue d'édition en a besoin pour son sélecteur "bloc
+  // précis". Même pattern de chargement paresseux que le "bloc désigné" des
+  // Défis entre potes (ClientFriends.tsx).
+  const fetchActiveBoulders = React.useCallback(async (): Promise<ActiveBoulderOption[]> => {
+    const snap = await getDocsCacheFirst(
+      query(collection(db, 'boulders'), where('type', '==', 'daily'), where('is_active', '==', true))
+    );
+    return snap.docs.map((d) => {
+      const data = d.data();
+      return {
+        id: d.id,
+        color: data.color,
+        label: `${data.color || '?'} n°${data.number || d.id} - ${data.wall || ''}`.trim(),
+      };
+    });
+  }, []);
+
+  // La fonction async est définie ET appelée directement dans le corps de
+  // l'effet (comme fetchValidations/fetchSummary ci-dessus) plutôt que via une
+  // référence externe : c'est ce qui évite l'avertissement ESLint
+  // react-hooks/set-state-in-effect sur un setState appelé depuis un effet.
+  React.useEffect(() => {
+    if (!user) return;
+    if (activeBoulders || loadingBouldersRef.current) return;
+    if (!weeklyGoalItems.some((it) => it.type === 'color')) return;
+
+    loadingBouldersRef.current = true;
+    const load = async () => {
+      try {
+        setActiveBoulders(await fetchActiveBoulders());
+      } catch (err) {
+        console.error('Erreur lors du chargement des blocs actifs :', err);
+      } finally {
+        loadingBouldersRef.current = false;
+      }
+    };
+    load();
+  }, [user, weeklyGoalItems, activeBoulders, fetchActiveBoulders]);
+
+  const ensureActiveBoulders = () => {
+    if (activeBoulders || loadingBouldersRef.current) return;
+    loadingBouldersRef.current = true;
+    fetchActiveBoulders()
+      .then(setActiveBoulders)
+      .catch((err) => console.error('Erreur lors du chargement des blocs actifs :', err))
+      .finally(() => { loadingBouldersRef.current = false; });
+  };
+
+  const goalItemLabel = (item: WeeklyGoalItem): string => {
+    if (item.type === 'all') return `${item.target} bloc${item.target > 1 ? 's' : ''} (tous niveaux)`;
+    if (item.type === 'color') return `${item.target} bloc${item.target > 1 ? 's' : ''} ${levelOptions[item.color] || item.color}`;
+    return item.boulderLabel;
+  };
+
+  const openGoalDialog = () => {
+    setDraftItems(weeklyGoalItems);
+    setNewItemType('color');
+    setNewColor('rouge');
+    setNewColorTarget('3');
+    setNewAllTarget('5');
+    setNewBoulderId('');
+    ensureActiveBoulders();
+    setGoalDialogOpen(true);
+  };
+
+  const handleAddDraftItem = () => {
+    let item: WeeklyGoalItem | null = null;
+    if (newItemType === 'color') {
+      const target = parseInt(newColorTarget, 10);
+      if (!Number.isFinite(target) || target <= 0) return;
+      item = { type: 'color', color: newColor, target };
+    } else if (newItemType === 'all') {
+      const target = parseInt(newAllTarget, 10);
+      if (!Number.isFinite(target) || target <= 0) return;
+      item = { type: 'all', target };
+    } else {
+      if (!newBoulderId) return;
+      const opt = (activeBoulders || []).find((b) => b.id === newBoulderId);
+      item = { type: 'boulder', boulderId: newBoulderId, boulderLabel: opt?.label || newBoulderId };
+    }
+    setDraftItems((items) => upsertGoalItem(items, item!).slice(0, MAX_WEEKLY_GOAL_ITEMS));
+    setNewBoulderId('');
+  };
+
+  const handleRemoveDraftItem = (idx: number) => {
+    setDraftItems((items) => items.filter((_, i) => i !== idx));
+  };
+
   const handleSaveGoal = async () => {
     if (!user) return;
-    const target = parseInt(goalInput, 10);
-    const value = Number.isFinite(target) && target > 0 ? target : null;
     try {
-      await setDoc(doc(db, 'users', user.uid), { weeklyGoalTarget: value }, { merge: true });
-      setUserData((prev) => (prev ? { ...prev, weeklyGoalTarget: value } : prev));
+      await setDoc(doc(db, 'users', user.uid), {
+        weeklyGoalItems: draftItems.length > 0 ? draftItems : deleteField(),
+        // Ancien champ : jamais réécrit avec une valeur, seulement effacé au
+        // premier enregistrement depuis ce nouvel écran (voir weeklyGoal.ts).
+        weeklyGoalTarget: deleteField(),
+      }, { merge: true });
+      setUserData((prev) => (prev ? {
+        ...prev,
+        weeklyGoalItems: draftItems.length > 0 ? draftItems : null,
+        weeklyGoalTarget: null,
+      } : prev));
       setGoalDialogOpen(false);
     } catch (err) {
       console.error("Erreur lors de la sauvegarde de l'objectif :", err);
     }
   };
 
-  const handleRemoveGoal = async () => {
-    setGoalInput('');
+  const handleRemoveAllGoals = async () => {
     if (!user) return;
     try {
-      await setDoc(doc(db, 'users', user.uid), { weeklyGoalTarget: null }, { merge: true });
-      setUserData((prev) => (prev ? { ...prev, weeklyGoalTarget: null } : prev));
+      await setDoc(doc(db, 'users', user.uid), {
+        weeklyGoalItems: deleteField(),
+        weeklyGoalTarget: deleteField(),
+      }, { merge: true });
+      setUserData((prev) => (prev ? { ...prev, weeklyGoalItems: null, weeklyGoalTarget: null } : prev));
+      setDraftItems([]);
       setGoalDialogOpen(false);
     } catch (err) {
       console.error("Erreur lors de la suppression de l'objectif :", err);
@@ -353,29 +511,33 @@ const ClientScreen: React.FC = () => {
             </Typography>
           </Box>
 
-          {userData?.weeklyGoalTarget ? (
+          {goalProgress.length > 0 ? (
             <Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, mb: 0.5 }}>
-                <Typography variant="body2">
-                  Objectif de la semaine : {weeklyCount}/{userData.weeklyGoalTarget} blocs
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, mb: 1 }}>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  Objectifs de la semaine ({goalProgress.filter((g) => g.done).length}/{goalProgress.length} atteints)
                 </Typography>
-                <Button
-                  size="small"
-                  startIcon={<EditIcon />}
-                  onClick={() => { setGoalInput(String(userData.weeklyGoalTarget)); setGoalDialogOpen(true); }}
-                >
+                <Button size="small" startIcon={<EditIcon />} onClick={openGoalDialog}>
                   Modifier
                 </Button>
               </Box>
-              <LinearProgress
-                variant="determinate"
-                value={Math.min(100, (weeklyCount / userData.weeklyGoalTarget) * 100)}
-                color={weeklyCount >= userData.weeklyGoalTarget ? 'success' : 'primary'}
-                sx={{ height: 8, borderRadius: 4 }}
-              />
+              {goalProgress.map((g, i) => (
+                <Box key={i} sx={{ mb: 1 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
+                    <Typography variant="body2">{goalItemLabel(g.item)}</Typography>
+                    <Typography variant="body2">{g.current}/{g.target}</Typography>
+                  </Box>
+                  <LinearProgress
+                    variant="determinate"
+                    value={Math.min(100, (g.current / g.target) * 100)}
+                    color={g.done ? 'success' : 'primary'}
+                    sx={{ height: 6, borderRadius: 3 }}
+                  />
+                </Box>
+              ))}
             </Box>
           ) : (
-            <Button size="small" startIcon={<EditIcon />} onClick={() => { setGoalInput(''); setGoalDialogOpen(true); }}>
+            <Button size="small" startIcon={<EditIcon />} onClick={openGoalDialog}>
               Définir un objectif pour la semaine
             </Button>
           )}
@@ -394,33 +556,122 @@ const ClientScreen: React.FC = () => {
         </Paper>
 
         <Dialog open={goalDialogOpen} onClose={() => setGoalDialogOpen(false)} maxWidth="xs" fullWidth>
-          <DialogTitle>Objectif de la semaine</DialogTitle>
+          <DialogTitle>Objectifs de la semaine</DialogTitle>
           <DialogContent>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Nombre de blocs à valider cette semaine (du lundi à aujourd'hui), tous niveaux confondus.
+              Cumulez plusieurs objectifs pour cette semaine (du lundi à aujourd'hui) : un nombre de blocs
+              d'une couleur donnée, un bloc précis, ou un nombre de blocs tous niveaux confondus.
             </Typography>
-            <TextField
-              autoFocus
-              fullWidth
-              type="number"
-              label="Objectif (nombre de blocs)"
-              value={goalInput}
-              onChange={(e) => setGoalInput(e.target.value)}
-              slotProps={{ htmlInput: { min: 1 } }}
-            />
+
+            {draftItems.length > 0 && (
+              <Stack spacing={1} sx={{ mb: 2 }}>
+                {draftItems.map((item, i) => (
+                  <Box key={i} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid', borderColor: 'divider', borderRadius: 1, px: 1.5, py: 0.75 }}>
+                    <Typography variant="body2">{goalItemLabel(item)}</Typography>
+                    <IconButton size="small" aria-label="Retirer cet objectif" onClick={() => handleRemoveDraftItem(i)}>
+                      <CloseIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
+                ))}
+              </Stack>
+            )}
+
+            <Divider sx={{ mb: 2 }} />
+
+            <Typography variant="subtitle2" sx={{ mb: 1 }}>Ajouter un objectif</Typography>
+            <Stack spacing={1.5}>
+              <FormControl fullWidth size="small">
+                <InputLabel id="new-goal-type-label">Type d'objectif</InputLabel>
+                <Select
+                  labelId="new-goal-type-label"
+                  label="Type d'objectif"
+                  value={newItemType}
+                  onChange={(e: SelectChangeEvent) => setNewItemType(e.target.value as 'color' | 'boulder' | 'all')}
+                >
+                  <MenuItem value="color">Un nombre de blocs d'une couleur</MenuItem>
+                  <MenuItem value="boulder">Un bloc précis</MenuItem>
+                  <MenuItem value="all">Un nombre de blocs, tous niveaux confondus</MenuItem>
+                </Select>
+              </FormControl>
+
+              {newItemType === 'color' && (
+                <Stack direction="row" spacing={1}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel id="new-goal-color-label">Couleur</InputLabel>
+                    <Select
+                      labelId="new-goal-color-label"
+                      label="Couleur"
+                      value={newColor}
+                      onChange={(e: SelectChangeEvent) => setNewColor(e.target.value)}
+                    >
+                      {colorGrades.map(({ value, label }) => (
+                        <MenuItem key={value} value={value}>{label}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  <TextField
+                    size="small"
+                    type="number"
+                    label="Nombre"
+                    value={newColorTarget}
+                    onChange={(e) => setNewColorTarget(e.target.value)}
+                    slotProps={{ htmlInput: { min: 1 } }}
+                    sx={{ width: 110, flexShrink: 0 }}
+                  />
+                </Stack>
+              )}
+
+              {newItemType === 'boulder' && (
+                <FormControl fullWidth size="small">
+                  <InputLabel id="new-goal-boulder-label">Bloc</InputLabel>
+                  <Select
+                    labelId="new-goal-boulder-label"
+                    label="Bloc"
+                    value={newBoulderId}
+                    onChange={(e: SelectChangeEvent) => setNewBoulderId(e.target.value)}
+                  >
+                    {(activeBoulders || []).map((b) => (
+                      <MenuItem key={b.id} value={b.id}>{b.label}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
+
+              {newItemType === 'all' && (
+                <TextField
+                  fullWidth
+                  size="small"
+                  type="number"
+                  label="Nombre de blocs"
+                  value={newAllTarget}
+                  onChange={(e) => setNewAllTarget(e.target.value)}
+                  slotProps={{ htmlInput: { min: 1 } }}
+                />
+              )}
+
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={handleAddDraftItem}
+                disabled={
+                  draftItems.length >= MAX_WEEKLY_GOAL_ITEMS ||
+                  (newItemType === 'color' && (!newColorTarget || Number(newColorTarget) <= 0)) ||
+                  (newItemType === 'all' && (!newAllTarget || Number(newAllTarget) <= 0)) ||
+                  (newItemType === 'boulder' && !newBoulderId)
+                }
+              >
+                Ajouter à la liste
+              </Button>
+            </Stack>
           </DialogContent>
           <DialogActions>
-            {!!userData?.weeklyGoalTarget && (
-              <Button color="error" onClick={handleRemoveGoal} sx={{ mr: 'auto' }}>
-                Supprimer l'objectif
+            {(!!userData?.weeklyGoalItems?.length || !!userData?.weeklyGoalTarget) && (
+              <Button color="error" onClick={handleRemoveAllGoals} sx={{ mr: 'auto' }}>
+                Tout supprimer
               </Button>
             )}
             <Button onClick={() => setGoalDialogOpen(false)}>Annuler</Button>
-            <Button
-              variant="contained"
-              onClick={handleSaveGoal}
-              disabled={!goalInput || Number(goalInput) <= 0}
-            >
+            <Button variant="contained" onClick={handleSaveGoal}>
               Enregistrer
             </Button>
           </DialogActions>
