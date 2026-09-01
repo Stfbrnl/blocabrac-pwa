@@ -1,166 +1,32 @@
 [
   {
     "uid": "1gq6Jyr4hXaMIDaKQmJVijIQtyW2",
+    "existed": true,
+    "realDrift": true,
     "drift": {
-      "ffmeCategory": {
-        "stored": null,
-        "expected": "Inconnu"
+      "colorCounts": {
+        "stored": {
+          "noire": 1,
+          "jaune": 4,
+          "rouge": 6,
+          "blanc": 1,
+          "bleu": 10,
+          "vert": 7,
+          "violet": 5,
+          "noir": 5
+        },
+        "expected": {
+          "jaune": 4,
+          "rouge": 6,
+          "vert": 7,
+          "violet": 5,
+          "noir": 5,
+          "bleu": 10,
+          "blanc": 1
+        },
+        "wasAbsent": false
       }
     },
-    "fixedAt": "2026-08-17T16:48:12.153Z"
-  },
-  {
-    "uid": "4nxpc9v6bcGQRaGsSaIU",
-    "drift": {
-      "gender": {
-        "stored": null,
-        "expected": "Homme"
-      },
-      "ffmeCategory": {
-        "stored": null,
-        "expected": "Inconnu"
-      }
-    },
-    "fixedAt": "2026-08-17T16:48:12.153Z"
-  },
-  {
-    "uid": "5erGHVpDAnbEzkypzOxKSt1VKo53",
-    "drift": {
-      "gender": {
-        "stored": null,
-        "expected": "Homme"
-      },
-      "ffmeCategory": {
-        "stored": null,
-        "expected": "Vétérans 2 (50 ans et +)"
-      }
-    },
-    "fixedAt": "2026-08-17T16:48:12.153Z"
-  },
-  {
-    "uid": "67UT3xxJ90g3R3wL9Ayi9CPdn9G3",
-    "drift": {
-      "gender": {
-        "stored": null,
-        "expected": "Homme"
-      },
-      "ffmeCategory": {
-        "stored": null,
-        "expected": "Inconnu"
-      }
-    },
-    "fixedAt": "2026-08-17T16:48:12.153Z"
-  },
-  {
-    "uid": "RZ0yzcAe4CfN4ENCL6ihCcl26U52",
-    "drift": {
-      "gender": {
-        "stored": null,
-        "expected": "Femme"
-      },
-      "ffmeCategory": {
-        "stored": null,
-        "expected": "Inconnu"
-      }
-    },
-    "fixedAt": "2026-08-17T16:48:12.153Z"
-  },
-  {
-    "uid": "SgcHX3AevpVjM1sC0chNOd6BwHj2",
-    "drift": {
-      "gender": {
-        "stored": null,
-        "expected": "Femme"
-      },
-      "ffmeCategory": {
-        "stored": null,
-        "expected": "Inconnu"
-      }
-    },
-    "fixedAt": "2026-08-17T16:48:12.153Z"
-  },
-  {
-    "uid": "V1ABV6MRqvVtscOHgLVaprP0QJA3",
-    "drift": {
-      "gender": {
-        "stored": null,
-        "expected": "Homme"
-      },
-      "ffmeCategory": {
-        "stored": null,
-        "expected": "Inconnu"
-      }
-    },
-    "fixedAt": "2026-08-17T16:48:12.153Z"
-  },
-  {
-    "uid": "YuAAXldAXmOZgmxV1rkCUQuvOhA2",
-    "drift": {
-      "gender": {
-        "stored": null,
-        "expected": "Homme"
-      },
-      "ffmeCategory": {
-        "stored": null,
-        "expected": "Inconnu"
-      }
-    },
-    "fixedAt": "2026-08-17T16:48:12.153Z"
-  },
-  {
-    "uid": "bzWuURha8VW9nxI7tGaCUSOj6R82",
-    "drift": {
-      "gender": {
-        "stored": null,
-        "expected": "Femme"
-      },
-      "ffmeCategory": {
-        "stored": null,
-        "expected": "Inconnu"
-      }
-    },
-    "fixedAt": "2026-08-17T16:48:12.153Z"
-  },
-  {
-    "uid": "hLxrJmVaEdc5HOsq3RAzwm6fXbh2",
-    "drift": {
-      "gender": {
-        "stored": null,
-        "expected": "Femme"
-      },
-      "ffmeCategory": {
-        "stored": null,
-        "expected": "Inconnu"
-      }
-    },
-    "fixedAt": "2026-08-17T16:48:12.153Z"
-  },
-  {
-    "uid": "qCBe3900hJYeeKuTt1O3telTcQR2",
-    "drift": {
-      "gender": {
-        "stored": null,
-        "expected": "Homme"
-      },
-      "ffmeCategory": {
-        "stored": null,
-        "expected": "Inconnu"
-      }
-    },
-    "fixedAt": "2026-08-17T16:48:12.153Z"
-  },
-  {
-    "uid": "tGP38DBuLppimzcggY9G",
-    "drift": {
-      "gender": {
-        "stored": null,
-        "expected": "Homme"
-      },
-      "ffmeCategory": {
-        "stored": null,
-        "expected": "Inconnu"
-      }
-    },
-    "fixedAt": "2026-08-17T16:48:12.153Z"
+    "fixedAt": null
   }
 ]
