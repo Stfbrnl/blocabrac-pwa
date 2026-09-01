@@ -4,9 +4,10 @@
 > (navigateur / ClaudeNav). Demande directe de l'utilisateur, pas de
 > `CONCEPTION-*.md`/`SUIVI-*.md` en amont cette fois.
 >
-> **Pas encore commité/poussé/déployé** — travail terminé et vérifié
-> (build/lint/tests) dans le Codespace, en attente de confirmation de
-> l'utilisateur avant `git commit`/`push`/déploiement Firebase.
+> **Commité, poussé et déployé** — commit `8ff095e` sur `main` (après rebase
+> sur `ccf58fd`, un commit automatique du CI `cleanup-orphan-boulder-images`
+> arrivé entre-temps, sans rapport), hosting uniquement (`npx firebase-tools
+> deploy --only hosting`, aucune règle Firestore à déployer).
 
 ---
 
@@ -230,8 +231,10 @@ déploiement si possible.
 
 ## 8. Reste à faire côté utilisateur/session suivante
 
-- Décider commit + push + déploiement (`hosting` seulement, pas de règles
-  Firestore à déployer).
-- Éventuellement vérifier avec un vrai compte client en prod après déploiement.
+- Éventuellement vérifier avec un vrai compte client en prod maintenant que
+  c'est déployé (https://blocabrac.web.app).
+- Envisager d'ajouter la vérification systématique "aide en ligne à jour"
+  (section 5bis) à la checklist de fin de chantier, pas seulement en
+  rattrapage sur demande.
 
 🤖 Généré avec [Claude Code](https://claude.com/claude-code)
