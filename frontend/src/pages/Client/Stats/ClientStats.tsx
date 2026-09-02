@@ -71,6 +71,8 @@ interface BoulderData extends DocumentData {
   difficulty_types?: string[];
   created_at?: string | Timestamp;
   color?: string;
+  is_active?: boolean;
+  type?: string;
 }
 
 interface CourseData extends DocumentData {
@@ -274,7 +276,16 @@ const ClientStats: React.FC = () => {
           const boulderData = boulderDoc.data() as BoulderData;
           const color = boulderData.color || boulderData.difficulty || 'Inconnu';
 
-          if (result.success === true) {
+          // Un badge couleur ne reste actif que tant qu'il reste au moins un bloc
+          // QUOTIDIEN ACTIF de cette couleur validé par le client. Une rotation de
+          // mur passe les anciens blocs en `is_active: false` (le document n'est
+          // jamais supprimé — cf. DailyBoulderForm.tsx) : ils doivent alors cesser
+          // de compter pour l'activation du badge, sinon celui-ci ne se grise jamais.
+          // Mêmes critères que l'inventaire courant plus bas et que ClientDaily.tsx.
+          const countsForBadges =
+            boulderData.is_active === true && boulderData.type === 'daily';
+
+          if (result.success === true && countsForBadges) {
             if (!existingValidatedBoulderIdsByColor[color]) {
               existingValidatedBoulderIdsByColor[color] = new Set();
             }
@@ -310,8 +321,17 @@ const ClientStats: React.FC = () => {
 
         // Inventaire courant des blocs en salle, par couleur (sert au badge "master"
         // qui exige la totalité des blocs d'une couleur, et pourra servir à d'autres
-        // badges du même type à l'avenir)
-        const bouldersSnapshot = await getDocs(collection(db, 'boulders'));
+        // badges du même type à l'avenir). On ne compte que les blocs QUOTIDIENS
+        // ACTIFS — mêmes critères que ClientDaily.tsx : un bloc désactivé (rotation
+        // de mur) ou un bloc de compétition ne fait pas partie de l'inventaire
+        // grimpable, et gonflerait à tort le dénominateur du badge "master".
+        const bouldersSnapshot = await getDocs(
+          query(
+            collection(db, 'boulders'),
+            where('type', '==', 'daily'),
+            where('is_active', '==', true)
+          )
+        );
         const inventoryByColor: Record<string, number> = {};
         bouldersSnapshot.forEach((boulderDoc) => {
           const data = boulderDoc.data() as BoulderData;
@@ -452,11 +472,16 @@ const ClientStats: React.FC = () => {
 
         // ✅ Synchronisation automatique du niveau du client d'après ses badges actifs :
         // le niveau devient la couleur du badge le plus élevé qui n'est pas grisé.
-        // Comme il n'existe pas de badge en dessous de violet, ce mécanisme ne
-        // s'applique qu'à partir de ce niveau ; en dessous, le niveau reste géré
-        // manuellement (profil du client ou administration).
+        // Le catalogue ne contient aucun badge en dessous de "violet" (jaune/vert/bleu
+        // = niveaux faciles sans badge) : ce mécanisme n'élève donc jamais en dessous
+        // de violet, et le niveau de base déclaré par le client à l'inscription (ou
+        // via son profil) vit dans `users.level` jusqu'à ce qu'un badge l'élève —
+        // moment où on le met de côté dans `users.baseLevel` pour pouvoir y revenir
+        // si un jour tous les badges retombent en veille (rotation de tous les murs).
         // Si un admin a verrouillé le niveau (levelOverride), on ne le touche jamais.
-        if (!userData?.levelOverride) {
+        if (!userData?.levelOverride && userData) {
+          const lowestBadgeIndex = colorOrder.indexOf('violet');
+          const currentLevelIndex = userData.level ? colorOrder.indexOf(userData.level) : -1;
           const activeBadgeColors = allClientBadges
             .filter((cb) => computeBadgeActive(cb.badge, validatedExistingByColorLocal, inventoryByColor))
             .map((cb) => cb.badge.criteria?.color || cb.badge.color)
@@ -467,8 +492,31 @@ const ClientStats: React.FC = () => {
               colorOrder.indexOf(color) > colorOrder.indexOf(highest) ? color : highest
             );
 
-            if (userData && userData.level !== highestActiveColor) {
-              await updateDoc(doc(db, 'users', user.uid), { level: highestActiveColor });
+            if (userData.level !== highestActiveColor) {
+              const update: Record<string, string> = { level: highestActiveColor };
+              // Mémoriser le niveau déclaré, une seule fois, juste avant la 1re
+              // élévation par un badge — et seulement si le niveau courant est un
+              // niveau "facile" sans badge (jaune/vert/bleu) ; au-delà, c'est déjà
+              // une valeur pilotée par un badge, rien à sauvegarder.
+              if (!userData.baseLevel && currentLevelIndex >= 0 && currentLevelIndex < lowestBadgeIndex) {
+                update.baseLevel = userData.level as string;
+              }
+              await updateDoc(doc(db, 'users', user.uid), update);
+            }
+          } else if (currentLevelIndex >= lowestBadgeIndex) {
+            // Aucun badge couleur actif alors que le niveau est à "violet" ou plus :
+            // cette valeur ne peut venir que d'un badge désormais en veille (rotation
+            // de tous les murs concernés). On ramène le niveau à celui déclaré par le
+            // client : `baseLevel` s'il a été mémorisé, sinon "bleu" — le plus haut
+            // niveau sans badge, hypothèse par défaut la plus probable (retomber en
+            // dessous de "violet" avec un vrai palmarès de badges est très improbable).
+            // Jamais vers le haut : monter de niveau reste le rôle des badges.
+            const fallbackLevel =
+              userData.baseLevel && colorOrder.includes(userData.baseLevel)
+                ? (userData.baseLevel as string)
+                : 'bleu';
+            if (colorOrder.indexOf(fallbackLevel) < currentLevelIndex) {
+              await updateDoc(doc(db, 'users', user.uid), { level: fallbackLevel });
             }
           }
         }
@@ -939,7 +987,7 @@ const ClientStats: React.FC = () => {
                       </Typography>
                       {!active && (
                         <Chip
-                          label="Badge inactif : aucun bloc de cette couleur en salle"
+                          label="Badge en veille : plus de bloc de cette couleur actuellement en salle. Il se rallume dès que vous en revalidez un."
                           size="small"
                           sx={{ mt: 1, backgroundColor: '#E0E0E0', color: '#616161', height: 'auto', '& .MuiChip-label': { whiteSpace: 'normal', py: 0.5 } }}
                         />

@@ -11,6 +11,16 @@ export interface ChangelogEntry {
 // tout l'historique ici, l'historique complet vit dans les commits git.
 export const changelog: ChangelogEntry[] = [
   {
+    version: '2.54',
+    date: '2026-09-02',
+    title: 'Badges "couleur" : mise en veille quand le mur change',
+    items: [
+      'Un badge "couleur" se met désormais en veille (grisé) quand, après une rotation des murs, il ne reste plus aucun bloc de cette couleur en salle que vous ayez validé.',
+      'Il se rallume tout seul dès que vous revalidez un bloc de cette couleur. Votre niveau en salle suit la même logique.',
+      'Certains badges liés à des murs démontés de longue date peuvent donc passer en veille : c\'est voulu, pas un bug.',
+    ],
+  },
+  {
     version: '2.53',
     date: '2026-09-01',
     title: 'Badges automatiques, défis et repérage des blocs',

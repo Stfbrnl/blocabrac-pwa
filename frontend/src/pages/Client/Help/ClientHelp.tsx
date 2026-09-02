@@ -77,7 +77,7 @@ const sections: HelpSection[] = [
     points: [
       'Filtrez vos blocs validés par période et consultez leur répartition par couleur.',
       'Retrouvez le détail de vos blocs et, si vous suivez des cours, de vos séances.',
-      'Consultez vos badges obtenus au fil du temps. Les badges « couleur » (réussir un bloc rouge, violet, noir…) sont attribués automatiquement dès que le critère est rempli, à l\'ouverture de cette page ; les autres badges et les diplômes sont décernés par un moniteur.',
+      'Consultez vos badges obtenus au fil du temps. Les badges « couleur » (réussir un bloc rouge, violet, noir…) sont attribués automatiquement dès que le critère est rempli, à l\'ouverture de cette page ; les autres badges et les diplômes sont décernés par un moniteur. Un badge « couleur » s\'affiche en grisé si, après une rotation des murs, il ne vous reste plus de bloc validé de cette couleur actuellement en salle ; il redevient coloré dès que vous en revalidez un.',
       "Votre niveau actuel (visible sur « Mon espace personnel ») est mis à jour automatiquement à partir de vos résultats — vous n'avez rien à saisir vous-même.",
     ],
   },

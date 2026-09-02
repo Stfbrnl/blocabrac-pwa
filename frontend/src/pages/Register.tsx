@@ -72,6 +72,10 @@ export default function Register() {
         dateOfBirth: dateOfBirth,
         gender: gender,
         level: level,
+        // Niveau de base déclaré, jamais écrasé par la synchro de niveau via badges
+        // (ClientStats.tsx) : sert de repli si tous les badges couleur d'un client
+        // repassent un jour en veille (rotation de tous les murs concernés).
+        baseLevel: level,
         // ✅ "roles" est le seul format écrit désormais (comme AdminUsers.tsx) :
         // écrire aussi "role" ici était justement à l'origine de la double
         // convention role/roles qui a causé plusieurs bugs de droits dans l'app.
