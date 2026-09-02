@@ -93,6 +93,15 @@ const ClientProfile: React.FC = () => {
         dateOfBirth: userData.dateOfBirth,
         gender: userData.gender,
         level: userData.level,
+        // Enregistrer son profil vaut re-déclaration du niveau : `baseLevel` (le
+        // niveau déclaré) est réécrit en même temps que `level`. La synchro de
+        // « Mes stats » (ClientStats.tsx) ne fait foi via les badges que tant
+        // qu'au moins un badge couleur est actif ; dès qu'ils sont tous en veille
+        // (grimpeur longtemps absent, murs tous renouvelés), c'est `baseLevel` —
+        // donc cette déclaration — qui reprend la main. Sans cette ligne, le repli
+        // écraserait la valeur que le grimpeur vient de saisir par un instantané
+        // pris des mois plus tôt.
+        baseLevel: userData.level,
         classementOptIn: userData.classementOptIn ?? false,
       };
 
@@ -219,6 +228,12 @@ const ClientProfile: React.FC = () => {
                 </MenuItem>
               ))}
             </Select>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+              Niveau déclaré. Tant que vous avez un badge de couleur actif, votre niveau
+              affiché suit automatiquement vos badges et cette valeur n'a pas d'effet.
+              Elle reprend la main uniquement si tous vos badges sont en veille (par
+              exemple après une longue absence, quand tous les murs ont changé).
+            </Typography>
           </FormControl>
 
           <FormControlLabel

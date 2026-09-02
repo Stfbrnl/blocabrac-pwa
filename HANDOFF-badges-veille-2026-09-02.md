@@ -190,14 +190,35 @@ Résultat au 02/09/2026 (**aucune anomalie**) :
 
 ---
 
-## 5. Réserves / dettes connues
+## 4bis. Suivi V2.54.1 — `ClientProfile.tsx` écrit `baseLevel` (retour ClaudeNav)
 
-- **`ClientProfile.tsx` ne met pas à jour `baseLevel`** quand le client modifie
-  son niveau à la main. Choix délibéré : le champ « niveau » y affiche déjà la
-  valeur pilotée par badge et la synchro l'écrase à la prochaine visite de
-  « Mes stats » — y toucher ajoutait de l'ambiguïté pour un bénéfice marginal.
-  Si un jour on veut un vrai « niveau déclaré » éditable, c'est là qu'il faut
-  intervenir.
+Le point « réserve » ci-dessous a été **corrigé** dans la foulée (commit
+V2.54.1). Raisonnement retenu, redéfinissant le champ plutôt que le corrigeant :
+
+- `baseLevel` = **niveau déclaré**, `level` = **niveau constaté**. Le constaté
+  fait foi tant qu'un badge couleur est actif ; quand tous sont en veille, le
+  déclaré reprend la main.
+- Enregistrer sa fiche « Mes informations » vaut **re-déclaration** :
+  `ClientProfile.tsx` écrit désormais `baseLevel: userData.level` dans le même
+  `batch.update` que `level`. Sans ça, le cas exact décrit par l'utilisateur —
+  grimpeur de retour après blessure, aucun badge actif, qui saisit le niveau
+  qui lui semble cohérent — voyait sa saisie écrasée à la visite suivante de
+  « Mes stats » par l'instantané `baseLevel` pris des mois plus tôt (ou `'bleu'`).
+- **La synchro ne fait jamais remonter le niveau** — vérifié : la branche
+  « 0 badge actif » n'écrit que si
+  `colorOrder.indexOf(fallbackLevel) < currentLevelIndex` (repli strictement
+  vers le bas). Un grimpeur qui déclare un niveau *supérieur* à son ancienne
+  base voit donc sa déclaration respectée (le nouveau `baseLevel` == le niveau
+  courant → aucune écriture de repli). La seule remontée possible reste
+  l'attribution d'un badge, ce qui est l'intention.
+- Caption ajoutée sous le `Select` « Niveau en salle » de `ClientProfile.tsx` :
+  la valeur ne s'applique que si aucun badge couleur n'est actif.
+- Conséquence : le snapshot legacy dans `ClientStats.tsx`
+  (`!userData.baseLevel && currentLevelIndex < violet`) ne sert plus qu'aux
+  comptes créés avant V2.54 qui n'ont jamais réenregistré leur profil —
+  conservé, inoffensif.
+
+## 5. Réserves / dettes connues
 - **Comptes legacy sans `baseLevel`** : si tous leurs badges passent un jour en
   veille, ils retombent à `'bleu'` par défaut, pas à leur vraie déclaration
   d'origine (perdue). Jugé acceptable : retomber en dessous de violet avec un
@@ -223,6 +244,7 @@ Résultat au 02/09/2026 (**aucune anomalie**) :
 |---|---|
 | `frontend/src/pages/Client/Stats/ClientStats.tsx` | filtre `is_active && type==='daily'` (badges + inventaire) ; repli de niveau sur `baseLevel`/`'bleu'` ; snapshot `baseLevel` ; libellé du chip ; `BoulderData` + 2 champs |
 | `frontend/src/pages/Register.tsx` | écrit `baseLevel: level` à la création du doc `users` |
+| `frontend/src/pages/Client/Profile/ClientProfile.tsx` | **(V2.54.1)** écrit `baseLevel` en même temps que `level` ; caption sous le champ « Niveau en salle » |
 | `frontend/src/pages/Client/Help/ClientHelp.tsx` | phrase sur la mise en veille |
 | `frontend/src/data/changelog.ts` | entrée `version:'2.54'` |
 | `frontend/package.json` | `2.53.2` → `2.54.0` |
