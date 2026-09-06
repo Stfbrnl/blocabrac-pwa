@@ -11,6 +11,20 @@ export interface ChangelogEntry {
 // tout l'historique ici, l'historique complet vit dans les commits git.
 export const changelog: ChangelogEntry[] = [
   {
+    version: '2.55',
+    date: '2026-09-06',
+    title: 'Bloc Roulette : traversées et défis "un cran au-dessus"',
+    items: [
+      'Nouveau défi "pieds libres" : un bloc un cran au-dessus de votre niveau, en vous autorisant les prises des autres blocs du mur comme pieds.',
+      'La traversée de murs s\'adapte à votre niveau : d\'un seul mur (niveau bleu) à quatre murs consécutifs sans prises jaunes ni vertes (niveau rose).',
+      'La "Roulette de la mort" devient jouable : un bloc un cran au-dessus, à sortir en s\'autorisant une ou deux prises supplémentaires de son choix sur le mur.',
+      'De nouveaux défis de style inspirés d\'exercices de club : pieds "touché-collé", grimpe sans prise de pied, à deux doigts, techniques imposées (cancan, lolotte, crochet de talon, contrepointe, drapeau), respiration, 3 blocs liés annoncés à voix haute.',
+      'Des défis de technique avancée à partir du niveau blanc : mouvement Yaniro (figure 4) et départ en chauve-souris, avec leur explication affichée sur la carte.',
+      'Chaque défi rappelle que vous pouvez prendre un bloc existant du bon niveau ou en composer un avec les prises de plusieurs blocs d\'un même mur.',
+      'Nouveau bouton « J\'ai relevé le défi » sur la carte Roulette : votre nombre de défis relevés s\'affiche sous les boutons et dans « Mes stats », avec la liste de vos 10 derniers (vous pouvez préciser le bloc utilisé, c\'est facultatif). Cela ne touche ni votre classement ni vos statistiques de blocs.',
+    ],
+  },
+  {
     version: '2.54',
     date: '2026-09-02',
     title: 'Badges "couleur" : mise en veille quand le mur change',

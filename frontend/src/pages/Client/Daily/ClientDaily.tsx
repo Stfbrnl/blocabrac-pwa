@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '../../../services/firebaseConfig';
-import { collection, query, where, getDocs, addDoc, setDoc, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, setDoc, doc, getDoc, updateDoc, increment } from 'firebase/firestore';
 import { scoreDeltaForValidation, isWithinSeasonWindow } from '../../../utils/classementScore';
 import { calculatePoints } from '../../../utils/climbingPoints';
 import { getDocsCacheFirst } from '../../../utils/firestoreCacheFirst';
@@ -24,8 +24,11 @@ import { getBoulderImageUrl } from '../../../services/imageStorage';
 import CasinoIcon from '@mui/icons-material/Casino';
 import { levelOrder, type Level } from '../../../utils/competitionEligibility';
 import { resolveSeuilTargetColor } from '../../../utils/challenges';
-import { drawProposal, drawDeathProposal, type DrawResult, type WallCounts } from '../../../utils/roulette';
-import RouletteDialog from './RouletteDialog';
+import {
+  drawProposal, drawDeathProposal, addRouletteCompletion, resolveDrawLabel,
+  type DrawResult, type WallCounts, type RouletteCompletion,
+} from '../../../utils/roulette';
+import RouletteDialog, { type RouletteChosenBoulder } from './RouletteDialog';
 
 // ✅ Bloc Roulette : clé localStorage de l'anti-lassitude (§1.5) — les ~10 derniers ids de
 // propositions tirées, exclus du tirage suivant. Préfixée comme les autres clés de la salle
@@ -111,7 +114,19 @@ const ClientDaily: React.FC = () => {
   // ✅ Bloc Roulette : niveau et compteur par mur du grimpeur lui-même, lus une seule fois au
   // montage (voir extension de `fetchUsers` ci-dessous — pas de lecture Firestore
   // supplémentaire, le `getDoc(users/{uid})` existait déjà pour résoudre son propre nom).
-  const [selfProfile, setSelfProfile] = useState<{ level?: Level; wallCounts?: WallCounts }>({});
+  const [selfProfile, setSelfProfile] = useState<{
+    level?: Level;
+    wallCounts?: WallCounts;
+    rouletteChallengesCompleted?: number;
+    rouletteRecentChallenges?: RouletteCompletion[];
+  }>({});
+  // ✅ Ref-de-state (même discipline que `activeChallengesRef`/`lastPersistedResultRef`) :
+  // `handleValiderRoulette` doit repartir de l'état LE PLUS RÉCENT pour recomposer la liste
+  // des 10 derniers défis (deux validations rapprochées sans remontage sinon → la 2e écrase
+  // la 1re dans le tableau — retour ClaudeNav 06/09). La ref est mise à jour dans un effet,
+  // jamais pendant le rendu.
+  const selfProfileRef = useRef(selfProfile);
+  useEffect(() => { selfProfileRef.current = selfProfile; }, [selfProfile]);
   const [openRoulette, setOpenRoulette] = useState(false);
   const [rouletteIsDeath, setRouletteIsDeath] = useState(false);
   const [rouletteResult, setRouletteResult] = useState<DrawResult | null>(null);
@@ -257,9 +272,15 @@ const ClientDaily: React.FC = () => {
             firstName: data.first_name || '',
             lastName: data.last_name || '',
           };
-          // ✅ Bloc Roulette : même lecture, pas de getDoc séparé — niveau et compteur par
-          // mur du grimpeur, nécessaires au tirage (utils/roulette.ts).
-          setSelfProfile({ level: data.level, wallCounts: data.wallCounts });
+          // ✅ Bloc Roulette : même lecture, pas de getDoc séparé — niveau + compteur par mur
+          // (nécessaires au tirage) et suivi des défis relevés (compteur + 10 derniers), lus
+          // ici pour être réécrits sans relecture au moment du "J'ai relevé le défi".
+          setSelfProfile({
+            level: data.level,
+            wallCounts: data.wallCounts,
+            rouletteChallengesCompleted: data.rouletteChallengesCompleted,
+            rouletteRecentChallenges: data.rouletteRecentChallenges,
+          });
         }
       } catch (ownErr) {
         console.error('Erreur lors du chargement de son propre profil:', ownErr);
@@ -438,6 +459,46 @@ const ClientDaily: React.FC = () => {
       handleOpenDeathRoulette();
     } else {
       handleOpenRoulette();
+    }
+  };
+
+  // ✅ "J'ai relevé le défi" (V2.55, version hybride) : UNE écriture sur `users/{uid}` —
+  // compteur `increment(1)` + liste plafonnée des 10 derniers défis recomposée en mémoire
+  // depuis `selfProfileRef.current` (aucune relecture Firestore : le doc a été chargé au
+  // montage). JAMAIS `client_boulder_results`, donc famille E / roulette de la mort comptent
+  // sans toucher classement/badges/niveau.
+  // Mise à jour de l'affichage APRÈS le succès de l'écriture (pas d'UI optimiste) : le
+  // compteur ne monte que si Firestore a bien pris — pas d'état incohérent en cas d'échec
+  // (retour ClaudeNav 06/09).
+  const handleValiderRoulette = async (chosen: RouletteChosenBoulder) => {
+    if (!user || !rouletteResult) return;
+    const entry: RouletteCompletion = {
+      proposalId: rouletteResult.proposal.id,
+      label: resolveDrawLabel(rouletteResult),
+      family: rouletteResult.proposal.family,
+      color: rouletteResult.resolvedTraversee ? null : rouletteResult.resolvedColor,
+      wall: chosen.wall,
+      number: chosen.number,
+      at: new Date().toISOString(),
+    };
+    const nextRecent = addRouletteCompletion(selfProfileRef.current.rouletteRecentChallenges, entry);
+    setOpenRoulette(false);
+    try {
+      await updateDoc(doc(db, 'users', user.uid), {
+        rouletteChallengesCompleted: increment(1),
+        rouletteRecentChallenges: nextRecent,
+      });
+      // Compteur : mise à jour fonctionnelle (toujours juste) ; liste : `nextRecent` recomposé.
+      setSelfProfile((prev) => ({
+        ...prev,
+        rouletteChallengesCompleted: (prev.rouletteChallengesCompleted || 0) + 1,
+        rouletteRecentChallenges: nextRecent,
+      }));
+      const shownCount = (selfProfileRef.current.rouletteChallengesCompleted || 0) + 1;
+      setSuccess(`Bravo, ${shownCount}ᵉ défi Roulette relevé !`);
+    } catch (err) {
+      console.error('Erreur lors de l\'enregistrement du défi Roulette relevé:', err);
+      setError("Le défi n'a pas pu être enregistré — réessaie dans un instant.");
     }
   };
 
@@ -794,12 +855,18 @@ const ClientDaily: React.FC = () => {
           Roulette de la mort ☠️
         </Button>
       </Box>
+      {(selfProfile.rouletteChallengesCompleted || 0) > 0 && (
+        <Typography variant="body2" color="text.secondary" sx={{ mt: -2, mb: 3 }}>
+          🎲 {selfProfile.rouletteChallengesCompleted} défi{(selfProfile.rouletteChallengesCompleted || 0) > 1 ? 's' : ''} Roulette relevé{(selfProfile.rouletteChallengesCompleted || 0) > 1 ? 's' : ''}
+        </Typography>
+      )}
       <RouletteDialog
         open={openRoulette}
         isDeath={rouletteIsDeath}
         result={rouletteResult}
         onClose={() => setOpenRoulette(false)}
         onRelancer={handleRelancerRoulette}
+        onValider={handleValiderRoulette}
       />
 
       <FormControl size="small" sx={{ mb: 3, minWidth: 220 }}>

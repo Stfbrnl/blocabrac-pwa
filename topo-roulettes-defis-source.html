@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<title>Topo Bloc Roulette &amp; Défis entre potes — édition papier</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Dosis:wght@400;500;600;700&display=swap');
+
+  :root {
+    --green: #27B142;
+    --green-dark: #177038;
+    --ink: #292929;
+    --muted: #545353;
+    --line: #dfe6e0;
+    --bg-soft: #eef8f0;
+    --warn-bg: #fbeee0;
+    --warn-line: #d98c2e;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: 'Dosis', 'Helvetica Neue', Arial, sans-serif;
+    color: var(--ink);
+    font-size: 13.5px;
+    line-height: 1.5;
+  }
+  .page {
+    width: 210mm;
+    min-height: 297mm;
+    padding: 18mm 16mm;
+    page-break-after: always;
+    position: relative;
+  }
+  .page:last-child { page-break-after: auto; }
+
+  .eyebrow {
+    font-family: monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+  h1 { font-family: Georgia, 'Times New Roman', serif; font-size: 32px; margin: 8px 0 14px; }
+  h2.section-title { font-size: 19px; font-weight: 600; margin: 0 0 2px; }
+  h3.sub { font-size: 15px; font-weight: 600; color: var(--green-dark); margin: 20px 0 6px; }
+
+  .pill-row { display: flex; gap: 10px; flex-wrap: wrap; margin: 18px 0; }
+  .pill {
+    border: 1px solid var(--green);
+    color: var(--green-dark);
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-size: 12.5px;
+    font-family: monospace;
+  }
+
+  .callout {
+    border-left: 3px solid var(--green);
+    background: var(--bg-soft);
+    padding: 12px 16px;
+    margin: 16px 0;
+    break-inside: avoid;
+    page-break-inside: avoid;
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+  .warn {
+    border-left: 3px solid var(--warn-line);
+    background: var(--warn-bg);
+    padding: 10px 14px;
+    margin: 10px 0;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .warn b { display: block; color: #8a4d0e; margin-bottom: 3px; font-size: 13px; }
+  .warn p { margin: 0; color: var(--muted); font-size: 12.5px; }
+
+  table.cat { width: 100%; border-collapse: collapse; margin: 8px 0 4px; }
+  table.cat tr { break-inside: avoid; page-break-inside: avoid; }
+  table.cat td { border-top: 1px solid var(--line); padding: 7px 8px; vertical-align: top; font-size: 12px; }
+  table.cat td.id { width: 42px; font-family: monospace; color: var(--green-dark); font-weight: 600; }
+  table.cat td.lvl { width: 92px; color: var(--muted); font-size: 11px; }
+  table.cat tr:first-child td { border-top: none; }
+
+  .fam-head { display: flex; align-items: baseline; gap: 10px; margin: 18px 0 2px; }
+  .fam-head .letter { font-family: monospace; font-size: 15px; font-weight: 700; color: var(--green-dark); }
+  .fam-head .name { font-size: 15px; font-weight: 600; }
+  .fam-head .tag { font-size: 11px; color: var(--muted); font-family: monospace; }
+
+  .scale { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 12px; }
+  .scale th { text-align: left; font-family: monospace; font-size: 10.5px; text-transform: uppercase; color: var(--muted); padding: 4px 8px; border-bottom: 1px solid var(--ink); }
+  .scale td { padding: 6px 8px; border-bottom: 1px solid var(--line); }
+
+  .toc { list-style: none; margin: 0; padding: 0; }
+  .toc li { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed var(--line); font-size: 13px; }
+  .toc .num { font-family: monospace; color: var(--green-dark); width: 28px; display: inline-block; margin-right: 14px; }
+  .toc .desc { color: var(--muted); font-size: 12px; }
+
+  footer.pagefoot {
+    position: absolute;
+    bottom: 14mm;
+    left: 16mm;
+    right: 16mm;
+    display: flex;
+    justify-content: space-between;
+    border-top: 1px solid var(--line);
+    padding-top: 6px;
+    font-size: 10.5px;
+    color: var(--muted);
+  }
+  .cover-logo-wrap {
+    width: 64px;
+    height: 64px;
+    border-radius: 14px;
+    background: var(--green);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 10px;
+    font-size: 34px;
+  }
+</style>
+</head>
+<body>
+
+<!-- PAGE 1 : COUVERTURE -->
+<section class="page">
+  <div class="cover-logo-wrap">🎲</div>
+  <div class="eyebrow">Guide interne — équipe de la salle · édition papier</div>
+  <h1>Bloc Roulette &amp; Défis entre potes</h1>
+  <p style="max-width:560px; color:var(--muted); font-size:14px;">
+    Complément au Topo Blocabrac. Ce document liste <b>toutes</b> les propositions de
+    Bloc Roulette et <b>toutes</b> les structures de Défis entre potes, telles qu'elles
+    tournent réellement dans l'application, pour que l'équipe puisse répondre aux
+    questions des grimpeurs et animer autour de ces fonctions.
+  </p>
+  <div class="pill-row">
+    <div class="pill">46 propositions de roulette</div>
+    <div class="pill">+ roulette de la mort</div>
+    <div class="pill">4 structures de défis</div>
+    <div class="pill">Tirage 100 % gratuit</div>
+  </div>
+  <div class="callout">
+    Le contenu reflète le fonctionnement au moment de l'impression — en cas de doute,
+    vérifier dans l'application avant d'affirmer quoi que ce soit à un grimpeur.
+    Version de l'application au moment de la génération : V2.55.
+  </div>
+  <footer class="pagefoot">
+    <span>Topo Bloc Roulette &amp; Défis — édition papier</span>
+    <span>Généré le 6 septembre 2026</span>
+  </footer>
+</section>
+
+<!-- PAGE 2 : SOMMAIRE + PRINCIPES -->
+<section class="page">
+  <div class="eyebrow">Sommaire</div>
+  <h2 class="section-title" style="margin-bottom:14px;">Dans ce document</h2>
+  <ul class="toc">
+    <li><span><span class="num">01</span>Comment marche la Bloc Roulette</span><span class="desc">tirage, niveaux, familles, validation</span></li>
+    <li><span><span class="num">02</span>Toutes les propositions</span><span class="desc">catalogue complet par famille</span></li>
+    <li><span><span class="num">03</span>Traversées &amp; roulette de la mort</span><span class="desc">barèmes par niveau</span></li>
+    <li><span><span class="num">04</span>Défis entre potes</span><span class="desc">les 4 structures</span></li>
+    <li><span><span class="num">05</span>Points de vigilance équipe</span><span class="desc">à connaître avant d'animer</span></li>
+  </ul>
+
+  <div class="eyebrow" style="margin-top:26px;">01 · Comment ça marche</div>
+  <h2 class="section-title">La Bloc Roulette</h2>
+  <p style="color:var(--muted); font-size:12.5px; max-width:620px;">
+    Depuis « Mon Blocabrac quotidien », le bouton 🎲 tire un défi au hasard dans un
+    catalogue fixe. Le tirage et « Relancer » ne coûtent <b>aucune</b> lecture ni écriture :
+    tout ce dont l'app a besoin (blocs du jour, niveau du grimpeur, murs fréquentés) est
+    déjà chargé. La fonction est donc entièrement gratuite pour la salle.
+  </p>
+
+  <h3 class="sub">Le niveau proposé</h3>
+  <table class="scale">
+    <tr><th>Tirage</th><th>Fréquence</th><th>Couleur visée</th></tr>
+    <tr><td>Un cran sous le niveau max</td><td>≈ 70 %</td><td>socle, on consolide</td></tr>
+    <tr><td>Au niveau max</td><td>≈ 20 %</td><td>exigeant</td></tr>
+    <tr><td>Un cran au-dessus</td><td>≈ 10 %</td><td>progression — <b>essai partiel uniquement</b></td></tr>
+  </table>
+  <p style="color:var(--muted); font-size:12px;">
+    Cas limites : au niveau le plus bas, « un cran sous » reste au niveau courant ; au
+    niveau rose, « un cran au-dessus » est impossible → les défis de progression (famille E)
+    n'apparaissent pas. Deux défis (« sans prise de pied », « grimpe à une main ») visent
+    volontairement <b>deux</b> crans sous le max : la contrainte seule les rend déjà très durs.
+  </p>
+
+  <h3 class="sub">Anti-lassitude &amp; « déjà fait »</h3>
+  <p style="color:var(--muted); font-size:12.5px;">
+    Les ~10 dernières propositions tirées sont mémorisées sur l'appareil du grimpeur et
+    évitées au tirage suivant. Les défis qui parlent d'un bloc « pas encore fait » ne
+    connaissent que les validations de la <b>séance en cours</b> — d'où la formulation
+    « aujourd'hui » et jamais « jamais ».
+  </p>
+
+  <h3 class="sub">Valider un défi</h3>
+  <p style="color:var(--muted); font-size:12.5px;">
+    Bouton <b>« J'ai relevé le défi »</b> sur la carte (toutes familles). Il incrémente un
+    compteur personnel affiché sous les boutons Roulette et dans « Mes stats » (avec les
+    10 derniers défis). Le grimpeur peut préciser le bloc utilisé (mur + numéro), c'est
+    facultatif. <b>Ce n'est pas une validation de bloc</b> : classement, badges et niveau
+    ne bougent pas. Le compteur est privé (visible du seul grimpeur).
+  </p>
+  <footer class="pagefoot">
+    <span>Topo Bloc Roulette &amp; Défis — édition papier</span>
+    <span>01 · Principes</span>
+  </footer>
+</section>
+
+<!-- PAGE 3 : CATALOGUE A-C -->
+<section class="page">
+  <div class="eyebrow">02 · Catalogue complet</div>
+  <h2 class="section-title">Toutes les propositions de Bloc Roulette</h2>
+  <p style="color:var(--muted); font-size:12px;">
+    « {couleur} » est remplacé au tirage par la couleur visée ; « {mur} » / « n°{numéro} »
+    par le mur / le bloc résolus. La colonne « Niveau » ne figure que si l'accès est restreint.
+  </p>
+
+  <div class="fam-head"><span class="letter">A</span><span class="name">Socle</span><span class="tag">un cran sous le max · vérifiable</span></div>
+  <table class="cat">
+    <tr><td class="id">A1</td><td class="lvl"></td><td>Ton prochain bloc : {couleur} n°{numéro} sur {mur}.</td></tr>
+    <tr><td class="id">A2</td><td class="lvl"></td><td>Un bloc que tu n'as pas encore fait aujourd'hui.</td></tr>
+    <tr><td class="id">A3</td><td class="lvl"></td><td>Deux blocs d'affilée sur le même mur, sans t'asseoir.</td></tr>
+    <tr><td class="id">A4</td><td class="lvl"></td><td>Trois blocs, trois murs différents.</td></tr>
+    <tr><td class="id">A5</td><td class="lvl"></td><td>Le plus grand numéro de {couleur} que tu n'as pas encore fait aujourd'hui.</td></tr>
+    <tr><td class="id">A6</td><td class="lvl"></td><td>Un bloc posé cette semaine.</td></tr>
+  </table>
+
+  <div class="fam-head"><span class="letter">B</span><span class="name">Style</span><span class="tag">un cran sous le max · déclaratif</span></div>
+  <table class="cat">
+    <tr><td class="id">B7</td><td class="lvl"></td><td>Départ assis : au besoin, utilise les prises d'un bloc voisin pour rejoindre le premier mouvement assis.</td></tr>
+    <tr><td class="id">B8</td><td class="lvl"></td><td>Pieds silencieux : aucun bruit de pied, du départ à la fin.</td></tr>
+    <tr><td class="id">B9</td><td class="lvl"></td><td>Une seule fois par prise : interdit de repositionner une main.</td></tr>
+    <tr><td class="id">B10</td><td class="lvl"></td><td>Annonce chaque prise à voix haute avant de l'attraper.</td></tr>
+    <tr><td class="id">B11</td><td class="lvl"></td><td>Enchaîne sans jamais reposer les deux mains en même temps.</td></tr>
+    <tr><td class="id">B12</td><td class="lvl"></td><td>Repère tout le bloc depuis le sol, puis grimpe sans hésiter.</td></tr>
+    <tr><td class="id">B13</td><td class="lvl"></td><td>Termine en tenant la prise finale trois secondes, à trois doigts.</td></tr>
+    <tr><td class="id">B36</td><td class="lvl"></td><td>Touché-collé : à chaque pied, pose-le, décolle-le, repose-le au même endroit avant de pousser dessus.</td></tr>
+    <tr><td class="id">B37</td><td class="lvl">2 crans sous</td><td>Un bloc {couleur} sans aucune prise de pied : volumes, reliefs du mur et adhérence de semelle.</td></tr>
+    <tr><td class="id">B38</td><td class="lvl"></td><td>Un bloc {couleur} à deux doigts par main. Variante : garder une gourde / balle dans une main.</td></tr>
+    <tr><td class="id">B39</td><td class="lvl"></td><td>Un bloc {couleur} avec une technique imposée : cancan, lolotte, crochet de talon, contrepointe ou drapeau (définitions affichées sur la carte).</td></tr>
+    <tr><td class="id">B40</td><td class="lvl">2 crans sous</td><td>Un bloc {couleur} sans se servir d'une main — d'un côté puis de l'autre.</td></tr>
+    <tr><td class="id">B41</td><td class="lvl">≥ rouge</td><td>Un bloc {couleur} en déplaçant toujours les deux mains ensemble (ballant du bassin).</td></tr>
+    <tr><td class="id">B42</td><td class="lvl"></td><td>Un bloc {couleur} en expirant bruyamment et à fond à chaque mouvement, jamais d'apnée.</td></tr>
+    <tr><td class="id">B45</td><td class="lvl">≥ blanc</td><td>Un bloc {couleur} avec au moins un mouvement en Yaniro (figure 4) — définition affichée.</td></tr>
+    <tr><td class="id">B46</td><td class="lvl">≥ blanc</td><td>Un bloc {couleur} avec un départ en chauve-souris — définition + rappel sécurité affichés.</td></tr>
+  </table>
+
+  <div class="fam-head"><span class="letter">C</span><span class="name">Chronométré</span><span class="tag">un cran sous le max · déclaratif · chrono intégré</span></div>
+  <table class="cat">
+    <tr><td class="id">C14</td><td class="lvl"></td><td>Ce bloc en moins de 45 secondes, du départ à la prise finale.</td></tr>
+    <tr><td class="id">C15</td><td class="lvl"></td><td>Trois blocs en 10 minutes.</td></tr>
+    <tr><td class="id">C16</td><td class="lvl"></td><td>Le plus de blocs possible en 15 minutes.</td></tr>
+    <tr><td class="id">C17</td><td class="lvl"></td><td>Une minute de repos maximum entre deux essais, pendant 20 minutes.</td></tr>
+    <tr><td class="id">C44</td><td class="lvl">≥ rouge</td><td>40 s de grimpe / 20 s de repos, 6 fois, sur des blocs {couleur} faciles pour toi.</td></tr>
+  </table>
+  <footer class="pagefoot">
+    <span>Topo Bloc Roulette &amp; Défis — édition papier</span>
+    <span>02 · Catalogue (A–C)</span>
+  </footer>
+</section>
+
+<!-- PAGE 4 : CATALOGUE D-G -->
+<section class="page">
+  <div class="fam-head"><span class="letter">D</span><span class="name">Mur délaissé</span><span class="tag">un cran sous le max · s'appuie sur les murs fréquentés</span></div>
+  <table class="cat">
+    <tr><td class="id">D18</td><td class="lvl"></td><td>Ton mur le moins fréquenté en ce moment : {mur}. Un bloc dessus.</td></tr>
+    <tr><td class="id">D19</td><td class="lvl"></td><td>Un bloc sur chacun des trois murs que tu délaisses le plus.</td></tr>
+    <tr><td class="id">D20</td><td class="lvl"></td><td>Mur du jour : {mur}. Un bloc de chaque couleur jusqu'à ton niveau.</td></tr>
+    <tr><td class="id">D21</td><td class="lvl"></td><td>Cinq murs consécutifs dans l'ordre de la salle, un bloc sur chacun.</td></tr>
+    <tr><td class="id">D22</td><td class="lvl"></td><td>Le mur que tu n'as pas touché depuis le plus longtemps.</td></tr>
+  </table>
+
+  <div class="fam-head"><span class="letter">E</span><span class="name">Progression</span><span class="tag">un cran AU-DESSUS · essai partiel · jamais une validation</span></div>
+  <table class="cat">
+    <tr><td class="id">E23</td><td class="lvl"></td><td>Trouve un bloc {couleur} et fais-en les trois premiers mouvements.</td></tr>
+    <tr><td class="id">E24</td><td class="lvl"></td><td>Un bloc {couleur} : réussis le départ et le premier mouvement, c'est tout.</td></tr>
+    <tr><td class="id">E25</td><td class="lvl"></td><td>Repère le mouvement dur d'un bloc {couleur} et réussis-le isolément.</td></tr>
+    <tr><td class="id">E26</td><td class="lvl"></td><td>Un bloc {couleur} : quatre mouvements n'importe où dans le bloc.</td></tr>
+    <tr><td class="id">E35</td><td class="lvl"></td><td>Un bloc {couleur} (max+1), pieds libres : appuis de pied autorisés sur les prises des autres blocs du mur. Objectif : le sortir en entier.</td></tr>
+  </table>
+
+  <div class="fam-head"><span class="letter">F</span><span class="name">Sans échec</span><span class="tag">vérifiable via le nombre d'essais</span></div>
+  <table class="cat">
+    <tr><td class="id">F27</td><td class="lvl"></td><td>Flash : ce bloc au premier essai.</td></tr>
+    <tr><td class="id">F28</td><td class="lvl"></td><td>Trois flashs d'affilée, deux niveaux en dessous du tien.</td></tr>
+    <tr><td class="id">F29</td><td class="lvl"></td><td>Cinq blocs de {couleur}, aucun échec autorisé. Un raté et le défi tombe.</td></tr>
+    <tr><td class="id">F30</td><td class="lvl">au niveau max</td><td>Un bloc à ton niveau max, essais illimités, jusqu'à le sortir.</td></tr>
+  </table>
+
+  <div class="fam-head"><span class="letter">G</span><span class="name">Créatif &amp; traversées</span><span class="tag">déclaratif</span></div>
+  <table class="cat">
+    <tr><td class="id">G31</td><td class="lvl"></td><td>Invente un bloc : compose une ligne multi-couleurs, annonce ta cotation, fais valider par un ami.</td></tr>
+    <tr><td class="id">G32</td><td class="lvl"></td><td>Traversée — texte composé selon le niveau du grimpeur (barème page suivante).</td></tr>
+    <tr><td class="id">G33</td><td class="lvl"></td><td>Le grand tour : la salle entière dans l'ordre des murs, sans toucher le sol.</td></tr>
+    <tr><td class="id">G34</td><td class="lvl"></td><td>Refais un bloc que tu connais en t'interdisant une prise sur deux.</td></tr>
+    <tr><td class="id">G43</td><td class="lvl">≥ bleu</td><td>Choisis 3 blocs {couleur} sur le même mur, lis-les du sol, annonce l'enchaînement à voix haute, réalise-le sans repos.</td></tr>
+  </table>
+  <footer class="pagefoot">
+    <span>Topo Bloc Roulette &amp; Défis — édition papier</span>
+    <span>02 · Catalogue (D–G)</span>
+  </footer>
+</section>
+
+<!-- PAGE 5 : TRAVERSÉES + ROULETTE DE LA MORT -->
+<section class="page">
+  <div class="eyebrow">03 · Barèmes par niveau</div>
+  <h2 class="section-title">Traversées de murs (G32)</h2>
+  <p style="color:var(--muted); font-size:12.5px;">
+    Le défi G32 s'adapte au niveau constaté du grimpeur. Dans tous les cas : sans poser le
+    pied au sol. Barème fixé avec l'utilisateur le 6 septembre 2026.
+  </p>
+  <table class="scale">
+    <tr><th>Niveau du grimpeur</th><th>Contrainte</th></tr>
+    <tr><td>Jaune · Vert · Bleu</td><td>1 mur</td></tr>
+    <tr><td>Violet</td><td>2 murs consécutifs</td></tr>
+    <tr><td>Rouge</td><td>3 murs</td></tr>
+    <tr><td>Noir</td><td>3 murs consécutifs, sans utiliser de prise de blocs jaunes</td></tr>
+    <tr><td>Blanc</td><td>4 murs consécutifs, sans prise de blocs jaunes</td></tr>
+    <tr><td>Rose</td><td>4 murs consécutifs, sans prise de blocs jaunes ni verts</td></tr>
+  </table>
+  <p style="color:var(--muted); font-size:12px;">
+    G33 (« le grand tour ») ne change pas : la salle entière dans l'ordre des murs, sans
+    toucher le sol, quel que soit le niveau.
+  </p>
+
+  <h2 class="section-title" style="margin-top:26px;">Roulette de la mort ☠️</h2>
+  <p style="color:var(--muted); font-size:12.5px;">
+    Bouton séparé, à part du catalogue : jamais tirée par la roulette normale, jamais
+    soumise à l'anti-lassitude (« son intérêt tient à sa rareté »). Toujours un cran
+    au-dessus du niveau, <b>sans repli</b> : s'il n'existe aucun bloc de cette couleur,
+    le message est « pas de bloc disponible » plutôt qu'un rabattage silencieux.
+  </p>
+  <div class="callout">
+    <b style="color:var(--green-dark);">Énoncé actuel :</b> « Un bloc {couleur} (ton niveau max+1).
+    Tu as le droit d'ajouter 1 ou 2 prises de ton choix, n'importe où sur le mur — mains ou
+    pieds, n'importe quelle couleur. Choisis-les bien, puis sors le bloc en entier. »
+  </div>
+  <p style="color:var(--muted); font-size:12px;">
+    C'est un défi de famille E (sortie assistée d'un bloc au-dessus du niveau) : « J'ai
+    relevé le défi » compte dans le compteur, mais <b>rien</b> n'est enregistré comme une
+    validation de bloc.
+  </p>
+  <footer class="pagefoot">
+    <span>Topo Bloc Roulette &amp; Défis — édition papier</span>
+    <span>03 · Barèmes</span>
+  </footer>
+</section>
+
+<!-- PAGE 6 : DÉFIS ENTRE POTES -->
+<section class="page">
+  <div class="eyebrow">04 · Entre amis</div>
+  <h2 class="section-title">Défis entre potes</h2>
+  <p style="color:var(--muted); font-size:12.5px; max-width:620px;">
+    Accessible depuis « Potes de grimpe ». 2 à 6 participants, uniquement des amis déjà
+    acceptés (pas d'invitation séparée : être ami suffit). Aucune notification — un défi
+    se découvre en ouvrant la page. Le créateur peut supprimer son défi à tout moment.
+  </p>
+
+  <h3 class="sub">Seuil</h3>
+  <p style="color:var(--muted); font-size:12.5px;">
+    Premier à valider N blocs de la couleur cible. La cible est soit une couleur fixe,
+    soit « mon niveau max » ou « mon niveau max −1 », résolue <b>pour chaque participant</b>
+    selon son propre niveau (deux grimpeurs de niveaux différents peuvent donc s'affronter
+    équitablement). Progression automatique depuis « Mon Blocabrac quotidien ». « Clôturer »
+    dès qu'un gagnant est atteignable, cliquable par n'importe quel participant.
+  </p>
+
+  <h3 class="sub">Fenêtre</h3>
+  <p style="color:var(--muted); font-size:12.5px;">
+    Le plus de progrès sur une période donnée : en nombre de blocs, ou en points de
+    classement. Progression automatique. Se clôture toute seule à l'échéance dès qu'un
+    participant rouvre la page.
+  </p>
+
+  <h3 class="sub">Bloc désigné</h3>
+  <p style="color:var(--muted); font-size:12.5px;">
+    Meilleur score sur un seul et même bloc choisi à la création. Ne réagit qu'à ce bloc
+    précis et seulement au succès (un échec ne fait jamais baisser un meilleur score déjà
+    enregistré). « Clôturer » cliquable par n'importe quel participant.
+  </p>
+
+  <h3 class="sub">Déclaratif</h3>
+  <p style="color:var(--muted); font-size:12.5px;">
+    Traversée, bloc inventé, sortie en un temps donné… Pas de gagnant calculé : chacun
+    coche « C'est fait » lui-même (confiance donnée aux grimpeurs, comme pour la roulette
+    et le classement de saison). Fin par un bouton « Terminer le défi » manuel.
+  </p>
+  <footer class="pagefoot">
+    <span>Topo Bloc Roulette &amp; Défis — édition papier</span>
+    <span>04 · Défis entre potes</span>
+  </footer>
+</section>
+
+<!-- PAGE 7 : VIGILANCE -->
+<section class="page">
+  <div class="eyebrow">05 · À connaître avant d'animer</div>
+  <h2 class="section-title">Points de vigilance équipe</h2>
+
+  <div class="warn"><b>Un défi « un cran au-dessus » n'est jamais une validation</b><p>Familles E et roulette de la mort : le grimpeur ne fait qu'un essai partiel (quelques mouvements, pieds libres, prises ajoutées). « J'ai relevé le défi » incrémente un compteur ludique — classement, badges et niveau auto ne bougent pas. Ne pas laisser croire qu'on « valide un bloc au-dessus de son niveau ».</p></div>
+
+  <div class="warn"><b>« Pas encore fait aujourd'hui », jamais « jamais fait »</b><p>L'app ne connaît que les blocs ouverts pendant la séance en cours. Un défi peut donc retomber sur un bloc déjà validé lors d'une séance précédente — c'est voulu, et les textes le disent.</p></div>
+
+  <div class="warn"><b>Murs enfants</b><p>Traversées et grands tours peuvent passer par la Réta d'initiation / la Caverne des petits. Un rappel s'affiche avant le tirage, mais vérifier qu'aucun cours n'occupe le secteur avant de s'y engager.</p></div>
+
+  <div class="warn"><b>Le compteur « défis relevés » est privé</b><p>Visible uniquement par le grimpeur lui-même (dans « Mes stats »). Les règles de sécurité interdisent au staff de consulter les données d'un autre compte — inutile de chercher un tableau de bord équipe, il n'y en a pas.</p></div>
+
+  <div class="warn"><b>Composer un bloc « approximatif »</b><p>Pour chaque défi, l'app suggère de prendre un bloc existant du bon niveau OU d'en composer un de niveau équivalent avec les prises de plusieurs blocs d'un même mur. C'est une consigne assumée, pas un contournement : l'important est la contrainte de style, pas le numéro du bloc.</p></div>
+
+  <div class="warn"><b>Cotations « famille F » à deux niveaux en dessous</b><p>F28 demande des flashs « deux niveaux sous le tien » : sur ces défis la couleur affichée « Niveau visé » peut être plus haute que ce que dit le texte — le texte fait foi.</p></div>
+  <footer class="pagefoot">
+    <span>Topo Bloc Roulette &amp; Défis — édition papier</span>
+    <span>05 · Vigilance</span>
+  </footer>
+</section>
+
+</body>
+</html>

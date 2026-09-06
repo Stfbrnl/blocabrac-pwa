@@ -47,11 +47,15 @@ const sections: HelpSection[] = [
     title: 'Bloc Roulette',
     intro: 'Un tirage ludique pour varier votre séance, accessible depuis « Mon Blocabrac quotidien ».',
     points: [
-      'Le bouton 🎲 « Bloc Roulette » tire un défi au hasard : un bloc précis, une contrainte de style, un chronométrage, une exploration des murs que vous fréquentez le moins…',
+      'Le bouton 🎲 « Bloc Roulette » tire un défi au hasard : un bloc précis, une contrainte de style, une technique imposée, un chronométrage, une exploration des murs que vous fréquentez le moins, une traversée de murs…',
       'Le niveau proposé s\'ajuste au vôtre : le plus souvent un cran en dessous de votre niveau maximum, parfois à votre niveau, plus rarement un cran au-dessus.',
-      'Sur un défi « un cran au-dessus », il ne s\'agit que d\'un essai partiel (quelques mouvements) — rien n\'est enregistré comme une validation, votre classement et vos statistiques ne bougent pas.',
+      'Certains défis imposent une technique précise (cancan, lolotte, crochet de talon, Yaniro, départ chauve-souris…) : sa définition s\'affiche avec le défi. Les plus pointus n\'apparaissent qu\'à partir d\'un certain niveau.',
+      'Pour chaque défi, vous pouvez prendre un bloc existant du bon niveau ou en composer un de niveau équivalent avec les prises de plusieurs blocs d\'un même mur.',
+      'Les défis « un cran au-dessus » sont assistés (quelques mouvements seulement, pieds libres, ou une ou deux prises ajoutées) — rien n\'est enregistré comme une validation, votre classement et vos statistiques ne bougent pas.',
+      'La traversée de murs s\'adapte à votre niveau : d\'un seul mur au niveau bleu jusqu\'à quatre murs consécutifs sans prises jaunes ni vertes au niveau rose.',
       '« Relancer » retire une nouvelle proposition ; « Fermer » referme la carte sans rien changer.',
-      'Le bouton séparé ☠️ « Roulette de la mort » propose un bloc entier, un cran au-dessus de votre niveau, pour les envies de défi plus corsées.',
+      '« J\'ai relevé le défi » enregistre le défi comme réussi : le compteur s\'affiche sous les boutons Roulette et dans « Mes stats » (avec vos 10 derniers défis). Vous pouvez préciser le bloc utilisé (mur + numéro), c\'est facultatif. Cela ne compte pas comme une validation de bloc : classement, badges et niveau ne bougent pas.',
+      'Le bouton séparé ☠️ « Roulette de la mort » propose un bloc un cran au-dessus de votre niveau, que vous sortez en vous autorisant une ou deux prises supplémentaires de votre choix sur le mur.',
     ],
   },
   {

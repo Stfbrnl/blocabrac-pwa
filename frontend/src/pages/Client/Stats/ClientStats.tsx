@@ -50,6 +50,7 @@ import { jsPDF } from 'jspdf';
 import * as html2canvas from 'html2canvas';
 import { logoAssetUrl as logo } from '../../../config/gymConfig';
 import { computeBadgeActive } from '../../../utils/badgeActivation';
+import type { RouletteCompletion } from '../../../utils/roulette';
 
 // Couleurs des niveaux
 const levelColors: Record<string, string> = {
@@ -146,6 +147,10 @@ const ClientStats: React.FC = () => {
   const [diplomas, setDiplomas] = useState<Diploma[]>([]);
   // Genre du client connecté, récupéré depuis Firestore "users"
   const [userGender, setUserGender] = useState<string>('Homme');
+  // ✅ Bloc Roulette (V2.55) : compteur + 10 derniers défis relevés, lus depuis le doc `users`
+  // déjà chargé ici — aucune lecture supplémentaire.
+  const [rouletteCount, setRouletteCount] = useState<number>(0);
+  const [rouletteRecent, setRouletteRecent] = useState<RouletteCompletion[]>([]);
 
   // Pour chaque couleur : nombre de blocs DISTINCTS encore présents en salle
   // que le client a validés (tous historiques confondus, indépendamment du filtre de période)
@@ -206,6 +211,8 @@ const ClientStats: React.FC = () => {
         const userData = userDoc.exists() ? userDoc.data() : null;
         if (userData) {
           setUserGender(userData.gender || 'Homme');
+          setRouletteCount(userData.rouletteChallengesCompleted || 0);
+          setRouletteRecent(Array.isArray(userData.rouletteRecentChallenges) ? userData.rouletteRecentChallenges : []);
         }
 
         // Récupérer les exercices
@@ -812,6 +819,33 @@ const ClientStats: React.FC = () => {
           )}
         </Box>
       </Paper>
+
+      {/* ✅ Bloc Roulette (V2.55) : défis relevés. Données déjà dans le doc `users` chargé
+          plus haut — aucune lecture Firestore en plus. Masqué tant qu'aucun défi relevé. */}
+      {rouletteCount > 0 && (
+        <Paper sx={{ p: 2, mb: 2 }}>
+          <Typography variant="h6" sx={{ mb: 1 }}>
+            🎲 Défis Roulette relevés : {rouletteCount}
+          </Typography>
+          {rouletteRecent.length > 0 && (
+            <>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                Tes {rouletteRecent.length} derniers :
+              </Typography>
+              <Box component="ul" sx={{ m: 0, pl: 3 }}>
+                {rouletteRecent.map((c, i) => (
+                  <li key={`${c.proposalId}-${c.at}-${i}`}>
+                    <Typography variant="body2">
+                      {c.label}
+                      {c.wall && ` — ${c.wall}${c.number ? ` n°${c.number}` : ''}`}
+                    </Typography>
+                  </li>
+                ))}
+              </Box>
+            </>
+          )}
+        </Paper>
+      )}
 
       {/* Onglets — scrollables sur mobile pour ne jamais être tronqués */}
       <Paper sx={{ p: 2, mb: 2 }}>

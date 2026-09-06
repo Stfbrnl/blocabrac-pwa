@@ -148,6 +148,34 @@ async function main() {
     assert(wallCounts?.[WALL] === 1, `wallCounts.${WALL} attendu 1, obtenu ${JSON.stringify(wallCounts)}`);
   });
 
+  await step('Client : Bloc Roulette -> "J\'ai relevé le défi"', async () => {
+    // ✅ Troisième compteur incrémental du projet (après colorCounts/wallCounts) :
+    // PROCESSUS-erreurs-avalees.md §4 impose une assertion e2e sur sa valeur résultante.
+    await gotoAndWait(clientP, '/client/daily', 'Mon Blocabrac quotidien');
+    await clientP.getByRole('button', { name: 'Bloc Roulette', exact: true }).click();
+    const valider = clientP.getByRole('button', { name: "J'ai relevé le défi" });
+    await valider.waitFor({ timeout: 10000 });
+    // Champ facultatif "quel bloc ?" : on le renseigne pour couvrir aussi ce chemin.
+    await clientP.getByRole('button', { name: 'Préciser le bloc utilisé (facultatif)' }).click();
+    await clientP.getByLabel('Mur').click();
+    await clientP.getByRole('option', { name: WALL, exact: true }).click();
+    await clientP.getByLabel('N° du bloc').fill(BOULDER_NUMBER);
+    await valider.click();
+    await clientP.getByText(/Bravo, \d+ᵉ défi Roulette relevé/).waitFor({ timeout: 10000 });
+  });
+
+  await step('Backend : users.rouletteChallengesCompleted + rouletteRecentChallenges écrits', async () => {
+    const { uid } = await adminAuth.getUserByEmail(CLIENT_EMAIL);
+    const data = (await adminDb.collection('users').doc(uid).get()).data() || {};
+    assert(data.rouletteChallengesCompleted === 1,
+      `rouletteChallengesCompleted attendu 1, obtenu ${JSON.stringify(data.rouletteChallengesCompleted)}`);
+    const recent = data.rouletteRecentChallenges;
+    assert(Array.isArray(recent) && recent.length === 1,
+      `rouletteRecentChallenges attendu 1 entrée, obtenu ${JSON.stringify(recent)}`);
+    assert(recent[0].wall === WALL && String(recent[0].number) === BOULDER_NUMBER,
+      `l'entrée doit porter le bloc précisé, obtenu ${JSON.stringify(recent[0])}`);
+  });
+
   await step('Classement en continu : le client validé apparaît (opt-in)', async () => {
     await gotoAndWait(clientP, '/client/classement', 'Classement des grimpeurs');
     await clientP.getByText('Dali Ente', { exact: false }).waitFor({ timeout: 10000 });
