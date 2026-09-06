@@ -7,6 +7,7 @@ import './styles/fonts.css';
 
 // Composants partagés
 import Navbar from './components/Navbar';
+import UpdateBanner from './components/UpdateBanner';
 import AppRoutes from './AppRoutes';
 import { formattedAppVersion, buildDetail } from './config/appVersion';
 
@@ -32,6 +33,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       <BrowserRouter>
         <AuthProvider>
           <Navbar />
+          <UpdateBanner />
           <AppRoutes />
         </AuthProvider>
       </BrowserRouter>

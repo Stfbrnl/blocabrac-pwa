@@ -128,6 +128,15 @@ const sections: HelpSection[] = [
       'Activez ou désactivez votre apparition dans le classement des grimpeurs.',
     ],
   },
+  {
+    title: 'Nouvelle version disponible',
+    intro: 'Un petit bandeau apparaît en bas de l\'écran quand l\'application a été mise à jour.',
+    points: [
+      'Cliquez sur « Mettre à jour » pour recharger avec la dernière version — c\'est instantané et vous ne perdez rien.',
+      '« Plus tard » referme le bandeau ; la mise à jour s\'appliquera de toute façon au prochain démarrage complet de l\'application.',
+      'Si vous n\'êtes pas sûr d\'avoir la dernière version, le numéro (V…) est affiché en haut de chaque page, à côté du logo.',
+    ],
+  },
 ];
 
 const ClientHelp: React.FC = () => {

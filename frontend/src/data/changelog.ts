@@ -11,6 +11,16 @@ export interface ChangelogEntry {
 // tout l'historique ici, l'historique complet vit dans les commits git.
 export const changelog: ChangelogEntry[] = [
   {
+    version: '2.57',
+    date: '2026-09-06',
+    title: 'Mise à jour de l\'application en un clic',
+    items: [
+      'Quand une nouvelle version est déployée, un bandeau « Une nouvelle version est disponible » apparaît désormais en bas de l\'écran.',
+      'Un clic sur « Mettre à jour » recharge l\'application avec la dernière version — fini de vider le cache ou de fermer tous les onglets.',
+      'L\'application vérifie aussi les mises à jour toute seule quand vous la rouvrez après un moment.',
+    ],
+  },
+  {
     version: '2.56',
     date: '2026-09-06',
     title: 'Classement de saison : redémarrage à venir',

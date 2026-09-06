@@ -1,4 +1,5 @@
 /// <reference types="vite/client" />
+/// <reference types="vite-plugin-pwa/react" />
 
 // ✅ Injecté au build par vite.config.ts (define), depuis package.json et git —
 // voir src/config/appVersion.ts pour l'utilisation.
