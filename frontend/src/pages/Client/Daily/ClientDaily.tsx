@@ -322,9 +322,14 @@ const ClientDaily: React.FC = () => {
   }, [user, loadingAuth]);
 
   // ✅ Classement de saison : fenêtre lue une seule fois au montage (voir
-  // `seasonWindowRef` ci-dessus). Une config absente ou incomplète (admin n'a jamais
-  // réglé `app_config/classement_saison`) laisse `seasonWindowRef` à `null` — aucune
-  // validation ne compte alors pour la saison, sans erreur ni blocage de la page.
+  // `seasonWindowRef` ci-dessus). Une config absente/incomplète (admin n'a jamais réglé
+  // `app_config/classement_saison`) OU une saison clôturée (`cloturee: true`, en attente
+  // de reconfiguration — jusqu'à 7 jours de battement) laisse `seasonWindowRef` à `null` :
+  // aucune validation ne compte alors pour la saison. Sans le test `cloturee`, éditer
+  // pendant ce battement une validation dont le `createdAt` tombe dans l'ancienne fenêtre
+  // repeuplerait des compteurs qu'on vient de remettre à zéro (retour ClaudeNav 06/09,
+  // §1) — et la réconciliation l'entérinerait. Même garde-fou que `loadSeasonWindow()`
+  // côté script (`if (data.cloturee) return null`).
   useEffect(() => {
     if (!user || loadingAuth) return;
     const fetchSeasonWindow = async () => {
@@ -332,7 +337,7 @@ const ClientDaily: React.FC = () => {
         const snap = await getDoc(doc(db, 'app_config', 'classement_saison'));
         if (snap.exists()) {
           const data = snap.data();
-          if (data.debut && data.fin) {
+          if (data.debut && data.fin && data.cloturee !== true) {
             seasonWindowRef.current = { debut: data.debut, fin: data.fin };
           }
         }
@@ -648,6 +653,7 @@ const ClientDaily: React.FC = () => {
     // bloc (essais corrigés, ou dé-validation) ne doit PAS toucher `season.*`, sinon le
     // score descendrait sous le crédit de départ pour une validation jamais comptée dans
     // la fenêtre. Une validation faite aujourd'hui a `createdAt` = aujourd'hui → comptée.
+    // (`seasonWindowRef` est déjà `null` si la saison est clôturée — voir `fetchSeasonWindow`.)
     const seasonWindow = seasonWindowRef.current;
     if (seasonWindow && isWithinSeasonWindow(resultCreatedAt, seasonWindow.debut, seasonWindow.fin)) {
       delta.seasonScoreDelta = scoreDelta;

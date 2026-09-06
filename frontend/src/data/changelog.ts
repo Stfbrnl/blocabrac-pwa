@@ -13,12 +13,12 @@ export const changelog: ChangelogEntry[] = [
   {
     version: '2.56',
     date: '2026-09-06',
-    title: 'Classement de saison remis à plat',
+    title: 'Classement de saison : redémarrage à venir',
     items: [
-      'Le classement de saison a été redémarré : il repart de vos validations actuelles des blocs encore posés — rien à revalider, votre nombre d\'essais d\'origine est conservé.',
-      'À partir de maintenant, votre score de saison ne redescend plus quand un mur change : les points acquis restent acquis.',
-      'Votre classement général (à vie) et vos badges ne sont pas remis à zéro. Au passage, il ne perd plus de points quand un mur change : un bloc que vous avez validé reste acquis même s\'il est retiré — certains scores vont donc légèrement remonter.',
-      'Ce redémarrage sert à rendre la course à la Finale équitable pendant le déploiement de l\'appli, tant que peu de grimpeurs y sont encore inscrits.',
+      'Le classement de saison va être redémarré à la mi-septembre, pour rendre la course à la Finale équitable pendant le déploiement de l\'appli — tant que peu de grimpeurs y sont encore inscrits.',
+      'Il repartira de vos validations des blocs encore en place : rien à revalider, votre nombre d\'essais d\'origine sera conservé. Votre classement général (à vie) et vos badges ne sont pas concernés.',
+      'À partir du redémarrage, votre score de saison ne redescendra plus quand un mur change : les points acquis resteront acquis.',
+      'Déjà en place : les points des blocs retirés ne sont plus déduits de votre score général — certains scores augmentent en conséquence.',
     ],
   },
   {

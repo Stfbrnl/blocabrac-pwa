@@ -58,17 +58,24 @@ const EXPECTED = {
   'climber.d.restart@blocabrac.test': { score: 450, colorCounts: { vert: 1, rouge: 1 } },
 };
 
+async function login(page, email) {
+  await page.goto(`${BASE_URL}/login`);
+  await page.locator('#email').fill(email);
+  await page.locator('#password').fill(PASSWORD);
+  await page.getByRole('button', { name: 'Se connecter' }).click();
+  await page.waitForURL((u) => u.pathname === '/', { timeout: 10000 });
+}
+
 async function main() {
   const browser = await chromium.launch();
   const adminP = await (await browser.newContext()).newPage();
-  adminP.on('pageerror', (e) => console.log(`   [pageerror] ${e.message}`));
+  const clientBP = await (await browser.newContext()).newPage();
+  adminP.on('pageerror', (e) => console.log(`   [pageerror admin] ${e.message}`));
+  clientBP.on('pageerror', (e) => console.log(`   [pageerror clientB] ${e.message}`));
 
-  await step('Connexion admin', async () => {
-    await adminP.goto(`${BASE_URL}/login`);
-    await adminP.locator('#email').fill(ADMIN_EMAIL);
-    await adminP.locator('#password').fill(PASSWORD);
-    await adminP.getByRole('button', { name: 'Se connecter' }).click();
-    await adminP.waitForURL((u) => u.pathname === '/', { timeout: 10000 });
+  await step('Connexion admin + client B', async () => {
+    await login(adminP, ADMIN_EMAIL);
+    await login(clientBP, 'climber.b.restart@blocabrac.test');
   });
 
   await step('AVANT redémarrage : la réconciliation IGNORE season.* (aucun baseScore posé)', async () => {
@@ -159,6 +166,37 @@ async function main() {
     const { uid: dUid } = await auth.getUserByEmail('climber.d.restart@blocabrac.test');
     assert(arch.top_garcons.some((e) => e.uid === cUid), 'C (Homme, opt-in) doit être dans top_garcons');
     assert(!topFillesUids.includes(dUid) && !arch.top_garcons.some((e) => e.uid === dUid), 'D (opt-out) ne doit être nulle part dans l\'archive');
+  });
+
+  await step('§1 : après clôture (cloturee=true), une validation ne repeuple PAS season.* — avant et après reconcile', async () => {
+    // ✅ Retour ClaudeNav 06/09 §1 : la porte `createdAt` seule ne suffit pas — pendant le
+    // battement clôture→reconfiguration (jusqu'à 7 j), la fenêtre `[debut, fin]` est encore
+    // celle de la saison finie. Sans le test `cloturee`, valider un bloc dont la date tombe
+    // dans cette fenêtre repeuplerait des compteurs remis à zéro. B valide ici un bloc NEUF
+    // (br-rouge, createdAt = aujourd'hui) : season.* doit rester 0.
+    const { uid: bUid } = await auth.getUserByEmail('climber.b.restart@blocabrac.test');
+    const before = (await db.collection('classement_profiles').doc(bUid).get()).data();
+    assert(before.season?.score === 0, `pré-condition : season.score de B doit être 0, obtenu ${before.season?.score}`);
+
+    await clientBP.goto(`${BASE_URL}/client/daily`);
+    await clientBP.getByRole('heading', { name: 'Mon Blocabrac quotidien' }).waitFor({ timeout: 10000 });
+    await clientBP.waitForTimeout(1500); // laisse le fetch des blocs peupler le sélecteur de murs
+    await clientBP.getByRole('button', { name: /^Dalle/ }).first().click();
+    await clientBP.getByText('Bloc n°21', { exact: false }).click();
+    await clientBP.getByText('Bloc n°21 - Dalle', { exact: false }).waitFor({ timeout: 10000 });
+    await clientBP.getByRole('button', { name: '✅ Réussi' }).click();
+    await clientBP.getByText('Réussite enregistrée', { exact: false }).waitFor({ timeout: 10000 });
+    await clientBP.getByRole('button', { name: 'Annuler' }).click(); // flushAll + ferme
+    await clientBP.waitForTimeout(1500);
+
+    const after = (await db.collection('classement_profiles').doc(bUid).get()).data();
+    assert(after.season?.score === 0, `season.score de B doit RESTER 0 (saison clôturée), obtenu ${after.season?.score}`);
+    assert(after.season?.baseScore === 0, `season.baseScore de B doit rester 0, obtenu ${after.season?.baseScore}`);
+    assert(after.score === before.score + 400, `all-time de B doit AVOIR augmenté de 400 (rouge validé), obtenu ${after.score} (avant ${before.score})`);
+
+    runScript(join(REPO_ROOT, 'scripts/reconcile-classement-profiles.js'), ['--fix', '--force']);
+    const reconciled = (await db.collection('classement_profiles').doc(bUid).get()).data();
+    assert(reconciled.season?.score === 0, `season.score de B doit rester 0 après reconcile --fix (garde-fou cloturee), obtenu ${reconciled.season?.score}`);
   });
 
   await browser.close();

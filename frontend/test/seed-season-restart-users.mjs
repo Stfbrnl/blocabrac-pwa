@@ -41,13 +41,14 @@ const CLIMBERS = [
 ];
 
 // Blocs : 4 actifs + 2 retirés (is_active:false — rotation passée).
+// Murs = noms réels de config/gymConfig.ts (le sélecteur client filtre dessus).
 const BOULDERS = [
   { id: 'br-vert', color: 'vert', wall: 'Dalle', number: 11, is_active: true },
   { id: 'br-bleu', color: 'bleu', wall: 'Dalle', number: 12, is_active: true },
-  { id: 'br-rouge', color: 'rouge', wall: 'Dévers', number: 21, is_active: true },
-  { id: 'br-noir', color: 'noir', wall: 'Dévers', number: 22, is_active: true },
-  { id: 'br-violet-retire', color: 'violet', wall: 'Mur ancien', number: 31, is_active: false },
-  { id: 'br-blanc-retire', color: 'blanc', wall: 'Mur ancien', number: 32, is_active: false },
+  { id: 'br-rouge', color: 'rouge', wall: 'Dalle', number: 21, is_active: true },
+  { id: 'br-noir', color: 'noir', wall: 'Grande Face', number: 22, is_active: true },
+  { id: 'br-violet-retire', color: 'violet', wall: 'Grande Face', number: 31, is_active: false },
+  { id: 'br-blanc-retire', color: 'blanc', wall: 'Grande Face', number: 32, is_active: false },
 ];
 
 // Validations : { climber, boulderId, attempts, daysAgo }
