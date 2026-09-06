@@ -75,14 +75,23 @@ const UpdateBanner: React.FC = () => {
   return (
     <Snackbar
       open
-      anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      /* ✅ C'est une action, pas une notification : ne se ferme jamais tout seul
-         (pas de `autoHideDuration`). */
+      // ✅ En haut, bien visible (retour utilisateur 06/09) : décalé sous l'AppBar
+      // (`position="static"`, ~56-64 px), largeur confortable, jamais auto-fermant
+      // (c'est une action, pas une notification).
+      anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      sx={{ top: { xs: 64, sm: 72 }, width: '100%', maxWidth: 620, px: { xs: 1, sm: 0 } }}
     >
       <Alert
-        severity="info"
+        severity="warning"
+        variant="filled"
         icon={false}
-        sx={{ alignItems: 'center' }}
+        sx={{
+          width: '100%',
+          alignItems: 'center',
+          fontWeight: 600,
+          boxShadow: 6,
+          '& .MuiAlert-action': { pt: 0, alignItems: 'center' },
+        }}
         action={
           <Box sx={{ display: 'flex', gap: 1, whiteSpace: 'nowrap' }}>
             <Button color="inherit" size="small" onClick={() => setUpdateReady(false)}>
@@ -92,6 +101,7 @@ const UpdateBanner: React.FC = () => {
               color="inherit"
               size="small"
               variant="outlined"
+              sx={{ borderColor: 'currentColor', fontWeight: 700 }}
               onClick={() => window.location.reload()}
             >
               Mettre à jour
