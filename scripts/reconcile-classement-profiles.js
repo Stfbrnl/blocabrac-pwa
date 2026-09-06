@@ -162,19 +162,27 @@ function calculatePoints(color, attempts) {
 }
 
 // ✅ client_boulder_results ne stocke PAS la couleur du bloc (voir ClientDaily.tsx) :
-// la couleur utilisée pour le calcul est toujours celle ACTUELLE du bloc (colorById),
-// jamais figée au moment de la validation — un bloc recoloré change donc le calcul de
-// TOUTES ses validations passées, à la prochaine réconciliation comme à la prochaine
-// validation de ce bloc précis en usage normal (voir la note dans ClientDaily.tsx).
-// Un bloc désactivé depuis (is_active: false) sort de cette carte, donc ses validations
-// passées ne comptent plus — même comportement que l'app (voir colorById dans
-// ClientDaily.tsx), reproduit ici pour que la réconciliation converge avec le calcul
-// réellement fait par l'app, pas avec un calcul "plus complet" mais différent.
-async function loadActiveColorById() {
-  const snapshot = await db.collection('boulders')
-    .where('type', '==', 'daily')
-    .where('is_active', '==', true)
-    .get();
+// la couleur utilisée pour le calcul est toujours celle ACTUELLE / DERNIÈRE CONNUE du
+// bloc (colorById), jamais figée au moment de la validation — un bloc recoloré change donc
+// le calcul de TOUTES ses validations passées à la prochaine réconciliation.
+//
+// ✅ V2.56 (RETOUR-redemarrage-saison-modele-a.md §3, demande utilisateur 06/09) : cette
+// carte NE FILTRE PLUS sur `is_active`, ni pour le all-time ni pour la saison. Les deux
+// classements sont des compteurs d'ACCUMULATION : un bloc validé puis retiré à une
+// rotation garde ses points ("les points acquis restent acquis" — même logique que la
+// saison). Auparavant le all-time perdait ces points à chaque passe de réconciliation
+// (journal V2.53 : "−360 points, 1 rouge sur un bloc depuis désactivé"), une décroissance
+// que rien n'expliquait au grimpeur et incohérente avec le compteur stocké de
+// ClientDaily.tsx qui, lui, gèle déjà les contributions des blocs retirés (il ne les
+// retire jamais). Aucun document `boulders` n'est jamais supprimé (une rotation fait
+// `updateDoc(..., { is_active: false })`), donc la couleur d'un bloc retiré reste lisible.
+//
+// ⚠️ Première passe --fix après le déploiement de V2.56 : les grimpeurs ayant validé des
+// blocs depuis retirés verront leur score all-time REMONTER (restitution des points
+// indûment retirés par les passes précédentes) — écart réel côté garde-fou, un
+// `--force` unique le confirme, comme pour n'importe quel réalignement de masse.
+async function loadDailyColorById() {
+  const snapshot = await db.collection('boulders').where('type', '==', 'daily').get();
   const colorById = new Map();
   snapshot.forEach((docSnap) => {
     const data = docSnap.data();
@@ -186,16 +194,17 @@ async function loadActiveColorById() {
 // Recalcule le résumé complet d'un utilisateur depuis client_boulder_results — la
 // source de vérité, jamais l'inverse.
 //
-// ✅ Classement de saison (point 4) : season.colorCounts/season.score sont recomputés
-// EN PLUS des champs all-time, à partir du même snapshot — une validation compte pour
-// la saison si son `createdAt` (immuable depuis le correctif §1, voir
-// RELECTURE-classement-saisonnier.md et ClientDaily.tsx) tombe dans `[debut, fin]`.
-// C'est une définition volontairement simplifiée : une validation éditée après coup
-// (nombre d'essais corrigé) continue de compter pour la saison de sa PREMIÈRE écriture,
-// pas de sa dernière édition — cohérent avec le fait que `createdAt` ne bouge plus.
-// `seasonWindow` à `null` désactive ce calcul entièrement (aucune fenêtre configurée,
-// ou saison clôturée en attente de reconfiguration — voir loadSeasonWindow()).
-async function computeExpectedProfile(uid, colorById, seasonWindow) {
+// ✅ Classement de saison (V2.56, Modèle A — RETOUR-redemarrage-saison-modele-a.md §1) :
+//   season.* = base + Σ (validations dont createdAt ∈ [debut, fin]), chaque bloc à sa
+//              couleur dernière connue, ACTIF OU NON (comme le all-time depuis §3).
+// - `base` (season.baseScore / season.baseColorCounts) est le crédit de départ figé par
+//   le bouton "Redémarrer la saison" (AdminSeasonConfig.tsx). Tant qu'il n'a jamais été
+//   écrit (aucun redémarrage depuis le déploiement de V2.56), on NE réconcilie PAS
+//   season.* — l'ancien compteur et le nouveau modèle ne sont pas comparables, et le
+//   bouton va tout recalculer. Signalé par `seasonScore: undefined`.
+// - Une validation éditée après coup compte pour la saison de sa PREMIÈRE écriture
+//   (`createdAt` immuable), jamais de sa dernière édition.
+async function computeExpectedProfile(uid, colorById, seasonWindow, storedBase) {
   const snapshot = await db.collection('client_boulder_results')
     .where('userId', '==', uid)
     .where('success', '==', true)
@@ -203,19 +212,24 @@ async function computeExpectedProfile(uid, colorById, seasonWindow) {
 
   const colorCounts = {};
   let score = 0;
-  const seasonColorCounts = {};
-  let seasonScore = 0;
+
+  const hasBase = storedBase && storedBase.score !== undefined;
+  const doSeason = !!seasonWindow && hasBase;
+  const seasonColorCounts = doSeason ? { ...(storedBase.colorCounts || {}) } : {};
+  let seasonScore = doSeason ? (storedBase.score || 0) : 0;
+
   snapshot.forEach((docSnap) => {
     const data = docSnap.data();
-    const color = colorById.get(data.boulderId);
     const attempts = data.attempts || 1;
-    if (!color || !LEVEL_ORDER.includes(color)) return; // bloc désactivé/couleur inconnue : ignoré, pas cassé
-    const points = calculatePoints(color, attempts);
+    const color = colorById.get(data.boulderId);
+    if (!color || !LEVEL_ORDER.includes(color)) return; // couleur illisible : ignoré, pas cassé
+
     colorCounts[color] = (colorCounts[color] || 0) + 1;
-    score += points;
-    if (seasonWindow && isWithinSeasonWindow(data.createdAt, seasonWindow.debut, seasonWindow.fin)) {
+    score += calculatePoints(color, attempts);
+
+    if (doSeason && isWithinSeasonWindow(data.createdAt, seasonWindow.debut, seasonWindow.fin)) {
       seasonColorCounts[color] = (seasonColorCounts[color] || 0) + 1;
-      seasonScore += points;
+      seasonScore += calculatePoints(color, attempts);
     }
   });
 
@@ -227,7 +241,11 @@ async function computeExpectedProfile(uid, colorById, seasonWindow) {
     if (count > 0 && idx > bestColorRank) bestColorRank = idx;
   });
 
-  return { score, bouldersValidated, bestColorRank, colorCounts, seasonScore, seasonColorCounts };
+  return {
+    score, bouldersValidated, bestColorRank, colorCounts,
+    seasonScore: doSeason ? seasonScore : undefined,
+    seasonColorCounts: doSeason ? seasonColorCounts : undefined,
+  };
 }
 
 function colorCountsEqual(a, b) {
@@ -282,7 +300,11 @@ function colorCountsWriteValue(storedColorCounts, expectedColorCounts) {
 // échéant. Séparé de l'écriture pour que le garde-fou puisse évaluer l'ampleur de la
 // dérive AVANT que quoi que ce soit ne soit modifié — voir main().
 async function diffOne(uid, storedData, profileExists, colorById, seasonWindow, userGender, userDateOfBirth) {
-  const expected = await computeExpectedProfile(uid, colorById, seasonWindow);
+  const storedBase = {
+    score: storedData.season?.baseScore,
+    colorCounts: storedData.season?.baseColorCounts,
+  };
+  const expected = await computeExpectedProfile(uid, colorById, seasonWindow, storedBase);
   const expectedFfmeCategory = computeFfmeCategory(userDateOfBirth);
 
   const drift = {};
@@ -296,10 +318,11 @@ async function diffOne(uid, storedData, profileExists, colorById, seasonWindow, 
   set('colorCounts', fieldDrift(
     storedData.colorCounts, storedData.colorCounts || {}, expected.colorCounts, colorCountsEqual
   ));
-  // ✅ Garde-fou §2 : seasonWindow est `null` si aucune fenêtre n'est configurée ou si
-  // la saison vient d'être clôturée — dans ces deux cas, season.* n'est ni vérifié ni
-  // corrigé, quel que soit son contenu stocké.
-  if (seasonWindow) {
+  // ✅ Garde-fou §2 : `expected.seasonScore` est `undefined` si aucune fenêtre n'est
+  // configurée, si la saison vient d'être clôturée, OU (V2.56) si aucun redémarrage
+  // Modèle A n'a encore posé `season.baseScore` — dans ces trois cas, season.* n'est ni
+  // vérifié ni corrigé, quel que soit son contenu stocké.
+  if (expected.seasonScore !== undefined) {
     set('seasonScore', fieldDrift(
       storedData.season?.score, storedData.season?.score || 0, expected.seasonScore
     ));
@@ -384,12 +407,12 @@ async function fetchAllDiffs(colorById, seasonWindow) {
 
 async function main() {
   console.log(FIX ? 'Mode correction (--fix) : les écarts seront écrits si le garde-fou le permet.' : 'Mode simulation : aucune écriture.');
-  const colorById = await loadActiveColorById();
-  console.log(`${colorById.size} bloc(s) quotidien(s) actif(s) chargé(s).`);
+  const colorById = await loadDailyColorById();
+  console.log(`${colorById.size} bloc(s) quotidien(s) chargé(s) (actifs + retirés — un bloc retiré garde ses points, all-time comme saison).`);
 
   const seasonWindow = await loadSeasonWindow();
   console.log(seasonWindow
-    ? `Fenêtre de saison active : ${seasonWindow.debut} → ${seasonWindow.fin} (season.* vérifié).`
+    ? `Fenêtre de saison active : ${seasonWindow.debut} → ${seasonWindow.fin} (season.* vérifié pour les profils portant season.baseScore ; ignoré pour les autres — voir V2.56).`
     : 'Aucune fenêtre de saison active (non configurée, ou saison clôturée en attente de reconfiguration) — season.* ignoré.');
 
   // ✅ Toujours calculé en simulation d'abord (aucune écriture ici) : le garde-fou a
@@ -466,10 +489,11 @@ async function main() {
       gender: d.expected.gender,
       ffmeCategory: d.expected.ffmeCategory,
     };
-    // ✅ Garde-fou §2 : season.* n'est écrit que si une fenêtre de saison active a été
-    // chargée — jamais touché sinon, même si un écart de gender/all-time est corrigé
-    // sur le même profil dans cette même passe.
-    if (seasonWindow) {
+    // ✅ Garde-fou §2 : season.* n'est écrit que si `computeExpectedProfile` a produit un
+    // attendu (fenêtre active ET base de redémarrage V2.56 posée) — jamais touché sinon,
+    // même si un écart de gender/all-time est corrigé sur le même profil. `season.baseScore`
+    // / `baseColorCounts` ne sont pas dans `update.season` → préservés par le `set merge`.
+    if (d.expected.seasonScore !== undefined) {
       update.season = {
         score: d.expected.seasonScore,
         colorCounts: colorCountsWriteValue(d.drift.seasonColorCounts?.stored, d.expected.seasonColorCounts),

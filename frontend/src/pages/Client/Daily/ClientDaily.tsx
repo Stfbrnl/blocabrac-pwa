@@ -621,6 +621,7 @@ const ClientDaily: React.FC = () => {
     previous: { attempts: number } | null,
     success: boolean,
     resultAttempts: number,
+    resultCreatedAt: string,
     wall?: string,
     boulderId?: string
   ) => {
@@ -641,10 +642,14 @@ const ClientDaily: React.FC = () => {
     }
 
     // ✅ Classement de saison : même delta que ci-dessus, accumulé séparément et
-    // seulement si "maintenant" tombe dans la fenêtre de saison configurée. Hors
-    // fenêtre (été, ou aucune saison configurée), seuls les champs all-time bougent.
+    // seulement si LA DATE DE CETTE VALIDATION (`createdAt`, immuable) tombe dans la
+    // fenêtre — pas "maintenant" (retour ClaudeNav 06/09, V2.56). Depuis le redémarrage
+    // Modèle A, tout l'historique antérieur à `debut` est hors fenêtre : éditer un tel
+    // bloc (essais corrigés, ou dé-validation) ne doit PAS toucher `season.*`, sinon le
+    // score descendrait sous le crédit de départ pour une validation jamais comptée dans
+    // la fenêtre. Une validation faite aujourd'hui a `createdAt` = aujourd'hui → comptée.
     const seasonWindow = seasonWindowRef.current;
-    if (seasonWindow && isWithinSeasonWindow(new Date().toISOString(), seasonWindow.debut, seasonWindow.fin)) {
+    if (seasonWindow && isWithinSeasonWindow(resultCreatedAt, seasonWindow.debut, seasonWindow.fin)) {
       delta.seasonScoreDelta = scoreDelta;
       if (colorCountDelta !== 0) delta.seasonColorDeltas.set(color, colorCountDelta);
     }
@@ -738,7 +743,7 @@ const ClientDaily: React.FC = () => {
       // ci-dessus avait échoué, aucune mutation du classement n'aurait eu lieu.
       if (classementColor) {
         const previousClassementState = previousResultState?.success ? { attempts: previousResultState.attempts } : null;
-        applyClassementDelta(classementColor, previousClassementState, success, candidate.attempts, wallById.get(boulderId), boulderId);
+        applyClassementDelta(classementColor, previousClassementState, success, candidate.attempts, createdAt, wallById.get(boulderId), boulderId);
       }
     } catch (err: unknown) {
       setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
@@ -788,7 +793,7 @@ const ClientDaily: React.FC = () => {
       cachePreviousResultState(boulderId, candidate.success, candidate.attempts, createdAt);
       if (classementColor) {
         const previousClassementState = previousResultState?.success ? { attempts: previousResultState.attempts } : null;
-        applyClassementDelta(classementColor, previousClassementState, candidate.success, candidate.attempts, wallById.get(boulderId), boulderId);
+        applyClassementDelta(classementColor, previousClassementState, candidate.success, candidate.attempts, createdAt, wallById.get(boulderId), boulderId);
       }
       setRatings(prev => ({ ...prev, [boulderId]: rating }));
       setComments(prev => ({ ...prev, [boulderId]: comment }));

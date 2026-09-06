@@ -11,6 +11,17 @@ export interface ChangelogEntry {
 // tout l'historique ici, l'historique complet vit dans les commits git.
 export const changelog: ChangelogEntry[] = [
   {
+    version: '2.56',
+    date: '2026-09-06',
+    title: 'Classement de saison remis à plat',
+    items: [
+      'Le classement de saison a été redémarré : il repart de vos validations actuelles des blocs encore posés — rien à revalider, votre nombre d\'essais d\'origine est conservé.',
+      'À partir de maintenant, votre score de saison ne redescend plus quand un mur change : les points acquis restent acquis.',
+      'Votre classement général (à vie) et vos badges ne sont pas remis à zéro. Au passage, il ne perd plus de points quand un mur change : un bloc que vous avez validé reste acquis même s\'il est retiré — certains scores vont donc légèrement remonter.',
+      'Ce redémarrage sert à rendre la course à la Finale équitable pendant le déploiement de l\'appli, tant que peu de grimpeurs y sont encore inscrits.',
+    ],
+  },
+  {
     version: '2.55',
     date: '2026-09-06',
     title: 'Bloc Roulette : traversées et défis "un cran au-dessus"',

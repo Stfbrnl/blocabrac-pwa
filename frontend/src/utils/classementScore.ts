@@ -67,6 +67,41 @@ export const scoreDeltaForValidation = (
   return newPoints - oldPoints;
 };
 
+// ✅ Redémarrage du classement de saison (V2.56, Modèle A — voir
+// HANDOFF-redemarrage-saison-2026-09-06.md + RETOUR-redemarrage-saison-modele-a.md).
+// Recalcule le CRÉDIT DE DÉPART d'un grimpeur au moment d'un redémarrage : la somme de
+// ses validations existantes (`client_boulder_results`, succès uniquement) des blocs
+// encore posés, avec le nombre d'essais d'origine et la couleur ACTUELLE du bloc.
+//
+// ⚠️ `colorById` doit ici contenir TOUS les blocs quotidiens (actifs ET désactivés),
+// pas seulement les actifs — un bloc validé puis retiré garde ses points (« l'idée même
+// du changement »). C'est la différence assumée avec le calcul all-time / la
+// réconciliation historique, qui eux filtrent sur `is_active`. Le document `boulders`
+// n'est jamais supprimé (une rotation fait `is_active:false`), donc sa couleur reste
+// lisible — c'est ce qui rend ce calcul possible.
+//
+// Pur : aucun import Firestore. L'appelant (AdminSeasonConfig.tsx) lui passe les
+// résultats déjà lus et la carte des couleurs déjà construite.
+export interface SeasonBaselineResult {
+  boulderId: string;
+  attempts: number;
+}
+
+export const recomputeSeasonBaseline = (
+  results: SeasonBaselineResult[],
+  colorById: Map<string, string | null | undefined>
+): { score: number; colorCounts: ColorCounts } => {
+  let score = 0;
+  const colorCounts: ColorCounts = {};
+  results.forEach(({ boulderId, attempts }) => {
+    const color = colorById.get(boulderId);
+    if (!color || levelOrder.indexOf(color as Level) === -1) return; // bloc inconnu/hors barème : ignoré
+    score += calculatePoints(color, attempts, true);
+    colorCounts[color as Level] = (colorCounts[color as Level] || 0) + 1;
+  });
+  return { score, colorCounts };
+};
+
 // ✅ Classement de saison (CONCEPTION-classement-saisonnier.md) : détermine si une date
 // (ISO complète, ex. `new Date().toISOString()`) tombe dans la fenêtre de saison
 // `[debut, fin]` (dates ISO "YYYY-MM-DD", bornes incluses, lues depuis

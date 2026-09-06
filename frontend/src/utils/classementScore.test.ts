@@ -4,6 +4,7 @@ import {
   summaryFromColorCounts,
   scoreDeltaForValidation,
   isWithinSeasonWindow,
+  recomputeSeasonBaseline,
   type ColorCounts,
   type ValidatedBoulderResult,
 } from './classementScore';
@@ -177,5 +178,60 @@ describe('cohérence incrémental vs recalcul complet', () => {
       { boulderId: 'b5', color: 'rouge', attempts: 1 },
     ]);
     expect(incremental).toEqual(full);
+  });
+});
+
+describe('recomputeSeasonBaseline (V2.56 — crédit de départ au redémarrage)', () => {
+  const colorById = new Map<string, string | null | undefined>([
+    ['b-vert', 'vert'],
+    ['b-rouge', 'rouge'],
+    ['b-retire', 'noir'], // bloc désactivé : colorById le contient quand même (couleur lisible)
+    ['b-sanscouleur', null],
+  ]);
+
+  it('somme les validations, chaque bloc à sa couleur, essais d\'origine', () => {
+    const { score, colorCounts } = recomputeSeasonBaseline(
+      [
+        { boulderId: 'b-vert', attempts: 1 }, // 50
+        { boulderId: 'b-rouge', attempts: 3 }, // 400 - 2*20 = 360
+      ],
+      colorById,
+    );
+    expect(score).toBe(50 + 360);
+    expect(colorCounts).toEqual({ vert: 1, rouge: 1 });
+  });
+
+  it('compte un bloc retiré (présent dans colorById avec sa dernière couleur)', () => {
+    const { score, colorCounts } = recomputeSeasonBaseline(
+      [{ boulderId: 'b-retire', attempts: 1 }],
+      colorById,
+    );
+    expect(score).toBe(600);
+    expect(colorCounts).toEqual({ noir: 1 });
+  });
+
+  it('ignore un bloc absent de la carte ou sans couleur exploitable', () => {
+    const { score, colorCounts } = recomputeSeasonBaseline(
+      [
+        { boulderId: 'b-inconnu', attempts: 1 },
+        { boulderId: 'b-sanscouleur', attempts: 1 },
+        { boulderId: 'b-vert', attempts: 1 },
+      ],
+      colorById,
+    );
+    expect(score).toBe(50);
+    expect(colorCounts).toEqual({ vert: 1 });
+  });
+
+  it('additionne les validations multiples d\'une même couleur', () => {
+    const { colorCounts } = recomputeSeasonBaseline(
+      [
+        { boulderId: 'b-vert', attempts: 1 },
+        { boulderId: 'b-rouge', attempts: 1 },
+        { boulderId: 'b-retire', attempts: 1 },
+      ],
+      new Map([['b-vert', 'vert'], ['b-rouge', 'vert'], ['b-retire', 'vert']]),
+    );
+    expect(colorCounts).toEqual({ vert: 3 });
   });
 });

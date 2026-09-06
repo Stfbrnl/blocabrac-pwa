@@ -82,10 +82,15 @@ async function fetchAllProfiles() {
   return snapshot.docs.map((docSnap) => ({ uid: docSnap.id, ...docSnap.data() }));
 }
 
-async function chunkedBatchUpdate(refs, dataFn) {
+async function chunkedBatchUpdate(refs, data) {
   for (let i = 0; i < refs.length; i += BATCH_SIZE) {
     const batch = db.batch();
-    refs.slice(i, i + BATCH_SIZE).forEach((ref) => batch.set(ref, dataFn(), { merge: true }));
+    // ✅ `batch.update` par chemins pointés (`'season.colorCounts'`) REMPLACE la valeur à
+    // ce chemin — contrairement à `batch.set(..., {merge:true})` qui fusionne les maps et
+    // laisse donc les clés de `colorCounts` intactes (bug orphan-key exact de V2.53,
+    // corrigé pour reconcile-classement-profiles.js seulement). `refs` vient d'un snapshot
+    // de requête (`fetchAllProfiles`), tous les documents existent → `update` est sûr.
+    refs.slice(i, i + BATCH_SIZE).forEach((ref) => batch.update(ref, data));
     await batch.commit();
   }
 }
@@ -174,7 +179,7 @@ async function main() {
 
   if (!FIX) {
     console.log(`[simulation] Archiverait classement_saisons/${saisonId} :`, JSON.stringify(archive, null, 2));
-    console.log(`[simulation] Remettrait ${profiles.length} profil(s) à zéro pour la saison suivante (season.score/season.colorCounts).`);
+    console.log(`[simulation] Remettrait ${profiles.length} profil(s) à zéro pour la saison suivante (season.score/colorCounts + baseScore/baseColorCounts).`);
     console.log('[simulation] Ne pose pas cloturee. Relancez avec --fix pour clôturer réellement.');
     return;
   }
@@ -187,9 +192,17 @@ async function main() {
   await configRef.set({ cloturee: true, cloturee_at: new Date().toISOString() }, { merge: true });
   console.log(`Archive écrite (classement_saisons/${saisonId}), cloturee posé à true.`);
 
+  // ✅ V2.56 (RETOUR-redemarrage-saison-modele-a.md §1) : remettre AUSSI baseScore /
+  // baseColorCounts à zéro — sinon la saison suivante démarrerait avec le crédit de
+  // l'ancienne. `{}` par chemin pointé vide vraiment la map (cf. chunkedBatchUpdate).
   const allRefs = profiles.map((p) => db.collection('classement_profiles').doc(p.uid));
-  await chunkedBatchUpdate(allRefs, () => ({ season: { score: 0, colorCounts: {} } }));
-  console.log(`${allRefs.length} profil(s) remis à zéro pour la saison suivante.`);
+  await chunkedBatchUpdate(allRefs, {
+    'season.score': 0,
+    'season.colorCounts': {},
+    'season.baseScore': 0,
+    'season.baseColorCounts': {},
+  });
+  console.log(`${allRefs.length} profil(s) remis à zéro (season.score/colorCounts + baseScore/baseColorCounts) pour la saison suivante.`);
 }
 
 main().catch((err) => {
