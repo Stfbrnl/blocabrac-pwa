@@ -11,6 +11,15 @@ export interface ChangelogEntry {
 // tout l'historique ici, l'historique complet vit dans les commits git.
 export const changelog: ChangelogEntry[] = [
   {
+    version: '2.58',
+    date: '2026-09-09',
+    title: 'Nouvelle icône',
+    items: [
+      'L\'application a une nouvelle icône, reprise du logo de la salle sur le vert Blocabrac.',
+      'Si vous l\'avez déjà installée sur votre écran d\'accueil, réinstallez-la pour voir la nouvelle icône.',
+    ],
+  },
+  {
     version: '2.57',
     date: '2026-09-06',
     title: 'Mise à jour de l\'application en un clic',

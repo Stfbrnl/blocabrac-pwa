@@ -535,26 +535,33 @@ export default function CompetitionBoulderForm(): JSX.Element {
           />
 
           {formData.imagePreview && (
-            <Box sx={{ position: 'relative', mb: 2 }}>
-              <img
-                ref={imageRef}
-                src={formData.imagePreview}
-                alt="Bloc"
-                crossOrigin="anonymous"
-                style={{ maxWidth: '100%', display: 'block', border: '1px solid #ddd' }}
-              />
-              <canvas
-                ref={canvasRef}
-                onClick={handleCanvasClick}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  height: '100%',
-                  cursor: 'crosshair'
-                }}
-              />
+            <Box sx={{ mb: 2 }}>
+              {/* ✅ V2.58 : le conteneur position:relative n'entoure plus QUE l'image
+                  et le canvas. Avant, il englobait aussi les boutons Départ/Fin et la
+                  liste d'annotations : le canvas (height:100%) s'étirait alors sur toute
+                  la hauteur, débordait sur ces boutons (difficiles à cliquer) et faussait
+                  le placement des points près du bas de l'image. */}
+              <Box sx={{ position: 'relative', lineHeight: 0 }}>
+                <img
+                  ref={imageRef}
+                  src={formData.imagePreview}
+                  alt="Bloc"
+                  crossOrigin="anonymous"
+                  style={{ maxWidth: '100%', display: 'block', border: '1px solid #ddd' }}
+                />
+                <canvas
+                  ref={canvasRef}
+                  onClick={handleCanvasClick}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    cursor: 'crosshair'
+                  }}
+                />
+              </Box>
               <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: 'wrap' }}>
                 <Button
                   variant={currentMode === 'start' ? 'contained' : 'outlined'}

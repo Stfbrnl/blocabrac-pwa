@@ -60,23 +60,30 @@ export default defineConfig(({ mode }) => {
           short_name: env.VITE_GYM_NAME,
           description: env.VITE_APP_DESCRIPTION,
           theme_color: env.VITE_THEME_COLOR,
-          background_color: '#ffffff',
+          // ✅ V2.58 : aligné sur theme_color (vert de la charte) — un écran de
+          // démarrage blanc suivi d'une app verte était une incohérence visible
+          // à chaque lancement de la PWA installée.
+          background_color: env.VITE_THEME_COLOR,
           display: 'standalone',
           start_url: '/',
           lang: 'fr',
+          // ✅ V2.58 : suffixe "-v2" obligatoire — les fichiers de public/ ne
+          // portent pas de hash de build, le service worker les précache sous
+          // leur nom ; réutiliser un nom existant avec un contenu différent est
+          // exactement le cas qui reste bloqué en cache.
           icons: [
             {
-              src: '/icons/pwa-192x192.png',
+              src: '/icons/pwa-192x192-v2.png',
               sizes: '192x192',
               type: 'image/png',
             },
             {
-              src: '/icons/pwa-512x512.png',
+              src: '/icons/pwa-512x512-v2.png',
               sizes: '512x512',
               type: 'image/png',
             },
             {
-              src: '/icons/maskable-512x512.png',
+              src: '/icons/maskable-512x512-v2.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'maskable',
