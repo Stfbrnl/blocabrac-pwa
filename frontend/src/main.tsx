@@ -22,6 +22,9 @@ console.log(`Blocabrac ${formattedAppVersion} — ${buildDetail}`);
 // On recharge une seule fois pour récupérer la version courante (garde-fou sessionStorage
 // pour ne jamais boucler si le rechargement ne suffit pas à résoudre le problème).
 window.addEventListener('vite:preloadError', () => {
+  // ✅ V2.59 : trace de diagnostic — savoir si ce rechargement de secours
+  // court-circuite le bandeau de mise à jour lors d'un test (voir UpdateBanner.tsx).
+  console.warn('[main] vite:preloadError — rechargement de secours');
   if (sessionStorage.getItem('reloadedAfterPreloadError')) return;
   sessionStorage.setItem('reloadedAfterPreloadError', '1');
   window.location.reload();

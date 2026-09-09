@@ -41,16 +41,37 @@ const UpdateBanner: React.FC = () => {
   const hiddenSinceRef = useRef<number | null>(null);
 
   useRegisterSW({
+    // ✅ V2.59 : traces de diagnostic. Le bandeau ne s'est pas affiché lors du
+    // test 2.57.3 → 2.58 (onglet navigateur, rechargement manuel finalement) ;
+    // ces logs permettent, sur capture de la console, de savoir si `onNeedReload`
+    // est bien appelé (le SW s'active) ou pas du tout (l'événement ne se rejoue
+    // pas parce que le SW s'était déjà activé hors session).
     onNeedReload() {
+      console.log('[UpdateBanner] onNeedReload → bandeau armé');
       setUpdateReady(true);
     },
-    onRegisteredSW(_swScriptUrl, registration) {
+    onRegisteredSW(swScriptUrl, registration) {
+      console.log('[UpdateBanner] service worker enregistré', swScriptUrl, {
+        waiting: !!registration?.waiting,
+        installing: !!registration?.installing,
+        active: !!registration?.active,
+      });
       registrationRef.current = registration;
+    },
+    onRegisterError(error) {
+      console.error('[UpdateBanner] échec d\'enregistrement du service worker', error);
     },
   });
 
   useEffect(() => {
-    const check = () => { registrationRef.current?.update().catch(() => { /* réseau : sans conséquence */ }); };
+    if (updateReady) console.log('[UpdateBanner] bandeau affiché');
+  }, [updateReady]);
+
+  useEffect(() => {
+    const check = () => {
+      console.log('[UpdateBanner] vérification de mise à jour (registration.update)');
+      registrationRef.current?.update().catch(() => { /* réseau : sans conséquence */ });
+    };
 
     const onVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
