@@ -1,19 +1,28 @@
-// ✅ Bandeau de mise à jour de la PWA (PLAN-bandeau-mise-a-jour-pwa.md, 06/09/2026).
+// ✅ Bandeau de mise à jour de la PWA (PLAN-bandeau-mise-a-jour-pwa.md, 06/09/2026 ;
+// corrigé V2.62, CORRECTIF-bandeau-mode-prompt.md).
 //
-// `registerType: 'autoUpdate'` (vite.config.ts) active bien le nouveau service worker
-// tout seul, MAIS ne recharge pas la page : le JS déjà en mémoire reste celui de
-// l'ancienne version. D'où le symptôme (vider le cache sur PC, fermer tous les onglets +
-// 2-3 tirages vers le bas sur Android pour finir par obtenir la nouvelle version).
+// V2.57/V2.58 utilisaient `registerType: 'autoUpdate'` + `onNeedReload` (un événement
+// émis quand le SW prend le contrôle pendant que la page tourne). Sur un onglet PC resté
+// ouvert, React gagne toujours la course avec cet événement. Sur un démarrage à froid
+// Android, le SW peut s'activer (skipWaiting, propre à `autoUpdate`) avant même que
+// `UpdateBanner` soit monté : l'événement part dans le vide, jamais de bandeau, saut
+// direct à la nouvelle version au rechargement suivant — constaté en prod (2.60→2.61).
 //
-// Ici :
-//  1. `onNeedReload` intercepte le rechargement automatique de `autoUpdate` (le SW a pris
-//     le contrôle, la page "devrait" se recharger) pour proposer un bandeau à la place —
-//     un rechargement d'office serait néfaste sur l'écran TV de compétition ou pendant
-//     une saisie d'essais.
-//  2. On force une vérification (`registration.update()`) quand l'app revient au premier
-//     plan après une absence, et toutes les heures — sans quoi une PWA installée qu'on ne
-//     ferme jamais peut ignorer une version pendant des jours (le navigateur ne cherche
-//     une MAJ qu'au chargement de la page, et bride cette recherche).
+// `registerType: 'prompt'` (vite.config.ts) élimine la course : le nouveau SW reste
+// "waiting" au lieu de s'activer seul. `needRefresh` (de `useRegisterSW`) est un état
+// durable, pas un événement fugace — peu importe quand `UpdateBanner` se monte, il
+// retrouve un SW en attente s'il y en a un. Le clic sur « Mettre à jour » appelle
+// `updateServiceWorker(true)`, qui active le SW puis recharge.
+//
+// Conséquence à connaître : tant que personne ne clique, l'ancienne version continue
+// d'être servie indéfiniment (contrairement à `autoUpdate`, qui finissait par l'imposer
+// au rechargement suivant). Le repère de version en Navbar reste le diagnostic.
+//
+// Conservé à l'identique :
+//  1. Vérification forcée (`registration.update()`) au retour au premier plan après une
+//     absence, et toutes les heures — fait apparaître le SW en attente plus tôt, sans
+//     attendre un rechargement complet.
+//  2. Aucun bandeau sur l'écran TV de compétition.
 //
 // `registration.update()` = une requête réseau vers `sw.js` (quelques centaines d'octets,
 // servi en no-cache). Négligeable, ZÉRO lecture Firestore.
@@ -36,14 +45,14 @@ const PERIODIC_RECHECK_MS = 60 * 60 * 1000;
 
 const UpdateBanner: React.FC = () => {
   const { pathname } = useLocation();
-  const [updateReady, setUpdateReady] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
   const registrationRef = useRef<ServiceWorkerRegistration | undefined>(undefined);
   const hiddenSinceRef = useRef<number | null>(null);
 
-  useRegisterSW({
-    onNeedReload() {
-      setUpdateReady(true);
-    },
+  const {
+    needRefresh: [needRefresh],
+    updateServiceWorker,
+  } = useRegisterSW({
     onRegisteredSW(_swScriptUrl, registration) {
       registrationRef.current = registration;
     },
@@ -70,7 +79,7 @@ const UpdateBanner: React.FC = () => {
     };
   }, []);
 
-  if (!updateReady || isSilentRoute(pathname)) return null;
+  if (!needRefresh || dismissed || isSilentRoute(pathname)) return null;
 
   return (
     <Snackbar
@@ -94,7 +103,7 @@ const UpdateBanner: React.FC = () => {
         }}
         action={
           <Box sx={{ display: 'flex', gap: 1, whiteSpace: 'nowrap' }}>
-            <Button color="inherit" size="small" onClick={() => setUpdateReady(false)}>
+            <Button color="inherit" size="small" onClick={() => setDismissed(true)}>
               Plus tard
             </Button>
             <Button
@@ -102,7 +111,7 @@ const UpdateBanner: React.FC = () => {
               size="small"
               variant="outlined"
               sx={{ borderColor: 'currentColor', fontWeight: 700 }}
-              onClick={() => window.location.reload()}
+              onClick={() => updateServiceWorker(true)}
             >
               Mettre à jour
             </Button>

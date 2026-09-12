@@ -53,7 +53,13 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       VitePWA({
-        registerType: 'autoUpdate',
+        // ✅ V2.62 (CORRECTIF-bandeau-mode-prompt.md) : 'autoUpdate' activait le nouveau
+        // SW tout seul dès son installation — le bandeau (onNeedReload) dépendait alors
+        // d'une course entre cette activation et le montage de React, perdue sur un
+        // démarrage à froid (constaté sur Android : jamais de bandeau, saut direct à la
+        // nouvelle version). En mode 'prompt', le SW reste "waiting" (état durable) tant
+        // que UpdateBanner n'a pas appelé updateServiceWorker(true) — plus de course.
+        registerType: 'prompt',
         includeAssets: ['favicon.svg'],
         manifest: {
           name: env.VITE_APP_TITLE,
