@@ -11,6 +11,16 @@ export interface ChangelogEntry {
 // tout l'historique ici, l'historique complet vit dans les commits git.
 export const changelog: ChangelogEntry[] = [
   {
+    version: '2.61',
+    date: '2026-09-12',
+    title: 'Premiers ascensionnistes',
+    items: [
+      'Les blocs noir, blanc et rose affichent désormais les cinq premiers grimpeurs à les avoir validés, dans l\'ordre, avec la date de leur première validation.',
+      'Vous n\'y apparaissez pas par défaut — activez « Apparaître dans les premiers ascensionnistes des blocs difficiles » dans « Modifier mes informations » pour y figurer.',
+      'Ça ne s\'applique qu\'à vos prochaines validations, pas à celles déjà enregistrées.',
+    ],
+  },
+  {
     version: '2.58',
     date: '2026-09-09',
     title: 'Nouvelle icône',

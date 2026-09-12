@@ -59,6 +59,17 @@ const sections: HelpSection[] = [
     ],
   },
   {
+    title: 'Premiers ascensionnistes',
+    intro: 'Sur la fiche des blocs noir, blanc et rose, dans « Mon Blocabrac quotidien ».',
+    points: [
+      'Les cinq premiers grimpeurs à avoir validé un bloc noir, blanc ou rose sont affichés sur sa fiche, dans l\'ordre, avec la date de leur première validation.',
+      "Vous n'y apparaissez pas par défaut — activez « Apparaître dans les premiers ascensionnistes des blocs difficiles » dans « Modifier mes informations » pour y figurer.",
+      "L'activer ne vous ajoute pas rétroactivement aux blocs déjà validés — seules vos prochaines validations en tiennent compte.",
+      'Un bloc de compétition (cotation cachée) n\'affiche jamais cette liste, pour ne pas trahir sa difficulté.',
+      'Un bloc retiré lors d\'une rotation des murs conserve sa liste : c\'est un palmarès, pas une donnée qui disparaît avec le bloc.',
+    ],
+  },
+  {
     title: 'Série, objectifs de la semaine & partage',
     intro: 'Directement sur « Mon espace personnel », sous votre niveau et votre dernier badge.',
     points: [

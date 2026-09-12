@@ -665,3 +665,165 @@ describe('client_badges : auto-attribution des badges couleur par le client', ()
     await assertFails(deleteDoc(doc(db, 'client_badges', `${CLIENT_UID}_badge-auto`)));
   });
 });
+
+// ✅ PLAN-etat-ludique-hors-users.md : état ludique par utilisateur (objectifs de la
+// semaine, wallCounts, compteur/liste Roulette), lu ET écrit uniquement par son propriétaire
+// — contrairement à "users", jamais par le staff (aucun écran staff n'en a besoin, voir le
+// plan §5).
+describe('user_ludic_state : lecture/écriture réservées au propriétaire', () => {
+  it('le propriétaire peut créer/lire/écrire son propre document', async () => {
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertSucceeds(setDoc(doc(clientDb, 'user_ludic_state', CLIENT_UID), {
+      wallCounts: { Dalle: 1 },
+      rouletteChallengesCompleted: 1,
+      updated_at: new Date().toISOString(),
+    }));
+    await assertSucceeds(getDoc(doc(clientDb, 'user_ludic_state', CLIENT_UID)));
+  });
+
+  it('un autre client ne peut ni lire ni écrire le document d\'un tiers', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'user_ludic_state', CLIENT_UID), { wallCounts: { Dalle: 1 } });
+    });
+    const otherDb = testEnv.authenticatedContext(OTHER_CLIENT_UID).firestore();
+    await assertFails(getDoc(doc(otherDb, 'user_ludic_state', CLIENT_UID)));
+    await assertFails(updateDoc(doc(otherDb, 'user_ludic_state', CLIENT_UID), { wallCounts: { Dalle: 99 } }));
+  });
+
+  it('le staff (admin/moniteur/ouvreur) n\'a pas non plus accès — champs sans lecteur staff', async () => {
+    const moniteurDb = testEnv.authenticatedContext(MONITEUR_UID).firestore();
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'user_ludic_state', CLIENT_UID), { wallCounts: { Dalle: 1 } });
+    });
+    await assertFails(getDoc(doc(moniteurDb, 'user_ludic_state', CLIENT_UID)));
+  });
+
+  it('un utilisateur non authentifié ne peut pas lire ou écrire', async () => {
+    const anonDb = testEnv.unauthenticatedContext().firestore();
+    await assertFails(getDoc(doc(anonDb, 'user_ludic_state', CLIENT_UID)));
+    await assertFails(setDoc(doc(anonDb, 'user_ludic_state', CLIENT_UID), { wallCounts: {} }));
+  });
+});
+
+// ✅ PLAN-premiers-ascensionnistes.md §2 : c'est ICI que se joue la faisabilité du chantier
+// tel que conçu (liste sur le document du bloc, pas de sous-collection) — vérifie que la
+// règle peut réellement empêcher la réécriture du préfixe existant, pas seulement contrôler
+// la taille de la liste. Le premier test ("réécriture du préfixe") est celui qui aurait fait
+// basculer vers la sous-collection si l'égalité de liste n'était pas supportée.
+describe('boulders : firstAscents (premiers ascensionnistes)', () => {
+  const BOULDER_ID = 'boulder-noir-1';
+  const ascent = (uid: string, at = new Date().toISOString()) => ({ uid, displayName: 'Grimpeur', at });
+
+  async function seedBoulder(overrides: Record<string, unknown> = {}) {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'boulders', BOULDER_ID), {
+        type: 'daily',
+        color: 'noir',
+        wall: 'Dalle',
+        number: '12',
+        ...overrides,
+      });
+    });
+  }
+
+  it('le client peut ajouter SA PROPRE entrée quand la liste compte moins de 5 entrées', async () => {
+    // ⚠️ L'entrée existante doit être le MÊME objet (même `at`) entre le seed et la mise à
+    // jour — `isAppendOnly4` compare le préfixe par égalité de valeur, deux appels séparés à
+    // `ascent()` produiraient deux timestamps différents et feraient échouer le test à tort.
+    const firstEntry = ascent(OTHER_CLIENT_UID);
+    await seedBoulder({ firstAscents: [firstEntry] });
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertSucceeds(updateDoc(doc(clientDb, 'boulders', BOULDER_ID), {
+      firstAscents: [firstEntry, ascent(CLIENT_UID)],
+    }));
+  });
+
+  it('impossible d\'ajouter l\'entrée de quelqu\'un d\'autre', async () => {
+    await seedBoulder({ firstAscents: [] });
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertFails(updateDoc(doc(clientDb, 'boulders', BOULDER_ID), {
+      firstAscents: [ascent(OTHER_CLIENT_UID)],
+    }));
+  });
+
+  it('⚠️ point décisif du plan : impossible de réécrire le préfixe existant', async () => {
+    await seedBoulder({ firstAscents: [ascent('a'), ascent('b'), ascent('c')] });
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    // Même taille finale (4) qu'un ajout légitime, mais le préfixe [a,b,c] est remplacé
+    // par [x,y,z] plutôt que conservé — doit échouer même si la taille progresse de 1.
+    await assertFails(updateDoc(doc(clientDb, 'boulders', BOULDER_ID), {
+      firstAscents: [ascent('x'), ascent('y'), ascent('z'), ascent(CLIENT_UID)],
+    }));
+  });
+
+  it('impossible d\'écrire quand la liste est déjà pleine (5 entrées)', async () => {
+    await seedBoulder({ firstAscents: ['a', 'b', 'c', 'd', 'e'].map((u) => ascent(u)) });
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertFails(updateDoc(doc(clientDb, 'boulders', BOULDER_ID), {
+      firstAscents: ['a', 'b', 'c', 'd', 'e'].map((u) => ascent(u)).concat(ascent(CLIENT_UID)),
+    }));
+  });
+
+  it('impossible d\'ajouter plusieurs entrées en une seule écriture', async () => {
+    await seedBoulder({ firstAscents: [] });
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertFails(updateDoc(doc(clientDb, 'boulders', BOULDER_ID), {
+      firstAscents: [ascent(CLIENT_UID), ascent(OTHER_CLIENT_UID)],
+    }));
+  });
+
+  it('impossible de retirer une entrée existante (liste raccourcie)', async () => {
+    await seedBoulder({ firstAscents: [ascent('a'), ascent('b')] });
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertFails(updateDoc(doc(clientDb, 'boulders', BOULDER_ID), { firstAscents: [ascent('a')] }));
+  });
+
+  it('impossible de modifier un autre champ du bloc dans la même écriture', async () => {
+    await seedBoulder({ firstAscents: [] });
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertFails(updateDoc(doc(clientDb, 'boulders', BOULDER_ID), {
+      firstAscents: [ascent(CLIENT_UID)],
+      color: 'rose',
+    }));
+  });
+
+  it('impossible d\'ajouter des champs superflus sur l\'entrée', async () => {
+    await seedBoulder({ firstAscents: [] });
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertFails(updateDoc(doc(clientDb, 'boulders', BOULDER_ID), {
+      firstAscents: [{ ...ascent(CLIENT_UID), score: 9999 }],
+    }));
+  });
+
+  it('exclut un bloc de compétition (type "competition")', async () => {
+    await seedBoulder({ type: 'competition', firstAscents: [] });
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertFails(updateDoc(doc(clientDb, 'boulders', BOULDER_ID), {
+      firstAscents: [ascent(CLIENT_UID)],
+    }));
+  });
+
+  it('exclut un bloc quotidien réutilisé activement en compétition (competition_active)', async () => {
+    await seedBoulder({ competition_active: true, firstAscents: [] });
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertFails(updateDoc(doc(clientDb, 'boulders', BOULDER_ID), {
+      firstAscents: [ascent(CLIENT_UID)],
+    }));
+  });
+
+  it('le staff (ouvreur/admin) garde son accès libre, y compris sur firstAscents', async () => {
+    await seedBoulder({ firstAscents: [] });
+    const moniteurDb = testEnv.authenticatedContext(MONITEUR_UID).firestore();
+    // MONITEUR_UID n'a que le rôle "moniteur" dans ce fixture, pas ouvreur/admin —
+    // confirme que le rôle staff générique ne suffit pas, seuls ouvreur/admin sont exemptés.
+    await assertFails(updateDoc(doc(moniteurDb, 'boulders', BOULDER_ID), { color: 'rose' }));
+
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'users', 'ouvreur-1'), { roles: ['ouvreur'] });
+    });
+    const ouvreurDb = testEnv.authenticatedContext('ouvreur-1').firestore();
+    await assertSucceeds(updateDoc(doc(ouvreurDb, 'boulders', BOULDER_ID), {
+      firstAscents: [ascent('a'), ascent('b'), ascent('c'), ascent('d'), ascent('e'), ascent('f')],
+    }));
+  });
+});

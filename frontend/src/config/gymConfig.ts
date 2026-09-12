@@ -53,6 +53,11 @@ export const colorGrades: ColorGrade[] = [
   { value: 'rose', label: 'Rose (7B+-8A)', hex: '#FFC0CB', accountLabel: 'Rose (7B+-8A) - Grimpeur mutant' },
 ];
 
+// ✅ PLAN-premiers-ascensionnistes.md : couleurs assez difficiles pour justifier une liste
+// des "premiers ascensionnistes" (5 places, voir utils/firstAscents.ts) — propre à cette
+// salle, jamais en dur dans un composant (le fork "Grimpe !" aura d'autres seuils).
+export const firstAscentColors: string[] = ['noir', 'blanc', 'rose'];
+
 // Bloc "mystère" : utilisé pour les blocs de "grosse compétition", dont la
 // cotation réelle est cachée aux grimpeurs pendant l'événement (voir CLAUDE.md).
 // Deux graphies coexistent déjà dans le code historique ('mystere' comme valeur

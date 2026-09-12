@@ -21,6 +21,7 @@ import {
 import { doc, getDoc, writeBatch } from 'firebase/firestore';
 import { colorGrades } from '../../../config/gymConfig';
 import { getSeasonAge, getFfmeCategory } from '../../../utils/ageCategory';
+import { getLudicState, updateLudicState } from '../../../services/ludicState';
 
 // Tableau de correspondance code-couleur/cotations internationales
 const levelOptions = colorGrades.map(({ value, accountLabel }) => ({ value, label: accountLabel }));
@@ -43,6 +44,10 @@ const ClientProfile: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  // ✅ PLAN-premiers-ascensionnistes.md §3 : consentement dédié (distinct de
+  // classementOptIn), stocké dans `user_ludic_state` (PLAN-etat-ludique-hors-users.md est
+  // déjà engagé) plutôt que sur "users" — voir services/ludicState.ts.
+  const [firstAscentOptIn, setFirstAscentOptIn] = useState(false);
   const navigate = useNavigate();
 
   // Charger les données utilisateur
@@ -68,6 +73,8 @@ const ClientProfile: React.FC = () => {
             classementOptIn?: boolean;
           });
         }
+        const ludicState = await getLudicState(user.uid);
+        setFirstAscentOptIn(ludicState.firstAscentOptIn ?? false);
       } catch (err) {
         setError(`Erreur lors du chargement de vos informations : ${err}`);
       } finally {
@@ -123,6 +130,11 @@ const ClientProfile: React.FC = () => {
         classementOptIn: userData.classementOptIn ?? false,
       }, { merge: true });
       await batch.commit();
+      // ✅ Écriture séparée : `user_ludic_state` a ses propres règles Firestore
+      // (lecture/écriture réservées au propriétaire), pas le même document que le batch
+      // ci-dessus. Après le batch : si ce champ échouait seul, le reste du formulaire
+      // (déjà le plus important) resterait quand même enregistré.
+      await updateLudicState(user.uid, { firstAscentOptIn });
       setSuccess('Vos informations ont été mises à jour avec succès !');
       setTimeout(() => {
         navigate('/client/screen');
@@ -251,6 +263,25 @@ const ClientProfile: React.FC = () => {
               public — sans ce texte, l'effet serait invisible pour le grimpeur. */}
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
             Désactiver ce réglage vous retire aussi de la qualification pour la Finale de fin de saison.
+          </Typography>
+
+          <FormControlLabel
+            sx={{ mt: 1 }}
+            control={
+              <Switch
+                checked={firstAscentOptIn}
+                onChange={(e) => setFirstAscentOptIn(e.target.checked)}
+              />
+            }
+            label="Apparaître dans les premiers ascensionnistes des blocs difficiles"
+          />
+          {/* ✅ PLAN-premiers-ascensionnistes.md §6 : le consentement est vérifié au moment
+              de la validation, pas rétroactivement — l'activer ne fait pas apparaître le
+              grimpeur dans les listes des blocs déjà validés avant. */}
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+            Concerne les blocs noir, blanc et rose : les 5 premiers grimpeurs à valider un tel
+            bloc sont affichés sur sa fiche. N'a d'effet que sur vos prochaines validations —
+            pas sur celles déjà enregistrées.
           </Typography>
 
           <Box sx={{ mt: 4, display: 'flex', gap: 2 }}>

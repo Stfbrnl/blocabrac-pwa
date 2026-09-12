@@ -51,6 +51,7 @@ import * as html2canvas from 'html2canvas';
 import { logoAssetUrl as logo } from '../../../config/gymConfig';
 import { computeBadgeActive } from '../../../utils/badgeActivation';
 import type { RouletteCompletion } from '../../../utils/roulette';
+import { getLudicState } from '../../../services/ludicState';
 
 // Couleurs des niveaux
 const levelColors: Record<string, string> = {
@@ -211,9 +212,12 @@ const ClientStats: React.FC = () => {
         const userData = userDoc.exists() ? userDoc.data() : null;
         if (userData) {
           setUserGender(userData.gender || 'Homme');
-          setRouletteCount(userData.rouletteChallengesCompleted || 0);
-          setRouletteRecent(Array.isArray(userData.rouletteRecentChallenges) ? userData.rouletteRecentChallenges : []);
         }
+        // ✅ PLAN-etat-ludique-hors-users.md, passe C : lus uniquement depuis
+        // `user_ludic_state` via ludicState.ts (plus de repli sur "users").
+        const ludicState = await getLudicState(user.uid);
+        setRouletteCount(ludicState.rouletteChallengesCompleted || 0);
+        setRouletteRecent(Array.isArray(ludicState.rouletteRecentChallenges) ? ludicState.rouletteRecentChallenges : []);
 
         // Récupérer les exercices
         const exercisesQuery = query(collection(db, 'exercises'));

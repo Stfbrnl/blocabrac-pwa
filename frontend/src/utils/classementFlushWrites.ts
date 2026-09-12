@@ -1,9 +1,12 @@
 // ✅ PROCESSUS-erreurs-avalees.md §3 (V2.48) : logique d'écriture du flush débounced de
-// ClientDaily.tsx (classement_profiles + users.wallCounts + challenges.progress), extraite
-// en fonction PURE — aucun import Firestore ici, seulement des données et des références déjà
-// résolues. C'est cette extraction qui permet à `runReadThenWriteTransaction` (voir
-// firestoreTransaction.ts) d'imposer l'ordre lectures/écritures par la signature plutôt que
-// par la discipline : cette fonction ne reçoit jamais `tx`, elle ne PEUT pas relire.
+// ClientDaily.tsx (classement_profiles + user_ludic_state.wallCounts + challenges.progress),
+// extraite en fonction PURE — aucun import Firestore ici, seulement des données et des
+// références déjà résolues. C'est cette extraction qui permet à `runReadThenWriteTransaction`
+// (voir firestoreTransaction.ts) d'imposer l'ordre lectures/écritures par la signature plutôt
+// que par la discipline : cette fonction ne reçoit jamais `tx`, elle ne PEUT pas relire.
+// ✅ PLAN-etat-ludique-hors-users.md, passe C : wallCounts vit uniquement dans
+// user_ludic_state désormais (plus de double écriture/repli sur "users" — retiré après
+// vérification en production de la passe A/B, voir git blame pour la version transitoire).
 import type { DocumentReference, DocumentData } from 'firebase/firestore';
 import { summaryFromColorCounts, type ColorCounts } from './classementScore';
 import type { TransactionWrite } from './firestoreTransaction';
@@ -28,13 +31,15 @@ export const hasPendingClassementDelta = (pending: ClassementFlushPending): bool
 
 export interface ClassementFlushRefs {
   classementProfileRef: DocumentReference<DocumentData>;
-  userRef: DocumentReference<DocumentData>;
+  // Cible unique de wallCounts. Toujours fourni par l'appelant même quand wallDeltas est
+  // vide (comparé par identité uniquement si utilisé, jamais déréférencé sinon).
+  userLudicRef: DocumentReference<DocumentData>;
   challengeRefs: Map<string, DocumentReference<DocumentData>>;
 }
 
 export interface ClassementFlushReadData {
   classementProfile?: { score?: number; colorCounts?: ColorCounts; season?: { score?: number; colorCounts?: ColorCounts } };
-  user?: { wallCounts?: WallCounts };
+  userLudic?: { wallCounts?: WallCounts };
   challenges: Map<string, { progress?: Record<string, { value?: number }> } | undefined>;
 }
 
@@ -74,11 +79,11 @@ export const buildClassementFlushWrites = (
   });
 
   if (pending.wallDeltas.size > 0) {
-    const wallCounts: WallCounts = { ...readData.user?.wallCounts };
+    const wallCounts: WallCounts = { ...readData.userLudic?.wallCounts };
     pending.wallDeltas.forEach((delta, wall) => {
       wallCounts[wall] = (wallCounts[wall] || 0) + delta;
     });
-    writes.push({ ref: refs.userRef, data: { wallCounts } });
+    writes.push({ ref: refs.userLudicRef, data: { wallCounts, updated_at: new Date().toISOString() } });
   }
 
   // ✅ Défis entre potes : "seuil"/"fenetre" appliquent un delta cumulatif ; "bloc_designe"

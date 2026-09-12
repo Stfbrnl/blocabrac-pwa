@@ -14,7 +14,7 @@ const fakeRef = (id: string) => ({ id }) as unknown as DocumentReference<Documen
 
 const refs: ClassementFlushRefs = {
   classementProfileRef: fakeRef('classement_profiles/u1'),
-  userRef: fakeRef('users/u1'),
+  userLudicRef: fakeRef('user_ludic_state/u1'),
   challengeRefs: new Map([
     ['c1', fakeRef('challenges/c1')],
     ['c2', fakeRef('challenges/c2')],
@@ -54,7 +54,7 @@ describe('buildClassementFlushWrites', () => {
     expect(writes[0].data.colorCounts).toEqual({ rouge: 4 });
   });
 
-  it('n\'écrit users.wallCounts que si un delta de mur est en attente', () => {
+  it('n\'écrit user_ludic_state.wallCounts que si un delta de mur est en attente', () => {
     const withoutWall = buildClassementFlushWrites('u1', emptyClassementFlushPending(), { challenges: new Map() }, refs);
     expect(withoutWall).toHaveLength(1); // seulement classement_profiles
 
@@ -65,19 +65,19 @@ describe('buildClassementFlushWrites', () => {
       refs
     );
     expect(withWall).toHaveLength(2);
-    const wallWrite = withWall.find((w) => w.ref === refs.userRef);
-    expect(wallWrite?.data.wallCounts).toEqual({ Dalle: 1 });
+    const ludicWrite = withWall.find((w) => w.ref === refs.userLudicRef);
+    expect(ludicWrite?.data.wallCounts).toEqual({ Dalle: 1 });
   });
 
-  it('cumule wallCounts par-dessus un compteur existant', () => {
+  it('cumule wallCounts par-dessus un compteur existant dans user_ludic_state', () => {
     const writes = buildClassementFlushWrites(
       'u1',
       { ...emptyClassementFlushPending(), wallDeltas: new Map([['Dalle', 1]]) },
-      { user: { wallCounts: { Dalle: 4, Gullich: 2 } }, challenges: new Map() },
+      { userLudic: { wallCounts: { Dalle: 4, Gullich: 2 } }, challenges: new Map() },
       refs
     );
-    const wallWrite = writes.find((w) => w.ref === refs.userRef);
-    expect(wallWrite?.data.wallCounts).toEqual({ Dalle: 5, Gullich: 2 });
+    const ludicWrite = writes.find((w) => w.ref === refs.userLudicRef);
+    expect(ludicWrite?.data.wallCounts).toEqual({ Dalle: 5, Gullich: 2 });
   });
 
   it('applique un delta cumulatif à un défi "seuil"', () => {

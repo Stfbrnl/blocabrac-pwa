@@ -4,9 +4,10 @@
 // continu. Contre l'app + les émulateurs locaux, jamais la production.
 //
 // ✅ Mêle Playwright (UI) et firebase-admin (assertion backend directe sur
-// users.wallCounts) — PROCESSUS-erreurs-avalees.md §4 : "tout compteur incrémental
-// doit avoir une assertion e2e sur sa valeur résultante", wallCounts étant précisément
-// celui qui avait silencieusement cessé de s'écrire (bug de transaction V2.44→V2.46).
+// user_ludic_state.wallCounts — PLAN-etat-ludique-hors-users.md, passe C : plus sur
+// users) — PROCESSUS-erreurs-avalees.md §4 : "tout compteur incrémental doit avoir une
+// assertion e2e sur sa valeur résultante", wallCounts étant précisément celui qui avait
+// silencieusement cessé de s'écrire (bug de transaction V2.44→V2.46).
 import { chromium } from 'playwright';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -141,11 +142,13 @@ async function main() {
     await clientP.waitForTimeout(800);
   });
 
-  await step('Backend : users.wallCounts reflète la validation (compteur muet sans cette assertion)', async () => {
+  await step('Backend : user_ludic_state.wallCounts reflète la validation (compteur muet sans cette assertion)', async () => {
+    // ✅ PLAN-etat-ludique-hors-users.md, passe C : wallCounts ne vit plus que dans
+    // user_ludic_state (plus de users.wallCounts à vérifier).
     const { uid } = await adminAuth.getUserByEmail(CLIENT_EMAIL);
-    const userSnap = await adminDb.collection('users').doc(uid).get();
-    const wallCounts = userSnap.data()?.wallCounts;
-    assert(wallCounts?.[WALL] === 1, `wallCounts.${WALL} attendu 1, obtenu ${JSON.stringify(wallCounts)}`);
+    const ludicSnap = await adminDb.collection('user_ludic_state').doc(uid).get();
+    const wallCounts = ludicSnap.data()?.wallCounts;
+    assert(wallCounts?.[WALL] === 1, `user_ludic_state.wallCounts.${WALL} attendu 1, obtenu ${JSON.stringify(wallCounts)}`);
   });
 
   await step('Client : Bloc Roulette -> "J\'ai relevé le défi"', async () => {
@@ -164,14 +167,16 @@ async function main() {
     await clientP.getByText(/Bravo, \d+ᵉ défi Roulette relevé/).waitFor({ timeout: 10000 });
   });
 
-  await step('Backend : users.rouletteChallengesCompleted + rouletteRecentChallenges écrits', async () => {
+  await step('Backend : user_ludic_state.rouletteChallengesCompleted + rouletteRecentChallenges écrits', async () => {
+    // ✅ PLAN-etat-ludique-hors-users.md, passe C : plus de copie sur users, uniquement
+    // user_ludic_state.
     const { uid } = await adminAuth.getUserByEmail(CLIENT_EMAIL);
-    const data = (await adminDb.collection('users').doc(uid).get()).data() || {};
+    const data = (await adminDb.collection('user_ludic_state').doc(uid).get()).data() || {};
     assert(data.rouletteChallengesCompleted === 1,
-      `rouletteChallengesCompleted attendu 1, obtenu ${JSON.stringify(data.rouletteChallengesCompleted)}`);
+      `user_ludic_state.rouletteChallengesCompleted attendu 1, obtenu ${JSON.stringify(data.rouletteChallengesCompleted)}`);
     const recent = data.rouletteRecentChallenges;
     assert(Array.isArray(recent) && recent.length === 1,
-      `rouletteRecentChallenges attendu 1 entrée, obtenu ${JSON.stringify(recent)}`);
+      `user_ludic_state.rouletteRecentChallenges attendu 1 entrée, obtenu ${JSON.stringify(recent)}`);
     assert(recent[0].wall === WALL && String(recent[0].number) === BOULDER_NUMBER,
       `l'entrée doit porter le bloc précisé, obtenu ${JSON.stringify(recent[0])}`);
   });

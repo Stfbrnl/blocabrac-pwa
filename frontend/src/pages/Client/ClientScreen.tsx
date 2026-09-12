@@ -35,6 +35,7 @@ import {
   Close as CloseIcon
 } from '@mui/icons-material';
 import { doc, getDoc, setDoc, deleteField, collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
+import { getLudicState, updateLudicState } from '../../services/ludicState';
 import * as html2canvas from 'html2canvas';
 import AnnouncementBanner from '../../components/AnnouncementBanner';
 import WhatsNewPanel from '../../components/WhatsNewPanel';
@@ -116,8 +117,12 @@ const ClientScreen: React.FC = () => {
       try {
         const docRef = doc(db, 'users', user.uid);
         const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setUserData(docSnap.data());
+        const data = docSnap.exists() ? docSnap.data() : null;
+        // ✅ PLAN-etat-ludique-hors-users.md, passe C : weeklyGoalItems vient uniquement de
+        // `user_ludic_state` via ludicState.ts (plus de repli sur "users").
+        const ludicState = await getLudicState(user.uid);
+        if (data) {
+          setUserData({ ...data, weeklyGoalItems: ludicState.weeklyGoalItems });
         }
       } catch (err) {
         console.error("Erreur lors du chargement des données utilisateur :", err);
@@ -341,12 +346,15 @@ const ClientScreen: React.FC = () => {
   const handleSaveGoal = async () => {
     if (!user) return;
     try {
-      await setDoc(doc(db, 'users', user.uid), {
-        weeklyGoalItems: draftItems.length > 0 ? draftItems : deleteField(),
-        // Ancien champ : jamais réécrit avec une valeur, seulement effacé au
-        // premier enregistrement depuis ce nouvel écran (voir weeklyGoal.ts).
-        weeklyGoalTarget: deleteField(),
-      }, { merge: true });
+      // ✅ weeklyGoalItems : voir PLAN-etat-ludique-hors-users.md, passe C — écrit uniquement
+      // via ludicState.ts (user_ludic_state). weeklyGoalTarget reste sur "users" (champ
+      // légitimement legacy-legacy, jamais réécrit, seulement effacé au premier
+      // enregistrement depuis ce nouvel écran — voir weeklyGoal.ts) : il ne fait pas partie
+      // des quatre champs migrés par ce chantier.
+      await Promise.all([
+        updateLudicState(user.uid, { weeklyGoalItems: draftItems.length > 0 ? draftItems : deleteField() }),
+        setDoc(doc(db, 'users', user.uid), { weeklyGoalTarget: deleteField() }, { merge: true }),
+      ]);
       setUserData((prev) => (prev ? {
         ...prev,
         weeklyGoalItems: draftItems.length > 0 ? draftItems : null,
@@ -361,10 +369,10 @@ const ClientScreen: React.FC = () => {
   const handleRemoveAllGoals = async () => {
     if (!user) return;
     try {
-      await setDoc(doc(db, 'users', user.uid), {
-        weeklyGoalItems: deleteField(),
-        weeklyGoalTarget: deleteField(),
-      }, { merge: true });
+      await Promise.all([
+        updateLudicState(user.uid, { weeklyGoalItems: deleteField() }),
+        setDoc(doc(db, 'users', user.uid), { weeklyGoalTarget: deleteField() }, { merge: true }),
+      ]);
       setUserData((prev) => (prev ? { ...prev, weeklyGoalItems: null, weeklyGoalTarget: null } : prev));
       setDraftItems([]);
       setGoalDialogOpen(false);

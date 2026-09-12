@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '../../../services/firebaseConfig';
-import { collection, query, where, getDocs, addDoc, setDoc, doc, getDoc, updateDoc, increment } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, setDoc, doc, getDoc } from 'firebase/firestore';
 import { scoreDeltaForValidation, isWithinSeasonWindow } from '../../../utils/classementScore';
 import { calculatePoints } from '../../../utils/climbingPoints';
 import { getDocsCacheFirst } from '../../../utils/firestoreCacheFirst';
@@ -11,6 +11,8 @@ import {
   buildClassementFlushWrites, mergeClassementFlushPending, emptyClassementFlushPending,
   type ClassementFlushPending,
 } from '../../../utils/classementFlushWrites';
+import { buildFirstAscentWrite } from '../../../utils/firstAscentWrites';
+import type { FirstAscentEntry } from '../../../utils/firstAscents';
 import {
   Container, Typography, Box, Button, CircularProgress, Alert,
   Dialog, DialogTitle, DialogContent, DialogActions,
@@ -19,16 +21,17 @@ import {
   useMediaQuery
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
-import { walls as wallList, colorGrades, mysteryColorHexKey, mysteryColorHex, logoPath, storageKeyPrefix } from '../../../config/gymConfig';
+import { walls as wallList, colorGrades, mysteryColorHexKey, mysteryColorHex, logoPath, storageKeyPrefix, firstAscentColors } from '../../../config/gymConfig';
 import { getBoulderImageUrl } from '../../../services/imageStorage';
 import CasinoIcon from '@mui/icons-material/Casino';
 import { levelOrder, type Level } from '../../../utils/competitionEligibility';
 import { resolveSeuilTargetColor } from '../../../utils/challenges';
 import {
-  drawProposal, drawDeathProposal, addRouletteCompletion, resolveDrawLabel,
+  drawProposal, drawDeathProposal, resolveDrawLabel,
   type DrawResult, type WallCounts, type RouletteCompletion,
 } from '../../../utils/roulette';
 import RouletteDialog, { type RouletteChosenBoulder } from './RouletteDialog';
+import { getLudicState, incrementRouletteCompleted } from '../../../services/ludicState';
 
 // ✅ Bloc Roulette : clé localStorage de l'anti-lassitude (§1.5) — les ~10 derniers ids de
 // propositions tirées, exclus du tirage suivant. Préfixée comme les autres clés de la salle
@@ -82,6 +85,10 @@ interface Boulder {
   type?: string;
   is_child_route?: boolean;
   is_active?: boolean;
+  // ✅ PLAN-premiers-ascensionnistes.md : reste 'daily'/false pour tout bloc affiché ici (la
+  // requête filtre déjà type=='daily'), mais lu explicitement par prudence — voir §5 du plan.
+  competition_active?: boolean;
+  firstAscents?: FirstAscentEntry[];
 }
 
 // ✅ Chantier 2 : image_public_id (Cloudinary) prioritaire, repli sur l'ancien
@@ -119,6 +126,10 @@ const ClientDaily: React.FC = () => {
     wallCounts?: WallCounts;
     rouletteChallengesCompleted?: number;
     rouletteRecentChallenges?: RouletteCompletion[];
+    // ✅ PLAN-premiers-ascensionnistes.md §3 : consentement dédié (distinct de
+    // classementOptIn), lu ici pour être vérifié sans lecture supplémentaire au moment
+    // du clic "Réussi".
+    firstAscentOptIn?: boolean;
   }>({});
   // ✅ Ref-de-state (même discipline que `activeChallengesRef`/`lastPersistedResultRef`) :
   // `handleValiderRoulette` doit repartir de l'état LE PLUS RÉCENT pour recomposer la liste
@@ -200,12 +211,16 @@ const ClientDaily: React.FC = () => {
     persist: async (_key, pending) => {
       if (!user) return;
       const classementProfileRef = doc(db, 'classement_profiles', user.uid);
-      const userRef = doc(db, 'users', user.uid);
+      // ✅ PLAN-etat-ludique-hors-users.md, passe C : seule cible de wallCounts désormais
+      // (plus de double écriture sur "users" — retiré après vérification en production de
+      // la passe A/B). Toujours dans la liste des LECTURES de la transaction, jamais un
+      // `get()` en ligne (voir firestoreTransaction.ts).
+      const userLudicRef = doc(db, 'user_ludic_state', user.uid);
       const challengeIds = new Set<string>([...pending.challengeDeltas.keys(), ...pending.blocDesigneScores.keys()]);
       const challengeRefs = new Map(Array.from(challengeIds, (id) => [id, doc(db, 'challenges', id)]));
 
       const reads: Record<string, ReturnType<typeof doc>> = { classementProfile: classementProfileRef };
-      if (pending.wallDeltas.size > 0) reads.user = userRef;
+      if (pending.wallDeltas.size > 0) reads.userLudic = userLudicRef;
       challengeRefs.forEach((ref, id) => { reads[`challenge:${id}`] = ref; });
 
       await runReadThenWriteTransaction(db, reads, (readData) => buildClassementFlushWrites(
@@ -213,10 +228,10 @@ const ClientDaily: React.FC = () => {
         pending,
         {
           classementProfile: readData.classementProfile,
-          user: readData.user,
+          userLudic: readData.userLudic,
           challenges: new Map(Array.from(challengeIds, (id) => [id, readData[`challenge:${id}`]])),
         },
-        { classementProfileRef, userRef, challengeRefs }
+        { classementProfileRef, userLudicRef, challengeRefs }
       ));
     },
     // ✅ Niveau 3 (PROCESSUS-erreurs-avalees.md §2) : réutilise l'état error/Alert déjà
@@ -272,14 +287,18 @@ const ClientDaily: React.FC = () => {
             firstName: data.first_name || '',
             lastName: data.last_name || '',
           };
-          // ✅ Bloc Roulette : même lecture, pas de getDoc séparé — niveau + compteur par mur
-          // (nécessaires au tirage) et suivi des défis relevés (compteur + 10 derniers), lus
-          // ici pour être réécrits sans relecture au moment du "J'ai relevé le défi".
+          // ✅ Bloc Roulette : niveau depuis "users" (identité/droits, reste à sa place —
+          // PLAN-etat-ludique-hors-users.md) ; wallCounts + suivi des défis relevés viennent
+          // de `user_ludic_state` via ludicState.ts (passe C : plus de repli sur "users",
+          // la passe B a backfillé tous les comptes existants avant ce retrait). Lus ici
+          // pour être réécrits sans relecture au moment du "J'ai relevé le défi".
+          const ludicState = await getLudicState(user.uid);
           setSelfProfile({
             level: data.level,
-            wallCounts: data.wallCounts,
-            rouletteChallengesCompleted: data.rouletteChallengesCompleted,
-            rouletteRecentChallenges: data.rouletteRecentChallenges,
+            wallCounts: ludicState.wallCounts,
+            rouletteChallengesCompleted: ludicState.rouletteChallengesCompleted,
+            rouletteRecentChallenges: ludicState.rouletteRecentChallenges,
+            firstAscentOptIn: ludicState.firstAscentOptIn,
           });
         }
       } catch (ownErr) {
@@ -467,11 +486,14 @@ const ClientDaily: React.FC = () => {
     }
   };
 
-  // ✅ "J'ai relevé le défi" (V2.55, version hybride) : UNE écriture sur `users/{uid}` —
-  // compteur `increment(1)` + liste plafonnée des 10 derniers défis recomposée en mémoire
-  // depuis `selfProfileRef.current` (aucune relecture Firestore : le doc a été chargé au
-  // montage). JAMAIS `client_boulder_results`, donc famille E / roulette de la mort comptent
-  // sans toucher classement/badges/niveau.
+  // ✅ "J'ai relevé le défi" (V2.55, version hybride ; PLAN-etat-ludique-hors-users.md pour
+  // l'emplacement) : une écriture via ludicState.ts (double écriture user_ludic_state +
+  // users tant que la passe C n'a pas eu lieu) — compteur + liste plafonnée des 10 derniers
+  // défis, recomposée depuis `selfProfileRef.current` (aucune relecture Firestore : l'état a
+  // été chargé au montage). Valeur EXPLICITE (jamais `increment()`) : un `increment()`
+  // appliqué séparément aux deux documents diffuserait tant que `user_ludic_state` n'a pas
+  // été backfillé (voir incrementRouletteCompleted). JAMAIS `client_boulder_results`, donc
+  // famille E / roulette de la mort comptent sans toucher classement/badges/niveau.
   // Mise à jour de l'affichage APRÈS le succès de l'écriture (pas d'UI optimiste) : le
   // compteur ne monte que si Firestore a bien pris — pas d'état incohérent en cas d'échec
   // (retour ClaudeNav 06/09).
@@ -486,21 +508,15 @@ const ClientDaily: React.FC = () => {
       number: chosen.number,
       at: new Date().toISOString(),
     };
-    const nextRecent = addRouletteCompletion(selfProfileRef.current.rouletteRecentChallenges, entry);
     setOpenRoulette(false);
     try {
-      await updateDoc(doc(db, 'users', user.uid), {
-        rouletteChallengesCompleted: increment(1),
-        rouletteRecentChallenges: nextRecent,
-      });
-      // Compteur : mise à jour fonctionnelle (toujours juste) ; liste : `nextRecent` recomposé.
-      setSelfProfile((prev) => ({
-        ...prev,
-        rouletteChallengesCompleted: (prev.rouletteChallengesCompleted || 0) + 1,
-        rouletteRecentChallenges: nextRecent,
-      }));
-      const shownCount = (selfProfileRef.current.rouletteChallengesCompleted || 0) + 1;
-      setSuccess(`Bravo, ${shownCount}ᵉ défi Roulette relevé !`);
+      const { rouletteChallengesCompleted, rouletteRecentChallenges } = await incrementRouletteCompleted(
+        user.uid,
+        selfProfileRef.current,
+        entry
+      );
+      setSelfProfile((prev) => ({ ...prev, rouletteChallengesCompleted, rouletteRecentChallenges }));
+      setSuccess(`Bravo, ${rouletteChallengesCompleted}ᵉ défi Roulette relevé !`);
     } catch (err) {
       console.error('Erreur lors de l\'enregistrement du défi Roulette relevé:', err);
       setError("Le défi n'a pas pu être enregistré — réessaie dans un instant.");
@@ -703,6 +719,47 @@ const ClientDaily: React.FC = () => {
   };
 
 
+  // ✅ PLAN-premiers-ascensionnistes.md §6 : écriture IMMÉDIATE (pas débouncée, contrairement
+  // au flush classement/murs/défis) — déclenchée par le clic "Réussi", déjà immédiat, et
+  // unique par bloc sur toute sa vie (≤5 écritures). Relit le bloc FRAÎCHEMENT dans une petite
+  // transaction dédiée (jamais l'état `boulders` en mémoire, potentiellement périmé si un
+  // autre grimpeur vient de prendre une place) — `buildFirstAscentWrite` ne reçoit jamais
+  // `tx`, seulement les données déjà lues (même discipline que `classementFlushWrites.ts`).
+  // Échec silencieux côté utilisateur (console seulement) : la validation du bloc elle-même a
+  // déjà réussi au moment de cet appel, rater cette liste de prestige ne doit pas faire
+  // remonter une erreur intrusive sur un succès par ailleurs bien enregistré.
+  const maybeRecordFirstAscent = async (boulderId: string, success: boolean) => {
+    if (!user || !success || !selfProfile.firstAscentOptIn) return;
+    const boulder = boulders.find((b) => b.id === boulderId);
+    if (!boulder) return;
+    const color = boulder.color || boulder.difficulty;
+    if (!color || !firstAscentColors.includes(color)) return;
+    if (boulder.type !== 'daily' || boulder.competition_active) return;
+    const boulderRef = doc(db, 'boulders', boulderId);
+    const entry: FirstAscentEntry = { uid: user.uid, displayName: getUserFullName(user.uid), at: new Date().toISOString() };
+    try {
+      await runReadThenWriteTransaction(db, { boulder: boulderRef }, (readData) => buildFirstAscentWrite(
+        {
+          success, color, boulderType: boulder.type, competitionActive: boulder.competition_active,
+          uid: user.uid, optIn: true, eligibleColors: firstAscentColors,
+        },
+        entry,
+        { boulder: readData.boulder as { firstAscents?: FirstAscentEntry[] } | undefined },
+        { boulderRef }
+      ));
+      // ✅ Rafraîchit l'état local (mur + fiche ouverte si c'est la même) avec la liste
+      // réellement écrite — évite d'afficher une liste périmée sans recharger toute la page.
+      // Une seule lecture supplémentaire, seulement empruntée sur ce chemin rare (validation
+      // d'un bloc difficile, opt-in actif) — jamais sur une validation ordinaire.
+      const freshSnap = await getDoc(boulderRef);
+      const freshFirstAscents = freshSnap.exists() ? (freshSnap.data().firstAscents as FirstAscentEntry[] | undefined) : undefined;
+      setBoulders((prev) => prev.map((b) => (b.id === boulderId ? { ...b, firstAscents: freshFirstAscents } : b)));
+      setSelectedBoulder((prev) => (prev && prev.id === boulderId ? { ...prev, firstAscents: freshFirstAscents } : prev));
+    } catch (err) {
+      console.error("Erreur lors de l'enregistrement du premier ascensionniste:", err);
+    }
+  };
+
   const handleValidateSuccess = async (boulderId: string, success: boolean) => {
     if (!user) return;
     const candidate = {
@@ -751,6 +808,9 @@ const ClientDaily: React.FC = () => {
         const previousClassementState = previousResultState?.success ? { attempts: previousResultState.attempts } : null;
         applyClassementDelta(classementColor, previousClassementState, success, candidate.attempts, createdAt, wallById.get(boulderId), boulderId);
       }
+      // ✅ Après la classement — voir le commentaire de maybeRecordFirstAscent : ne doit
+      // jamais bloquer/retarder l'écriture principale ni son message de succès ci-dessus.
+      void maybeRecordFirstAscent(boulderId, success);
     } catch (err: unknown) {
       setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -1016,6 +1076,44 @@ const ClientDaily: React.FC = () => {
               <Typography variant="body2" sx={{ mb: 2 }}>
                 <strong>Créé par:</strong> {getUserFullName(selectedBoulder.created_by)}
               </Typography>
+
+              {/* ✅ PLAN-premiers-ascensionnistes.md §7 : uniquement sur la fiche de détail
+                  (pas sur la vignette du mur), et jamais sur un bloc de compétition (§5) —
+                  un bloc désactivé conserve sa liste (palmarès du mur précédent), le document
+                  n'étant jamais supprimé (invariant V2.56). */}
+              {firstAscentColors.includes(selectedBoulder.color || selectedBoulder.difficulty || '') &&
+                selectedBoulder.type === 'daily' && !selectedBoulder.competition_active && (
+                <Box sx={{ mb: 2, p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                  <Typography variant="subtitle2" sx={{ mb: 1 }}>🏆 Premiers ascensionnistes</Typography>
+                  {(selectedBoulder.firstAscents || []).length === 0 ? (
+                    <Typography variant="body2" color="text.secondary">
+                      Personne n'a encore validé ce bloc — sois le premier !
+                    </Typography>
+                  ) : (
+                    <>
+                      {(selectedBoulder.firstAscents || []).map((entry, idx) => (
+                        <Typography
+                          key={entry.uid}
+                          variant="body2"
+                          sx={{ fontWeight: entry.uid === user?.uid ? 'bold' : 'normal' }}
+                        >
+                          {idx + 1}. {entry.displayName} — {new Date(entry.at).toLocaleDateString()}
+                        </Typography>
+                      ))}
+                      {(selectedBoulder.firstAscents || []).length < 5 && (
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                          {5 - (selectedBoulder.firstAscents || []).length} place{5 - (selectedBoulder.firstAscents || []).length > 1 ? 's' : ''} restante{5 - (selectedBoulder.firstAscents || []).length > 1 ? 's' : ''} !
+                        </Typography>
+                      )}
+                    </>
+                  )}
+                  {!selfProfile.firstAscentOptIn && (
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                      Active « apparaître dans les premiers ascensionnistes » dans Mes informations pour y figurer.
+                    </Typography>
+                  )}
+                </Box>
+              )}
 
               <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
                 <Button

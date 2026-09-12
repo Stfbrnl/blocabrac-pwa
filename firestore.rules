@@ -62,6 +62,20 @@ service cloud.firestore {
       return exists(partPath) && get(partPath).data.get('submitted', false) == true;
     }
 
+    // ✅ PLAN-premiers-ascensionnistes.md §2 : vérifie que `newList` conserve `oldList`
+    // comme préfixe EXACT. La concaténation de listes (`oldList + [x]`) n'est PAS
+    // supportée par le langage des règles Firestore ("Unsupported operation error:
+    // list + list", constaté sur l'émulateur) — d'où cette version dépliée, comparant
+    // chaque position individuellement. `oldList` est plafonnée à 4 éléments avant
+    // l'écriture (voir la règle `boulders`, `firstAscents.size() < 5`), donc 4
+    // positions suffisent ; ajouter une position si ce plafond change un jour.
+    function isAppendOnly4(oldList, newList) {
+      return (oldList.size() < 1 || newList[0] == oldList[0]) &&
+             (oldList.size() < 2 || newList[1] == oldList[1]) &&
+             (oldList.size() < 3 || newList[2] == oldList[2]) &&
+             (oldList.size() < 4 || newList[3] == oldList[3]);
+    }
+
     // ========== 1. Utilisateurs ==========
     match /users/{userId} {
       allow read: if request.auth != null &&
@@ -88,6 +102,16 @@ service cloud.firestore {
                       );
       // ✅ Un admin peut désormais supprimer un compte (bloqué avant par "if false")
       allow delete: if request.auth != null && isUserRole("admin");
+    }
+
+    // ✅ PLAN-etat-ludique-hors-users.md : état ludique par utilisateur (objectifs de la
+    // semaine, compteur de murs, compteur/liste Roulette), sorti de "users" pour que les
+    // écrans staff qui lisent toute la collection "users" sans filtre n'aient plus à
+    // transporter ces champs. Contrairement à "users", jamais lu par le staff — ces champs
+    // n'existent que pour le grimpeur lui-même (recensement fait, aucun écran staff ne les
+    // lit, voir le plan §5). Lecture ET écriture réservées au propriétaire.
+    match /user_ludic_state/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
     // ✅ Fiche publique allégée (prénom/nom/genre/date de naissance/opt-in) lue par le
@@ -311,9 +335,30 @@ service cloud.firestore {
                      isUserRole("admin") ||
                      isUserRole("client") ||
                      isUserRole("moniteur"));
-      allow create, update, delete: if request.auth != null &&
-                                      (isUserRole("ouvreur") ||
-                                       isUserRole("admin"));
+      allow create, delete: if request.auth != null &&
+                              (isUserRole("ouvreur") ||
+                               isUserRole("admin"));
+      // ✅ PLAN-premiers-ascensionnistes.md §2 : un client peut désormais ajouter SA
+      // PROPRE entrée à `firstAscents` (liste plafonnée à 5, premiers grimpeurs à avoir
+      // validé un bloc difficile) — staff conserve l'accès libre existant (branche
+      // ci-dessous). Étanche par construction (testé sur l'émulateur, voir
+      // firestore.rules.test.ts) : `isAppendOnly4` interdit de réécrire un préfixe
+      // existant, pas seulement d'en vérifier la taille — un client ne peut ni
+      // remplacer une entrée passée, ni en retirer une, ni en insérer plusieurs à la
+      // fois. La concaténation de listes (`ancienne + [x] == nouvelle`) aurait été
+      // plus lisible mais n'est pas supportée par le langage des règles Firestore —
+      // voir le commentaire d'`isAppendOnly4`.
+      allow update: if request.auth != null &&
+                      ((isUserRole("ouvreur") || isUserRole("admin")) ||
+                       (isUserRole("client") &&
+                        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['firstAscents']) &&
+                        resource.data.type == 'daily' &&
+                        !resource.data.get('competition_active', false) &&
+                        resource.data.get('firstAscents', []).size() < 5 &&
+                        request.resource.data.firstAscents.size() == resource.data.get('firstAscents', []).size() + 1 &&
+                        isAppendOnly4(resource.data.get('firstAscents', []), request.resource.data.firstAscents) &&
+                        request.resource.data.firstAscents[resource.data.get('firstAscents', []).size()].uid == request.auth.uid &&
+                        request.resource.data.firstAscents[resource.data.get('firstAscents', []).size()].keys().hasOnly(['uid', 'displayName', 'at'])));
     }
 
     match /client_course_results/{docId} {
