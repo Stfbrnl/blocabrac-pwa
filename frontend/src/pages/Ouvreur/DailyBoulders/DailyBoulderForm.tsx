@@ -21,6 +21,7 @@ const boulderColorHex = (color?: string): string => {
   return colorGrades.find((c) => c.value === color)?.hex || mysteryColorHex;
 };
 import { uploadBoulderImage, getBoulderImageUrl } from '../../../services/imageStorage';
+import { buildOuvreurOptions, type StaffAccountOption } from '../../../utils/staffAccounts';
 
 interface RelativeHold {
   x: number;
@@ -33,6 +34,15 @@ interface BoulderAnnotations {
 }
 
 type DifficultyLevel = 'Plus' | 'Égal' | 'Moins';
+
+// ✅ PLAN-ouvreur-createur-bloc.md §2 : qui a réellement OUVERT le bloc sur le
+// mur, distinct de `created_by` (qui l'a SAISI dans l'appli — déjà existant,
+// automatique). Nom dénormalisé à la saisie pour un affichage client à coût nul
+// (un grimpeur ne peut pas lire `users`). `null` est une valeur valide.
+interface OpenedBy {
+  uid: string;
+  displayName: string;
+}
 
 interface Boulder {
   id: string;
@@ -48,6 +58,7 @@ interface Boulder {
   is_active?: boolean;
   is_child_route?: boolean;
   difficulty_level?: DifficultyLevel;
+  openedBy?: OpenedBy | null;
 }
 
 interface ColorRating {
@@ -127,6 +138,7 @@ export default function DailyBoulderForm(): JSX.Element {
     annotations: BoulderAnnotations;
     difficulty_level: DifficultyLevel;
     is_child_route: boolean;
+    openedByUid: string;
   }>({
     number: '',
     color: '',
@@ -139,9 +151,12 @@ export default function DailyBoulderForm(): JSX.Element {
       end_holds: []
     },
     difficulty_level: 'Égal',
-    is_child_route: false
+    is_child_route: false,
+    openedByUid: ''
   });
   const [currentMode, setCurrentMode] = useState<'start' | 'end'>('start');
+  // ✅ Menu déroulant alimenté par les comptes ouvreurs (fusion role/roles[], §2 du plan).
+  const [ouvreurOptions, setOuvreurOptions] = useState<StaffAccountOption[]>([]);
   const [openDeleteDialog, setOpenDeleteDialog] = useState<boolean>(false);
   const [boulderToDelete, setBoulderToDelete] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState<boolean>(false);
@@ -169,6 +184,32 @@ export default function DailyBoulderForm(): JSX.Element {
     fetchBoulders();
   }, [wall]);
 
+  // ✅ Indépendant du mur : la liste des ouvreurs ne change pas d'un formulaire à l'autre.
+  // Fusion des deux requêtes role/roles[] (convention du projet, cf. MessagesList.tsx).
+  useEffect(() => {
+    const fetchOuvreurs = async (): Promise<void> => {
+      try {
+        const [byRole, byRolesArray] = await Promise.all([
+          getDocs(query(collection(db, 'users'), where('role', '==', 'ouvreur'))),
+          getDocs(query(collection(db, 'users'), where('roles', 'array-contains', 'ouvreur'))),
+        ]);
+        const docs = [...byRole.docs, ...byRolesArray.docs].map((d) => ({ id: d.id, ...d.data() }));
+        const options = buildOuvreurOptions(docs);
+        setOuvreurOptions(options);
+        // ✅ Valeur par défaut : l'utilisateur connecté s'il est lui-même ouvreur — cas le
+        // plus fréquent (§7 du plan). Uniquement à la création, jamais si un bloc est déjà
+        // en cours d'édition (auquel cas handleEdit fixe déjà la valeur attendue).
+        if (user && options.some((o) => o.uid === user.uid)) {
+          setFormData((prev) => (prev.openedByUid || editingBoulder ? prev : { ...prev, openedByUid: user.uid }));
+        }
+      } catch (error: unknown) {
+        console.error('Erreur lors du chargement des ouvreurs :', error);
+      }
+    };
+    fetchOuvreurs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
   const handleEdit = (boulder: Boulder): void => {
     setEditingBoulder(boulder);
     setFormData({
@@ -183,7 +224,8 @@ export default function DailyBoulderForm(): JSX.Element {
         end_holds: boulder.annotations?.end_holds || []
       },
       difficulty_level: boulder.difficulty_level || 'Égal',
-      is_child_route: boulder.is_child_route || false
+      is_child_route: boulder.is_child_route || false,
+      openedByUid: boulder.openedBy?.uid || ''
     });
   };
 
@@ -295,7 +337,11 @@ export default function DailyBoulderForm(): JSX.Element {
       imagePreview: '',
       annotations: { start_holds: [], end_holds: [] },
       difficulty_level: 'Égal',
-      is_child_route: false
+      is_child_route: false,
+      // ✅ Repart sur l'utilisateur connecté s'il est ouvreur (même logique qu'au
+      // premier montage), pas sur une case vide — évite une saisie répétée entre
+      // deux créations par le même ouvreur.
+      openedByUid: (user && ouvreurOptions.some((o) => o.uid === user.uid)) ? user.uid : ''
     });
     setEditingBoulder(null);
     // ✅ Force le remontage de l'<input type="file"> natif : c'est ce qui
@@ -386,6 +432,12 @@ export default function DailyBoulderForm(): JSX.Element {
         uploadedPublicId = uploaded.publicId;
       }
 
+      // ✅ PLAN-ouvreur-createur-bloc.md §2 : dénormalise le nom au moment de la saisie,
+      // pas de résolution différée (un grimpeur ne peut pas lire `users`). Modifiable après
+      // coup (mode édition), contrairement à `created_by` qui ne change jamais.
+      const selectedOpenedBy = ouvreurOptions.find((o) => o.uid === formData.openedByUid);
+      const openedBy = selectedOpenedBy ? { uid: selectedOpenedBy.uid, displayName: selectedOpenedBy.displayName } : null;
+
       const boulderData = {
         wall: wall,
         number: parseInt(formData.number),
@@ -399,6 +451,7 @@ export default function DailyBoulderForm(): JSX.Element {
         is_active: true,
         difficulty_level: formData.difficulty_level,
         is_child_route: formData.is_child_route,
+        openedBy,
         // ✅ Ne pas écraser la date/l'auteur de création d'origine lors d'une modification
         ...(editingBoulder
           ? {}
@@ -516,6 +569,27 @@ export default function DailyBoulderForm(): JSX.Element {
             }
             label="🐒 Bloc enfant (symbole ouistiti — même cotation couleur que les adultes, sur les murs partagés comme Güllich)"
           />
+
+          {/* ✅ PLAN-ouvreur-createur-bloc.md : qui a réellement OUVERT le bloc sur le mur
+              (distinct de "créé par", qui reste la trace automatique de la saisie). Visible
+              des grimpeurs sur la fiche du bloc — voir ClientDaily.tsx. */}
+          <FormControl fullWidth margin="normal" disabled={isUploading}>
+            <InputLabel id="ouvert-par-select-label">Ouvert par</InputLabel>
+            <Select
+              labelId="ouvert-par-select-label" id="ouvert-par-select"
+              value={formData.openedByUid}
+              onChange={(e: SelectChangeEvent): void => setFormData({ ...formData, openedByUid: e.target.value })}
+              label="Ouvert par"
+            >
+              <MenuItem value="">Non renseigné</MenuItem>
+              {ouvreurOptions.map((o: StaffAccountOption) => (
+                <MenuItem key={o.uid} value={o.uid}>{o.displayName}</MenuItem>
+              ))}
+            </Select>
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
+              Visible des grimpeurs sur la fiche du bloc — modifiable à tout moment, y compris après coup.
+            </Typography>
+          </FormControl>
 
           <FormControl fullWidth margin="normal" disabled={isUploading}>
             <InputLabel id="types-de-difficulte-multiple-select-label">Types de difficulté (multiple)</InputLabel>
@@ -720,6 +794,10 @@ export default function DailyBoulderForm(): JSX.Element {
               </Typography>
               <Typography variant="body2">
                 Types: {(boulder.difficulty_types || []).join(', ')}
+              </Typography>
+              {/* ✅ §7 du plan : utile pour repérer les blocs non attribués depuis cette liste. */}
+              <Typography variant="body2" color={boulder.openedBy ? 'text.primary' : 'text.secondary'}>
+                Ouvert par : {boulder.openedBy?.displayName || 'non renseigné'}
               </Typography>
               {boulder.instructions && (
                 <Typography variant="body2" sx={{ mt: 1 }}>

@@ -827,3 +827,88 @@ describe('boulders : firstAscents (premiers ascensionnistes)', () => {
     }));
   });
 });
+
+// ✅ PLAN-ouvreur-createur-bloc.md §5/§8 : la règle ne peut pas empêcher un ouvreur de
+// désigner à tort un autre ouvreur (contrôle social, assumé par le plan) — elle empêche
+// seulement un uid inventé ou un compte qui n'a pas le rôle ouvreur, et ne doit jamais
+// planter sur `openedBy` absent/null (piège V2.27 : resource.data.get(...) sans défaut).
+describe('boulders : openedBy (attribution à un ouvreur)', () => {
+  const BOULDER_ID = 'boulder-attribution-1';
+
+  async function seedOuvreurs() {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'users', 'ouvreur-1'), { roles: ['ouvreur'] });
+      // ✅ Compte legacy au champ scalaire `role` (pas `roles[]`) — la fusion doit marcher
+      // aussi côté règles (hasRoleUid), pas seulement côté fusion des requêtes clientes.
+      await setDoc(doc(context.firestore(), 'users', 'ouvreur-legacy'), { role: 'ouvreur' });
+    });
+  }
+
+  it('un ouvreur peut créer un bloc avec un openedBy valide (rôle porté par roles[])', async () => {
+    await seedOuvreurs();
+    const ouvreurDb = testEnv.authenticatedContext('ouvreur-1').firestore();
+    await assertSucceeds(setDoc(doc(ouvreurDb, 'boulders', BOULDER_ID), {
+      type: 'daily', wall: 'Dalle', number: 1, color: 'jaune',
+      openedBy: { uid: 'ouvreur-1', displayName: 'Ouvreur Un' },
+    }));
+  });
+
+  it('un ouvreur peut créer un bloc avec un openedBy valide (rôle legacy scalaire)', async () => {
+    await seedOuvreurs();
+    const ouvreurDb = testEnv.authenticatedContext('ouvreur-1').firestore();
+    await assertSucceeds(setDoc(doc(ouvreurDb, 'boulders', BOULDER_ID), {
+      type: 'daily', wall: 'Dalle', number: 1, color: 'jaune',
+      openedBy: { uid: 'ouvreur-legacy', displayName: 'Ouvreur Historique' },
+    }));
+  });
+
+  it('openedBy absent ou null est accepté (valeur par défaut légitime)', async () => {
+    await seedOuvreurs();
+    const ouvreurDb = testEnv.authenticatedContext('ouvreur-1').firestore();
+    await assertSucceeds(setDoc(doc(ouvreurDb, 'boulders', BOULDER_ID), {
+      type: 'daily', wall: 'Dalle', number: 1, color: 'jaune',
+    }));
+    await assertSucceeds(updateDoc(doc(ouvreurDb, 'boulders', BOULDER_ID), { openedBy: null }));
+  });
+
+  it('rejette un uid qui n\'a pas le rôle ouvreur', async () => {
+    await seedOuvreurs();
+    const ouvreurDb = testEnv.authenticatedContext('ouvreur-1').firestore();
+    await assertFails(setDoc(doc(ouvreurDb, 'boulders', BOULDER_ID), {
+      type: 'daily', wall: 'Dalle', number: 1, color: 'jaune',
+      openedBy: { uid: CLIENT_UID, displayName: 'Pas un ouvreur' },
+    }));
+  });
+
+  it('rejette un uid inventé', async () => {
+    await seedOuvreurs();
+    const ouvreurDb = testEnv.authenticatedContext('ouvreur-1').firestore();
+    await assertFails(setDoc(doc(ouvreurDb, 'boulders', BOULDER_ID), {
+      type: 'daily', wall: 'Dalle', number: 1, color: 'jaune',
+      openedBy: { uid: 'uid-qui-n-existe-pas', displayName: 'Fantôme' },
+    }));
+  });
+
+  it('un ouvreur peut corriger l\'attribution d\'un bloc existant après coup', async () => {
+    await seedOuvreurs();
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'boulders', BOULDER_ID), {
+        type: 'daily', wall: 'Dalle', number: 1, color: 'jaune',
+        openedBy: { uid: 'ouvreur-1', displayName: 'Ouvreur Un' },
+      });
+    });
+    const ouvreurDb = testEnv.authenticatedContext('ouvreur-1').firestore();
+    await assertSucceeds(updateDoc(doc(ouvreurDb, 'boulders', BOULDER_ID), {
+      openedBy: { uid: 'ouvreur-legacy', displayName: 'Ouvreur Historique' },
+    }));
+  });
+
+  it('un client ne peut toujours pas écrire sur boulders (hors firstAscents)', async () => {
+    await seedOuvreurs();
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertFails(setDoc(doc(clientDb, 'boulders', BOULDER_ID), {
+      type: 'daily', wall: 'Dalle', number: 1, color: 'jaune',
+      openedBy: { uid: 'ouvreur-1', displayName: 'Ouvreur Un' },
+    }));
+  });
+});

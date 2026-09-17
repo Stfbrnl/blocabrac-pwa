@@ -12,6 +12,26 @@ service cloud.firestore {
       return (profile.roles is list && role in profile.roles) || ('role' in profile && profile.role == role);
     }
 
+    // ✅ PLAN-ouvreur-createur-bloc.md §5 : variante de isUserRole() pour un uid arbitraire
+    // (pas forcément request.auth.uid) — sert à valider `boulders.openedBy.uid` ci-dessous.
+    function hasRoleUid(uid, role) {
+      let profile = get(/databases/$(database)/documents/users/$(uid)).data;
+      return (profile.roles is list && role in profile.roles) || ('role' in profile && profile.role == role);
+    }
+
+    // ✅ PLAN-ouvreur-createur-bloc.md §5 : empêche un uid inventé ou non-ouvreur dans
+    // `openedBy`, sans bloquer les écritures qui ne touchent pas ce champ (court-circuit
+    // avant le get(), pour ne pas payer une lecture sur chaque édition de bloc). `null` et
+    // l'absence du champ sont des valeurs valides (§2 — un bloc peut légitimement ne pas
+    // avoir d'ouvreur désigné). Piège V2.27 évité : pas de comparaison directe sur un champ
+    // qui pourrait ne pas exister, tout passe par des littéraux `data.openedBy`, déjà
+    // garantis par le court-circuit `!('openedBy' in data)`.
+    function isValidOpenedBy(data) {
+      return !('openedBy' in data) ||
+             data.openedBy == null ||
+             hasRoleUid(data.openedBy.uid, "ouvreur");
+    }
+
     // ✅ Tout compte doit toujours porter le rôle "client" (les 3 autres rôles
     // s'additionnant par-dessus) : "Mon espace personnel" (protégé par role="client")
     // héberge désormais "Potes de grimpe", ouvert à tout le monde y compris le staff.
@@ -335,9 +355,15 @@ service cloud.firestore {
                      isUserRole("admin") ||
                      isUserRole("client") ||
                      isUserRole("moniteur"));
-      allow create, delete: if request.auth != null &&
-                              (isUserRole("ouvreur") ||
-                               isUserRole("admin"));
+      // ✅ PLAN-ouvreur-createur-bloc.md §5 : isValidOpenedBy() ajoute une seule contrainte
+      // sur la création (isValidOpenedBy(request.resource.data)) — les autres champs restent
+      // libres pour le staff comme avant.
+      allow create: if request.auth != null &&
+                      (isUserRole("ouvreur") || isUserRole("admin")) &&
+                      isValidOpenedBy(request.resource.data);
+      allow delete: if request.auth != null &&
+                      (isUserRole("ouvreur") ||
+                       isUserRole("admin"));
       // ✅ PLAN-premiers-ascensionnistes.md §2 : un client peut désormais ajouter SA
       // PROPRE entrée à `firstAscents` (liste plafonnée à 5, premiers grimpeurs à avoir
       // validé un bloc difficile) — staff conserve l'accès libre existant (branche
@@ -349,7 +375,13 @@ service cloud.firestore {
       // plus lisible mais n'est pas supportée par le langage des règles Firestore —
       // voir le commentaire d'`isAppendOnly4`.
       allow update: if request.auth != null &&
-                      ((isUserRole("ouvreur") || isUserRole("admin")) ||
+                      ((isUserRole("ouvreur") || isUserRole("admin")) &&
+                       // ✅ Ne paie la lecture supplémentaire (get() dans isValidOpenedBy)
+                       // que si `openedBy` fait partie de cette écriture — la grande
+                       // majorité des modifications (couleur, consignes, etc.) ne le touchent
+                       // pas et restent au coût d'avant.
+                       (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['openedBy']) ||
+                        isValidOpenedBy(request.resource.data)) ||
                        (isUserRole("client") &&
                         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['firstAscents']) &&
                         resource.data.type == 'daily' &&

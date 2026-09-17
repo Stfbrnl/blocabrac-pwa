@@ -40,6 +40,7 @@ interface Boulder {
   is_active: boolean;
   difficulty_level?: 'Plus' | 'Égal' | 'Moins';
   points_value?: number; // ✅ Mode de comptage "Blocs validés" uniquement
+  openedBy?: { uid: string; displayName: string } | null; // ✅ PLAN-ouvreur-createur-bloc.md
 }
 
 const colorRatings: { value: string; label: string }[] = colorGrades.map(
@@ -417,6 +418,7 @@ export default function CompetitionBouldersList(): JSX.Element {
                       <TableCell>Origine</TableCell>
                       <TableCell>Difficulté (interne)</TableCell>
                       <TableCell>Types</TableCell>
+                      <TableCell>Ouvert par</TableCell>
                       {isBlocsValidesMode && <TableCell>Points</TableCell>}
                       <TableCell>Actions</TableCell>
                     </TableRow>
@@ -463,6 +465,9 @@ export default function CompetitionBouldersList(): JSX.Element {
                           )}
                         </TableCell>
                         <TableCell>{boulder.difficulty_types?.join(', ') || 'Aucun'}</TableCell>
+                        {/* ✅ §7 du plan : utile pour repérer les blocs non attribués. Éditable
+                            uniquement depuis le formulaire d'origine (Daily/Competition), pas ici. */}
+                        <TableCell>{boulder.openedBy?.displayName || '—'}</TableCell>
                         {isBlocsValidesMode && (
                           <TableCell>
                             {isReusedDailyBoulder(boulder) ? (

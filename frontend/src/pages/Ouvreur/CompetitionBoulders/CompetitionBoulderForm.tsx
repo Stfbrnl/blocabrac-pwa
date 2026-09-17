@@ -7,12 +7,13 @@ import {
 import type { SelectChangeEvent } from '@mui/material';
 import { Delete as DeleteIcon, Check as CheckIcon } from '@mui/icons-material';
 import {
-  addDoc, collection, doc, updateDoc, getDoc
+  addDoc, collection, doc, updateDoc, getDoc, getDocs, query, where
 } from 'firebase/firestore';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '../../../services/firebaseConfig';
 import { walls, colorGrades, difficultyTypes, difficultyLevels } from '../../../config/gymConfig';
 import { uploadBoulderImage, getBoulderImageUrl } from '../../../services/imageStorage';
+import { buildOuvreurOptions, type StaffAccountOption } from '../../../utils/staffAccounts';
 
 interface RelativeHold {
   x: number;
@@ -25,6 +26,14 @@ interface BoulderAnnotations {
 }
 
 type DifficultyLevel = 'Plus' | 'Égal' | 'Moins';
+
+// ✅ PLAN-ouvreur-createur-bloc.md §2 : même distinction que DailyBoulderForm.tsx —
+// qui a ouvert le bloc, dénormalisé, nullable, modifiable après coup. Non affiché
+// tant que le bloc reste `type: 'competition'` (cotation cachée) : voir ClientCompetitions.tsx.
+interface OpenedBy {
+  uid: string;
+  displayName: string;
+}
 
 interface Boulder {
   id: string;
@@ -40,6 +49,7 @@ interface Boulder {
   is_active: boolean;
   difficulty_level?: DifficultyLevel;
   points_value?: number; // ✅ Mode de comptage "Blocs validés" uniquement
+  openedBy?: OpenedBy | null;
 }
 
 interface Competition {
@@ -125,6 +135,7 @@ export default function CompetitionBoulderForm(): JSX.Element {
     annotations: BoulderAnnotations;
     difficulty_level: DifficultyLevel;
     points_value: string;
+    openedByUid: string;
   }>({
     number: '',
     wall: '',
@@ -138,7 +149,8 @@ export default function CompetitionBoulderForm(): JSX.Element {
       end_holds: []
     },
     difficulty_level: 'Égal',
-    points_value: ''
+    points_value: '',
+    openedByUid: ''
   });
   const [currentMode, setCurrentMode] = useState<'start' | 'end'>('start');
   const [isUploading, setIsUploading] = useState<boolean>(false);
@@ -146,6 +158,8 @@ export default function CompetitionBoulderForm(): JSX.Element {
   const imageRef = useRef<HTMLImageElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [fileInputKey] = useState<number>(0);
+  // ✅ Menu déroulant alimenté par les comptes ouvreurs (fusion role/roles[], §2 du plan).
+  const [ouvreurOptions, setOuvreurOptions] = useState<StaffAccountOption[]>([]);
 
   useEffect(() => {
     if (!competitionId) return;
@@ -179,7 +193,8 @@ export default function CompetitionBoulderForm(): JSX.Element {
             imagePreview: (data.image_public_id ? getBoulderImageUrl(data.image_public_id, 'full') : data.image_base64) || '',
             annotations: data.annotations || { start_holds: [], end_holds: [] },
             difficulty_level: data.difficulty_level || 'Égal',
-            points_value: data.points_value !== undefined ? String(data.points_value) : ''
+            points_value: data.points_value !== undefined ? String(data.points_value) : '',
+            openedByUid: data.openedBy?.uid || ''
           });
         }
       } catch (error: unknown) {
@@ -188,6 +203,29 @@ export default function CompetitionBoulderForm(): JSX.Element {
     };
     fetchBoulder();
   }, [boulderId]);
+
+  // ✅ Indépendant de la compétition/du bloc : la liste des ouvreurs ne change pas.
+  useEffect(() => {
+    const fetchOuvreurs = async (): Promise<void> => {
+      try {
+        const [byRole, byRolesArray] = await Promise.all([
+          getDocs(query(collection(db, 'users'), where('role', '==', 'ouvreur'))),
+          getDocs(query(collection(db, 'users'), where('roles', 'array-contains', 'ouvreur'))),
+        ]);
+        const docs = [...byRole.docs, ...byRolesArray.docs].map((d) => ({ id: d.id, ...d.data() }));
+        const options = buildOuvreurOptions(docs);
+        setOuvreurOptions(options);
+        // ✅ Valeur par défaut à la création uniquement (pas en édition, où
+        // fetchBoulder ci-dessus a déjà fixé la valeur attendue).
+        if (user && !boulderId && options.some((o) => o.uid === user.uid)) {
+          setFormData((prev) => (prev.openedByUid ? prev : { ...prev, openedByUid: user.uid }));
+        }
+      } catch (error: unknown) {
+        console.error('Erreur lors du chargement des ouvreurs :', error);
+      }
+    };
+    fetchOuvreurs();
+  }, [user, boulderId]);
 
   useEffect(() => {
     const canvas: HTMLCanvasElement | null = canvasRef.current;
@@ -365,6 +403,10 @@ export default function CompetitionBoulderForm(): JSX.Element {
         uploadedPublicId = uploaded.publicId;
       }
 
+      // ✅ PLAN-ouvreur-createur-bloc.md §2 : même dénormalisation que DailyBoulderForm.tsx.
+      const selectedOpenedBy = ouvreurOptions.find((o) => o.uid === formData.openedByUid);
+      const openedBy = selectedOpenedBy ? { uid: selectedOpenedBy.uid, displayName: selectedOpenedBy.displayName } : null;
+
       const boulderData = {
         wall: formData.wall,
         number: parseInt(formData.number),
@@ -377,6 +419,7 @@ export default function CompetitionBoulderForm(): JSX.Element {
         competition_id: competitionId,
         is_active: true,
         difficulty_level: formData.difficulty_level,
+        openedBy,
         // ✅ N'écrit ce champ que dans le mode qui s'en sert : évite de laisser une
         // ancienne valeur sur un bloc si la compétition change plus tard de mode.
         ...(formData.points_value ? { points_value: parseInt(formData.points_value, 10) } : {}),
@@ -493,6 +536,28 @@ export default function CompetitionBoulderForm(): JSX.Element {
               helperText="Invisible des grimpeurs. Rapportés intégralement si le bloc est réussi, quel que soit le nombre d'essais."
             />
           )}
+
+          {/* ✅ PLAN-ouvreur-createur-bloc.md : qui a réellement OUVERT le bloc. Décision
+              produit : jamais affiché aux grimpeurs tant que la cotation reste cachée
+              (type 'competition') — visible seulement après "Terminer la compétition",
+              via ClientDaily.tsx comme un bloc quotidien ordinaire. */}
+          <FormControl fullWidth margin="normal" disabled={isUploading}>
+            <InputLabel id="ouvert-par-select-label">Ouvert par</InputLabel>
+            <Select
+              labelId="ouvert-par-select-label" id="ouvert-par-select"
+              value={formData.openedByUid}
+              onChange={(e: SelectChangeEvent): void => setFormData({ ...formData, openedByUid: e.target.value })}
+              label="Ouvert par"
+            >
+              <MenuItem value="">Non renseigné</MenuItem>
+              {ouvreurOptions.map((o: StaffAccountOption) => (
+                <MenuItem key={o.uid} value={o.uid}>{o.displayName}</MenuItem>
+              ))}
+            </Select>
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
+              Non affiché aux grimpeurs tant que la compétition n'est pas terminée (cotation cachée).
+            </Typography>
+          </FormControl>
 
           <FormControl fullWidth margin="normal" disabled={isUploading}>
             <InputLabel id="types-de-difficulte-multiple-select-label">Types de difficulté (multiple)</InputLabel>

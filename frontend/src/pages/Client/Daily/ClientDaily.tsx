@@ -89,6 +89,10 @@ interface Boulder {
   // requête filtre déjà type=='daily'), mais lu explicitement par prudence — voir §5 du plan.
   competition_active?: boolean;
   firstAscents?: FirstAscentEntry[];
+  // ✅ PLAN-ouvreur-createur-bloc.md : qui a réellement OUVERT le bloc (distinct de
+  // `created_by`, qui a saisi), dénormalisé — jamais lu ici pour un bloc de compétition
+  // (cette page ne charge que type=='daily', voir la requête plus bas).
+  openedBy?: { uid: string; displayName: string } | null;
 }
 
 // ✅ Chantier 2 : image_public_id (Cloudinary) prioritaire, repli sur l'ancien
@@ -1076,6 +1080,13 @@ const ClientDaily: React.FC = () => {
               <Typography variant="body2" sx={{ mb: 2 }}>
                 <strong>Créé par:</strong> {getUserFullName(selectedBoulder.created_by)}
               </Typography>
+              {/* ✅ PLAN-ouvreur-createur-bloc.md §4 (décision) : n'apparaît que si renseigné —
+                  un bloc ancien ou sans ouvreur désigné n'affiche simplement rien. */}
+              {selectedBoulder.openedBy && (
+                <Typography variant="body2" sx={{ mb: 2 }}>
+                  <strong>Ouvert par:</strong> {selectedBoulder.openedBy.displayName}
+                </Typography>
+              )}
 
               {/* ✅ PLAN-premiers-ascensionnistes.md §7 : uniquement sur la fiche de détail
                   (pas sur la vignette du mur), et jamais sur un bloc de compétition (§5) —

@@ -11,6 +11,16 @@ export interface ChangelogEntry {
 // tout l'historique ici, l'historique complet vit dans les commits git.
 export const changelog: ChangelogEntry[] = [
   {
+    version: '2.65',
+    date: '2026-09-17',
+    title: 'Ouvert par',
+    items: [
+      'La fiche d\'un bloc quotidien peut désormais indiquer qui l\'a réellement ouvert sur le mur, en plus de qui l\'a saisi dans l\'application.',
+      'N\'apparaît que si l\'ouvreur l\'a renseigné — un bloc ancien ou sans attribution ne montre simplement rien.',
+      'Jamais affiché pendant une compétition tant que la cotation reste cachée : seulement une fois l\'épreuve terminée.',
+    ],
+  },
+  {
     version: '2.61',
     date: '2026-09-12',
     title: 'Premiers ascensionnistes',
