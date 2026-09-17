@@ -65,10 +65,12 @@ rien eu à ajouter de ce côté).
 - `npm run test:rules` (émulateur Firestore) : **124/124** OK, dont les 7 nouveaux tests
   `openedBy`.
 - Pas d'e2e navigateur dédié (le plan §8 en suggérait un — pas fait, voir §5 ci-dessous).
-- Pas de contrôle visuel réel en navigateur (pas d'accès Playwright/claude-in-chrome dans ce
-  Codespace, cf. mémoire projet) — **à faire par l'utilisateur** : créer/éditer un bloc
-  quotidien en désignant un ouvreur, vérifier la fiche client, vérifier qu'un bloc de
-  compétition en cours ne montre rien.
+- **Contrôle visuel réel en prod, fait par l'utilisateur (17/09/2026) : OK.** Modification
+  d'un bloc côté Ouvreur (attribution à un ouvreur) + vérification de l'affichage côté
+  Client confirmées fonctionnelles. Compétition en cours non retestée explicitement par
+  l'utilisateur (rien ne l'exigeait dans ce contrôle) — comportement garanti par
+  construction (§3, `ClientCompetitions.tsx` n'affiche jamais `openedBy`), pas par un test
+  de bout en bout ; à surveiller à la prochaine vraie compétition.
 
 ---
 
@@ -84,10 +86,17 @@ ce champ, un e2e serait le premier réflexe à ajouter.
 
 ## 6. Reste à faire (hors périmètre agent)
 
-- **Contrôle visuel réel** décrit en §4 — poussé et déployé en prod (commit `12f92af`,
-  `firebase deploy --only hosting,firestore:rules`), reste à vérifier dans le navigateur.
-- Si le besoin apparaît un jour : réglage de consentement par ouvreur (tranché "non" cette
-  fois, §1 du présent handoff) — ne pas l'ajouter sans demande explicite.
+**Chantier clos** — contrôle visuel réel confirmé par l'utilisateur (§4), rien en attente.
+Si le besoin apparaît un jour : réglage de consentement par ouvreur (tranché "non" cette
+fois, §1 du présent handoff) — ne pas l'ajouter sans demande explicite.
+
+**Incident annexe résolu le même jour** : le premier déploiement (commit `12f92af`) a
+poussé un `frontend/dist` buildé *avant* le bump de version vers 2.65 — la Navbar affichait
+encore V2.64 après le clic "Mettre à jour", malgré un bandeau qui avait bien détecté un
+nouveau build (nouveau hash de fichier). Corrigé le jour même par un rebuild (`dist`
+reconstruit avec `__APP_VERSION__` = 2.65) et un second `firebase deploy --only hosting`
+(commit `4a7f916`, note ajoutée dans `CLAUDE.md` — section Commands — pour ne pas
+reproduire l'ordre fautif build → bump plutôt que bump → build → deploy).
 
 ---
 
