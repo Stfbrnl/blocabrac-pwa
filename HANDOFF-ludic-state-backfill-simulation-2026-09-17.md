@@ -93,6 +93,45 @@ du plan : **remesurer le volume réseau d'`AdminUsers.tsx`** (déjà notée comm
 
 ---
 
+---
+
+## 5. Retour ClaudeNav (même jour) : durci suite à revue
+
+ClaudeNav a durci la conclusion du §3 : le script était **dangereux**, pas seulement
+"à surveiller" — il écrasait dans les deux sens sans distinction, et rien dans son nom ni
+son emplacement (`scripts/`, à côté d'outils qu'on relance sans y penser) ne le signalait.
+Deux corrections demandées, faites le jour même dans `scripts/backfill-ludic-state.js` :
+
+1. **Garde-fou structurel, pas un commentaire.** Plutôt que la piste suggérée (refuser
+   `--fix` si un `updated_at` est postérieur au dernier passage — dépend d'un état
+   persisté externe et d'un horodatage à faire confiance), choix d'un garde-fou plus fort
+   et sans dépendance externe : **le script ne remplit désormais qu'un champ ABSENT de
+   `user_ludic_state` ; un champ déjà présent n'est plus jamais réécrit, même avec `--fix`,
+   quelle que soit sa valeur.** Exact symétrique du garde-fou déjà présent dans
+   `purge-legacy-ludic-fields.js` (qui ne supprime jamais un champ absent ailleurs), lu
+   dans l'autre sens. Un champ présent des deux côtés mais divergent est signalé
+   (`⛔`), jamais résolu silencieusement dans un sens ou l'autre.
+2. **Comparaison corrigée** : `canonicalize()` trie récursivement les clés des objets
+   (`wallCounts`) tout en préservant l'ordre des tableaux (`rouletteRecentChallenges`, où
+   l'ordre est significatif) — élimine la source des 10 faux positifs sur 11 du §3.
+
+**Revérifié en simulation contre la prod avec le script corrigé** : `0 compte avec un champ
+à combler`, `1 champ signalé comme divergent` (exactement le compte `nP1TFARq...` identifié
+à la main au §3 — confirmé automatiquement en un lancement, plus besoin d'investigation
+manuelle). **Testé aussi contre l'émulateur** (compte à champ absent → comblé ; compte à
+champ présent divergent → non touché) avant de faire confiance au comportement `--fix`
+contre la prod.
+
+`CLAUDE.md` § "Ludic-state migration" mis à jour en conséquence (statut Passe C corrigé —
+il était resté écrit "pas encore déployé" alors qu'il l'est depuis le 12/09 — et nouveau
+paragraphe sur le garde-fou).
+
+**Conséquence pratique** : le script est maintenant sûr à relancer à tout moment, y compris
+avec `--fix` — mais la décision d'attendre la purge reste inchangée (§4), ce n'est pas ce
+qui a changé aujourd'hui.
+
+---
+
 ## Points ouverts par ailleurs (inchangés)
 
 - **Purge état ludique** : prête, en attente du feu vert utilisateur (§4).
