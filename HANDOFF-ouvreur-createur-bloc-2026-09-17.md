@@ -2,7 +2,7 @@
 
 > Session Claude Code (Codespace), 17/09/2026.
 > Implémente `PLAN-ouvreur-createur-bloc.md` (rédigé le 13/09 par la session navigateur).
-> Committé sur `main`, à pousser/déployer (voir §6).
+> **Committé, poussé sur `main`, déployé** (`--only hosting,firestore:rules`).
 > Impact Firestore : un nouveau champ (`boulders.openedBy`), deux nouvelles fonctions dans
 > `firestore.rules` (pas de règle nouvelle, la règle `boulders` existante est étendue) —
 > **pas d'index composite nécessaire** (aucune requête sur `openedBy`).
@@ -84,10 +84,8 @@ ce champ, un e2e serait le premier réflexe à ajouter.
 
 ## 6. Reste à faire (hors périmètre agent)
 
-- **Pousser et déployer** (`git push`, puis `npx firebase-tools deploy --only hosting,firestore:rules`
-  depuis la racine du dépôt) — pas fait automatiquement, à confirmer par l'utilisateur avant
-  toute action affectant la prod.
-- **Contrôle visuel réel** décrit en §4.
+- **Contrôle visuel réel** décrit en §4 — poussé et déployé en prod (commit `12f92af`,
+  `firebase deploy --only hosting,firestore:rules`), reste à vérifier dans le navigateur.
 - Si le besoin apparaît un jour : réglage de consentement par ouvreur (tranché "non" cette
   fois, §1 du présent handoff) — ne pas l'ajouter sans demande explicite.
 
