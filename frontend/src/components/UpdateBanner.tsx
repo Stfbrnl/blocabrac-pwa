@@ -1,5 +1,5 @@
-// ✅ Bandeau de mise à jour de la PWA (PLAN-bandeau-mise-a-jour-pwa.md, 06/09/2026 ;
-// corrigé V2.62, CORRECTIF-bandeau-mode-prompt.md).
+// ✅ Bandeau de mise à jour de la PWA (docs/plans/PLAN-bandeau-mise-a-jour-pwa.md, 06/09/2026 ;
+// corrigé V2.62, docs/processus/CORRECTIF-bandeau-mode-prompt.md).
 //
 // V2.57/V2.58 utilisaient `registerType: 'autoUpdate'` + `onNeedReload` (un événement
 // émis quand le SW prend le contrôle pendant que la page tourne). Sur un onglet PC resté

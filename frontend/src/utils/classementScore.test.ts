@@ -51,7 +51,7 @@ describe('summaryFromColorCounts', () => {
   });
 
   it('ignore une couleur retombée à 0 pour le rang le plus difficile', () => {
-    // Cas du retrait d'une validation (§3 de CONCEPTION-selecteur-marge-compteur-incremental.md) :
+    // Cas du retrait d'une validation (§3 de docs/plans/CONCEPTION-selecteur-marge-compteur-incremental.md) :
     // le rang doit redescendre à la couleur suivante encore non-nulle, pas rester bloqué.
     expect(summaryFromColorCounts({ vert: 2, rose: 0 })).toEqual({
       bouldersValidated: 2,

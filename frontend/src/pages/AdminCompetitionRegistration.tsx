@@ -38,7 +38,7 @@ interface Competition {
   registered_count: number;
   minLevel?: Level; // ✅ Restrictions de niveau
   maxLevel?: Level;
-  // ✅ Écran live TV (CONCEPTION-ecran-live-competition.md §7) : un participant inscrit
+  // ✅ Écran live TV (docs/plans/CONCEPTION-ecran-live-competition.md §7) : un participant inscrit
   // ici par l'admin ne voit jamais l'écran d'inscription client, donc jamais la mention
   // de diffusion — d'où l'avertissement affiché plus bas quand ce champ est vrai.
   liveDisplayEnabled?: boolean;
@@ -248,12 +248,12 @@ const AdminCompetitionRegistration: React.FC = () => {
         return;
       }
 
-      // ✅ Chantier écritures (SUIVI-quota-ecritures.md point 2) : ID
+      // ✅ Chantier écritures (docs/suivi/SUIVI-quota-ecritures.md point 2) : ID
       // déterministe ("${uid}_${competitionId}"), comme côté client
       // (ClientCompetitions.tsx) — c'est le chemin attendu par
       // firestore.rules (isParticipationSubmitted) pour vérifier le
       // verrouillage sans requête.
-      // ✅ `?? null` (retour ClaudeNav sur CONCEPTION-classement-saisonnier.md, même
+      // ✅ `?? null` (retour ClaudeNav sur docs/plans/CONCEPTION-classement-saisonnier.md, même
       // bug trouvé par l'e2e dans AdminCompetitionManagement.tsx) : un `users.age`
       // absent produit `undefined`, que Firestore refuse dans un `setDoc` — l'échec se
       // manifeste au moment d'inscrire quelqu'un, donc en salle.
@@ -495,7 +495,7 @@ const AdminCompetitionRegistration: React.FC = () => {
               </TableContainer>
             )}
 
-            {/* ✅ Trou de la chaîne de consentement (CONCEPTION-ecran-live-competition.md
+            {/* ✅ Trou de la chaîne de consentement (docs/plans/CONCEPTION-ecran-live-competition.md
                 §7) : une inscription faite ici ne passe jamais par l'écran client qui
                 affiche la mention de diffusion — l'admin doit en informer le participant
                 lui-même. */}

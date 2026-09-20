@@ -1,4 +1,4 @@
-// ✅ PROCESSUS-erreurs-avalees.md §3 (V2.48) : impose par la SIGNATURE l'ordre "toutes les
+// ✅ docs/processus/PROCESSUS-erreurs-avalees.md §3 (V2.48) : impose par la SIGNATURE l'ordre "toutes les
 // lectures avant toute écriture" qu'une transaction Firestore exige — au lieu de compter sur
 // la discipline du code appelant, qui a déjà été prise en défaut une fois (voir le correctif
 // V2.46 dans ClientDaily.tsx : `tx.get(userRef)` après `tx.set(ref, ...)`, silencieusement

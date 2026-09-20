@@ -64,7 +64,7 @@ interface StatusDisplay {
   color: 'success' | 'default';
 }
 
-// ✅ Défis entre potes (CONCEPTION-roulette-et-defis.md, Partie 2). `boulder_label` n'est
+// ✅ Défis entre potes (docs/plans/CONCEPTION-roulette-et-defis.md, Partie 2). `boulder_label` n'est
 // pas dans le modèle du document de conception : ajouté pour figer un libellé lisible
 // ("rouge n°12 - Gullich") au moment de la création, évitant une relecture de `boulders`
 // juste pour l'affichage (le bloc peut être désactivé/renuméroté entre-temps).

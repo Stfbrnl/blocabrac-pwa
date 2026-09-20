@@ -42,7 +42,7 @@ interface Competition {
   registered_count: number;
   minLevel?: string;
   maxLevel?: string;
-  // ✅ Écran live TV (CONCEPTION-ecran-live-competition.md §7) : si vrai, la mention de
+  // ✅ Écran live TV (docs/plans/CONCEPTION-ecran-live-competition.md §7) : si vrai, la mention de
   // diffusion est affichée ci-dessous — l'inscription vaut alors consentement.
   liveDisplayEnabled?: boolean;
   // ✅ Chantier "comptes de points" : n'affecte que l'aperçu de points affiché ici
@@ -129,8 +129,8 @@ const ClientCompetitions: React.FC = () => {
   const lastPersistedRef = useRef<Record<string, ValidationResult>>({});
 
   // ✅ Chargement unique des résultats du grimpeur par compétition (voir
-  // SUIVI-quota-lectures-competition.md option A, puis
-  // SUIVI-remontages-et-version.md point 1) : un `getDocs` était d'abord refait
+  // docs/suivi/SUIVI-quota-lectures-competition.md option A, puis
+  // docs/suivi/SUIVI-remontages-et-version.md point 1) : un `getDocs` était d'abord refait
   // à chaque ouverture de la modale, puis remplacé par un `onSnapshot` unique
   // par compétition — mais un `onSnapshot` refacture son snapshot initial à
   // chaque nouvel abonnement, donc à chaque REMONTAGE de page (rechargement
@@ -439,7 +439,7 @@ const ClientCompetitions: React.FC = () => {
   // ✅ 1.2 — Écrit chaque validation dans Firestore (merge: true), en plus de
   // l'état React local qui pilote l'affichage immédiat. Ne pose created_at que
   // sur la première écriture du document (voir persistedBoulderIds).
-  // ✅ PROCESSUS-erreurs-avalees.md §3 (V2.48, corrigé V2.50) : minuteur/pagehide/compteur
+  // ✅ docs/processus/PROCESSUS-erreurs-avalees.md §3 (V2.48, corrigé V2.50) : minuteur/pagehide/compteur
   // d'échecs portés par `useDebouncedFlushQueue` (même hook que ClientDaily.tsx/
   // ClientCourseSession.tsx) plutôt que réimplémentés ici — une clé par bloc (`boulderId`),
   // fusion "remplacement" : `merge(older, newer)` renvoie toujours `newer`, la valeur la plus
@@ -485,7 +485,7 @@ const ClientCompetitions: React.FC = () => {
       persistedBoulderIds.current.add(boulderId);
       lastPersistedRef.current[boulderId] = result;
     },
-    // ✅ Niveau 3 (PROCESSUS-erreurs-avalees.md §2) : dès le 1er échec (comme avant ce
+    // ✅ Niveau 3 (docs/processus/PROCESSUS-erreurs-avalees.md §2) : dès le 1er échec (comme avant ce
     // chantier — cet écran prévenait déjà immédiatement, contrairement à ClientDaily.tsx
     // qui tolère des coupures transitoires avant d'alerter). `onRecovered` est nouveau
     // (l'ancien code ne réeffaçait jamais l'erreur) — amélioration sans risque : un
@@ -674,7 +674,7 @@ const ClientCompetitions: React.FC = () => {
                   {selectedCompetition.maxLevel ? `max ${selectedCompetition.maxLevel}` : ''}
                 </Typography>
               ) : null}
-              {/* ✅ Mention de diffusion (CONCEPTION-ecran-live-competition.md §7) :
+              {/* ✅ Mention de diffusion (docs/plans/CONCEPTION-ecran-live-competition.md §7) :
                   seul mécanisme de consentement retenu — l'inscription qui suit vaut
                   consentement. */}
               {selectedCompetition.liveDisplayEnabled && (

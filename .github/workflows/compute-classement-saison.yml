@@ -1,6 +1,6 @@
 name: Clôture classement de saison
 
-# Classement de saison (CONCEPTION-classement-saisonnier.md) : la fenêtre de saison est
+# Classement de saison (docs/plans/CONCEPTION-classement-saisonnier.md) : la fenêtre de saison est
 # désormais paramétrable par l'admin (AdminSeasonConfig.tsx), plus une date calendaire
 # fixe — ce cron tourne donc quotidiennement et laisse scripts/compute-classement-saison.js
 # décider s'il y a réellement quelque chose à clôturer (garde-fou sur `fin`/`cloturee`,

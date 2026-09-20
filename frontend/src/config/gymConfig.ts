@@ -23,7 +23,7 @@ export const brandGreenDark = '#177038';
 export const logoPath = '/images/logo-blocabrac.png';
 export { default as logoAssetUrl } from '../assets/logo-blocabrac.png';
 
-// ✅ Ordre circulaire réel de la salle (validé avec l'utilisateur, CONCEPTION-roulette-et-defis.md
+// ✅ Ordre circulaire réel de la salle (validé avec l'utilisateur, docs/plans/CONCEPTION-roulette-et-defis.md
 // §1.7.A) — remplace l'ancien ordre (simple historique d'ajout des murs). Utilisé pour
 // l'affichage (ordre des boutons de sélection de mur) et par la famille "murs" de la Roulette
 // (utils/roulette.ts, ex. proposition #21 "cinq murs consécutifs dans l'ordre de la salle").
@@ -53,7 +53,7 @@ export const colorGrades: ColorGrade[] = [
   { value: 'rose', label: 'Rose (7B+-8A)', hex: '#FFC0CB', accountLabel: 'Rose (7B+-8A) - Grimpeur mutant' },
 ];
 
-// ✅ PLAN-premiers-ascensionnistes.md : couleurs assez difficiles pour justifier une liste
+// ✅ docs/plans/PLAN-premiers-ascensionnistes.md : couleurs assez difficiles pour justifier une liste
 // des "premiers ascensionnistes" (5 places, voir utils/firstAscents.ts) — propre à cette
 // salle, jamais en dur dans un composant (le fork "Grimpe !" aura d'autres seuils).
 export const firstAscentColors: string[] = ['noir', 'blanc', 'rose'];

@@ -1,4 +1,4 @@
-// Chantier "compteur incrémental" (CONCEPTION-selecteur-marge-compteur-incremental.md
+// Chantier "compteur incrémental" (docs/plans/CONCEPTION-selecteur-marge-compteur-incremental.md
 // §3) : classement_profiles/{uid}.colorCounts est désormais tenu à jour par petites
 // variations (ClientDaily.tsx), pas recalculé depuis l'historique complet à chaque
 // validation — un compteur incrémental qui dérive un jour (écriture perdue, bug
@@ -27,7 +27,7 @@
 //                                                            garde-fou se déclenche
 //
 // ✅ Garde-fou anti-dérive massive (retour de ClaudeNav, 16/08/2026,
-// CONCEPTION-mode-ffme-et-garde-fou-reconciliation.md §A) : "une dérive de compteur
+// docs/plans/CONCEPTION-mode-ffme-et-garde-fou-reconciliation.md §A) : "une dérive de compteur
 // incrémental est corrective par construction" n'est vrai QUE pour une dérive de
 // données — pas pour un bug du SCRIPT lui-même (dans son propre recalcul, ou après une
 // évolution du barème). Sans garde-fou, un tel bug serait propagé sans contrôle par le
@@ -40,7 +40,7 @@
 // à 12 comptes, UN SEUL écart fait déjà 8%, un pur seuil en % se déclencherait à tort.
 //
 // ✅ Le garde-fou ne compte QUE les "écarts réels" (retour de ClaudeNav, 17/08/2026,
-// SUIVI-date-de-naissance.md) : une valeur déjà écrite puis devenue fausse. Un profil
+// docs/suivi/SUIVI-date-de-naissance.md) : une valeur déjà écrite puis devenue fausse. Un profil
 // absent (jamais créé) ou un champ jamais encore écrit (backfill d'un champ neuf, comme
 // l'introduction de "ffmeCategory" qui a produit 100% de "drift" sans qu'aucune valeur
 // n'ait jamais été fausse) n'en fait plus partie — voir fieldDrift()/"wasAbsent" et le
@@ -57,7 +57,7 @@ const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 
 const CREDENTIALS_DIR = path.join(__dirname, '../firestore-migration');
 const STATE_DIR = path.join(__dirname, '../cleanup-state');
-// ✅ Retour ClaudeNav (19/08/2026, sur PROCESSUS-erreurs-avalees.md) : "la vigilance ne
+// ✅ Retour ClaudeNav (19/08/2026, sur docs/processus/PROCESSUS-erreurs-avalees.md) : "la vigilance ne
 // suffira pas" — un lancement local de ce script contre l'émulateur (fait, entre autres,
 // par test/e2e-season-classement-flow.mjs) écrivait auparavant dans le MÊME fichier suivi
 // par git que le cron mensuel en prod, remplaçant silencieusement le journal réel par des
@@ -104,7 +104,7 @@ const DEDUCTIONS = { jaune: 10, vert: 10, bleu: 10, violet: 10, rouge: 20, noir:
 
 // ✅ Réimplémentation fidèle de gymConfig.ts (ageBands) et utils/ageCategory.ts
 // (getSeasonAge/getFfmeCategory) — tenir synchronisée si les tranches FFME changent.
-// SUIVI-date-de-naissance.md §3 / relecture ClaudeNav (17/08/2026) : classement_profiles
+// docs/suivi/SUIVI-date-de-naissance.md §3 / relecture ClaudeNav (17/08/2026) : classement_profiles
 // ne stocke plus la date de naissance brute, seulement cette catégorie dérivée.
 const UNKNOWN_CATEGORY = 'Inconnu';
 const AGE_BANDS = [
@@ -129,10 +129,10 @@ function computeFfmeCategory(dateOfBirth, referenceDate = new Date()) {
   return band ? band.label : UNKNOWN_CATEGORY;
 }
 
-// ✅ Classement de saison (CONCEPTION-classement-saisonnier.md, décision point 4) :
+// ✅ Classement de saison (docs/plans/CONCEPTION-classement-saisonnier.md, décision point 4) :
 // season.colorCounts/season.score et gender sont vérifiés au même titre que les
 // compteurs all-time ci-dessus, avec un garde-fou dédié — voir loadSeasonWindow()
-// et le §2 de RELECTURE-classement-saisonnier.md.
+// et le §2 de docs/handoffs/RELECTURE-classement-saisonnier.md.
 function isWithinSeasonWindow(dateISO, debut, fin) {
   const day = (dateISO || '').slice(0, 10);
   return day >= debut && day <= fin;
@@ -166,7 +166,7 @@ function calculatePoints(color, attempts) {
 // bloc (colorById), jamais figée au moment de la validation — un bloc recoloré change donc
 // le calcul de TOUTES ses validations passées à la prochaine réconciliation.
 //
-// ✅ V2.56 (RETOUR-redemarrage-saison-modele-a.md §3, demande utilisateur 06/09) : cette
+// ✅ V2.56 (docs/handoffs/RETOUR-redemarrage-saison-modele-a.md §3, demande utilisateur 06/09) : cette
 // carte NE FILTRE PLUS sur `is_active`, ni pour le all-time ni pour la saison. Les deux
 // classements sont des compteurs d'ACCUMULATION : un bloc validé puis retiré à une
 // rotation garde ses points ("les points acquis restent acquis" — même logique que la
@@ -194,7 +194,7 @@ async function loadDailyColorById() {
 // Recalcule le résumé complet d'un utilisateur depuis client_boulder_results — la
 // source de vérité, jamais l'inverse.
 //
-// ✅ Classement de saison (V2.56, Modèle A — RETOUR-redemarrage-saison-modele-a.md §1) :
+// ✅ Classement de saison (V2.56, Modèle A — docs/handoffs/RETOUR-redemarrage-saison-modele-a.md §1) :
 //   season.* = base + Σ (validations dont createdAt ∈ [debut, fin]), chaque bloc à sa
 //              couleur dernière connue, ACTIF OU NON (comme le all-time depuis §3).
 // - `base` (season.baseScore / season.baseColorCounts) est le crédit de départ figé par
@@ -256,7 +256,7 @@ function colorCountsEqual(a, b) {
   return true;
 }
 
-// ✅ Retour de ClaudeNav (17/08/2026, SUIVI-date-de-naissance.md) : le garde-fou
+// ✅ Retour de ClaudeNav (17/08/2026, docs/suivi/SUIVI-date-de-naissance.md) : le garde-fou
 // anti-dérive comptait "champ jamais écrit" (backfill d'un champ neuf, ou profil
 // entier absent) exactement comme "champ écrit puis devenu faux" (vraie dérive) —
 // exactement ce que la réconciliation cherche à détecter. Introduire "ffmeCategory"
@@ -335,7 +335,7 @@ async function diffOne(uid, storedData, profileExists, colorById, seasonWindow, 
   // `cloturee` de season.* : contrairement à season.score/colorCounts (des compteurs
   // qui n'ont de sens que bornés à une saison précise), ffmeCategory doit refléter la
   // saison COURANTE au moment où la réconciliation tourne, pas une saison qui vient de
-  // se clore (décision explicite, SUIVI-date-de-naissance.md §3 / relecture ClaudeNav).
+  // se clore (décision explicite, docs/suivi/SUIVI-date-de-naissance.md §3 / relecture ClaudeNav).
   set('ffmeCategory', fieldDrift(storedData.ffmeCategory, storedData.ffmeCategory || null, expectedFfmeCategory));
 
   if (Object.keys(drift).length === 0) return { uid, existed: profileExists, drifted: false };

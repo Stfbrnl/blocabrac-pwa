@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { combineByFreshness } from './useDebouncedFlushQueue';
 
-// ✅ Régression du bug trouvé par ClaudeNav (retour du 19/08/2026, PROCESSUS-erreurs-avalees.md
+// ✅ Régression du bug trouvé par ClaudeNav (retour du 19/08/2026, docs/processus/PROCESSUS-erreurs-avalees.md
 // §3) : un contrat `merge(prev, incoming)` naïf faisait gagner la valeur la plus ANCIENNE dans
 // le cas "deux enqueue() rapprochés" (essais réglés à 2 puis 3 avant la fin du debounce
 // aurait persisté 2). `combineByFreshness` est la pièce qui empêche cette classe de bug de

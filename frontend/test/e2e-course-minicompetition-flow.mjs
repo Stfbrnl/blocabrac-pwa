@@ -1,5 +1,5 @@
 // Script Playwright ponctuel : couvre spécifiquement la file d'attente "blocs de
-// mini-compétition" de ClientCourseSession.tsx (`boulderQueue`, PROCESSUS-erreurs-avalees.md
+// mini-compétition" de ClientCourseSession.tsx (`boulderQueue`, docs/processus/PROCESSUS-erreurs-avalees.md
 // §3 / useDebouncedFlushQueue) — jamais exercée par e2e-course-flow.mjs, qui ne valide qu'un
 // exercice (`exerciseQueue`). Même structure de séance programmée -> active -> archivée que
 // e2e-course-flow.mjs, réduite au strict nécessaire pour ce chemin précis. Contre l'app + les

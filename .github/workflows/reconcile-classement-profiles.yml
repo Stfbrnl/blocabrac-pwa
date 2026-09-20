@@ -1,6 +1,6 @@
 name: Réconciliation classement_profiles
 
-# Chantier "compteur incrémental" (CONCEPTION-selecteur-marge-compteur-incremental.md
+# Chantier "compteur incrémental" (docs/plans/CONCEPTION-selecteur-marge-compteur-incremental.md
 # §3) : classement_profiles/{uid}.colorCounts est maintenu par petites variations
 # (ClientDaily.tsx), pas recalculé depuis l'historique complet à chaque validation —
 # un compteur incrémental qui dérive un jour (écriture perdue, bug transitoire,

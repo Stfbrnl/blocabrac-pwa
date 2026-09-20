@@ -195,7 +195,7 @@ describe('classement_profiles : fiche publique du classement', () => {
   });
 });
 
-// ✅ CONCEPTION-classement-saisonnier.md, point 1 : doc de config singleton, nouveau
+// ✅ docs/plans/CONCEPTION-classement-saisonnier.md, point 1 : doc de config singleton, nouveau
 // pattern dans ce projet — lecture large (nécessaire à ClientDaily.tsx), écriture
 // admin uniquement côté client (le job planifié écrit via l'Admin SDK, jamais soumis
 // à ces règles, donc rien à tester ici pour lui).
@@ -228,7 +228,7 @@ describe('app_config/classement_saison : fenêtre de la saison en cours', () => 
   });
 });
 
-// ✅ CONCEPTION-classement-saisonnier.md : archive figée du top 10/10 de fin de
+// ✅ docs/plans/CONCEPTION-classement-saisonnier.md : archive figée du top 10/10 de fin de
 // saison — lecture large comme classement_profiles, écriture jamais côté client
 // (même l'admin ne l'écrit pas depuis l'UI : seul le job planifié, Admin SDK).
 describe('classement_saisons : archive du top 10/10 de fin de saison', () => {
@@ -425,7 +425,7 @@ describe('climbing_status / next_sessions : visibles seulement par les amis acce
   });
 });
 
-// ✅ Défis entre potes (CONCEPTION-roulette-et-defis.md, Partie 2, V2.46) : lecture réservée
+// ✅ Défis entre potes (docs/plans/CONCEPTION-roulette-et-defis.md, Partie 2, V2.46) : lecture réservée
 // aux participants, écriture d'un participant limitée à sa propre clé dans `progress`, clôture
 // ouverte à n'importe quel participant (décision utilisateur du 19/08/2026).
 describe('challenges : défis entre potes', () => {
@@ -666,7 +666,7 @@ describe('client_badges : auto-attribution des badges couleur par le client', ()
   });
 });
 
-// ✅ PLAN-etat-ludique-hors-users.md : état ludique par utilisateur (objectifs de la
+// ✅ docs/plans/PLAN-etat-ludique-hors-users.md : état ludique par utilisateur (objectifs de la
 // semaine, wallCounts, compteur/liste Roulette), lu ET écrit uniquement par son propriétaire
 // — contrairement à "users", jamais par le staff (aucun écran staff n'en a besoin, voir le
 // plan §5).
@@ -705,7 +705,7 @@ describe('user_ludic_state : lecture/écriture réservées au propriétaire', ()
   });
 });
 
-// ✅ PLAN-premiers-ascensionnistes.md §2 : c'est ICI que se joue la faisabilité du chantier
+// ✅ docs/plans/PLAN-premiers-ascensionnistes.md §2 : c'est ICI que se joue la faisabilité du chantier
 // tel que conçu (liste sur le document du bloc, pas de sous-collection) — vérifie que la
 // règle peut réellement empêcher la réécriture du préfixe existant, pas seulement contrôler
 // la taille de la liste. Le premier test ("réécriture du préfixe") est celui qui aurait fait
@@ -828,7 +828,7 @@ describe('boulders : firstAscents (premiers ascensionnistes)', () => {
   });
 });
 
-// ✅ PLAN-ouvreur-createur-bloc.md §5/§8 : la règle ne peut pas empêcher un ouvreur de
+// ✅ docs/plans/PLAN-ouvreur-createur-bloc.md §5/§8 : la règle ne peut pas empêcher un ouvreur de
 // désigner à tort un autre ouvreur (contrôle social, assumé par le plan) — elle empêche
 // seulement un uid inventé ou un compte qui n'a pas le rôle ouvreur, et ne doit jamais
 // planter sur `openedBy` absent/null (piège V2.27 : resource.data.get(...) sans défaut).

@@ -1,5 +1,5 @@
 // Script Playwright ponctuel : couvre le flux "Défis entre potes" (V2.46,
-// CONCEPTION-roulette-et-defis.md Partie 2) de bout en bout sur les deux structures les
+// docs/plans/CONCEPTION-roulette-et-defis.md Partie 2) de bout en bout sur les deux structures les
 // moins coûteuses à vérifier ensemble : "seuil" (mise à jour automatique depuis
 // ClientDaily.tsx à la validation) et "declaratif" (bouton "C'est fait" dans
 // ClientFriends.tsx). Contre l'app + les émulateurs locaux, jamais la production.

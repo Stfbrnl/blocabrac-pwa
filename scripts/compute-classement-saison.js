@@ -1,4 +1,4 @@
-// Classement de saison (CONCEPTION-classement-saisonnier.md) : clôture la saison en
+// Classement de saison (docs/plans/CONCEPTION-classement-saisonnier.md) : clôture la saison en
 // cours dès que sa fenêtre `[debut, fin]` (app_config/classement_saison) est dépassée —
 // archive le top 10 garçons / top 10 filles dans classement_saisons/{saisonId}, pose
 // `cloturee: true`, puis remet season.score/season.colorCounts à zéro sur tous les
@@ -16,7 +16,7 @@
 //                                                    dépassée et pas déjà clôturée ; ne
 //                                                    fait rien sinon (log explicite)
 //
-// ✅ Retour ClaudeNav (17/08/2026, RELECTURE-classement-saisonnier.md point 1) : c'est le
+// ✅ Retour ClaudeNav (17/08/2026, docs/handoffs/RELECTURE-classement-saisonnier.md point 1) : c'est le
 // reset le plus destructeur des trois scripts de ce projet (irréversible, jamais rejoué
 // contre la prod), et c'était pourtant le seul sans simulation par défaut — asymétrie à
 // l'envers, corrigée en alignant sur la convention des deux autres scripts.
@@ -65,7 +65,7 @@ function totalBouldersFromColorCounts(colorCounts) {
 // ✅ Départage à égalité décidé avec l'utilisateur (17/08/2026) : score de saison, puis
 // nombre total de blocs validés dans la saison. Renvoie TOUS les comptes à égalité au
 // seuil de la 10e place (potentiellement plus de 10 entrées) plutôt que de trancher
-// arbitrairement — voir CONCEPTION-classement-saisonnier.md, "Départage à égalité".
+// arbitrairement — voir docs/plans/CONCEPTION-classement-saisonnier.md, "Départage à égalité".
 function topNWithTies(entries, n) {
   const sorted = [...entries].sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;
@@ -192,7 +192,7 @@ async function main() {
   await configRef.set({ cloturee: true, cloturee_at: new Date().toISOString() }, { merge: true });
   console.log(`Archive écrite (classement_saisons/${saisonId}), cloturee posé à true.`);
 
-  // ✅ V2.56 (RETOUR-redemarrage-saison-modele-a.md §1) : remettre AUSSI baseScore /
+  // ✅ V2.56 (docs/handoffs/RETOUR-redemarrage-saison-modele-a.md §1) : remettre AUSSI baseScore /
   // baseColorCounts à zéro — sinon la saison suivante démarrerait avec le crédit de
   // l'ancienne. `{}` par chemin pointé vide vraiment la map (cf. chunkedBatchUpdate).
   const allRefs = profiles.map((p) => db.collection('classement_profiles').doc(p.uid));

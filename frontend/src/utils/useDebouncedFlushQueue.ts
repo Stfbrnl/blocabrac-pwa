@@ -1,4 +1,4 @@
-// ✅ PROCESSUS-erreurs-avalees.md §3 (V2.48) : jusqu'à cette version, le motif "debounce +
+// ✅ docs/processus/PROCESSUS-erreurs-avalees.md §3 (V2.48) : jusqu'à cette version, le motif "debounce +
 // flush sur pagehide + comparaison à la dernière valeur persistée + catch" existait en TROIS
 // implémentations distinctes (ClientDaily.tsx, ClientCompetitions.tsx, ClientCourseSession.tsx
 // — le document en comptait quatre en pensant les défis séparés de ClientDaily, mais leur
@@ -45,7 +45,7 @@ import { useCallback, useEffect, useRef } from 'react';
 // écran qui a besoin d'une file débouncée passe TOUJOURS par `useDebouncedFlushQueue`
 // (`enqueue`/`writeNow`/`flushAll`), jamais par `combineByFreshness` directement. Si un
 // jour un écran réimplémente sa propre file au lieu d'utiliser celle-ci, c'est le
-// problème que le §3 de PROCESSUS-erreurs-avalees.md voulait éliminer — pas un signe qu'il
+// problème que le §3 de docs/processus/PROCESSUS-erreurs-avalees.md voulait éliminer — pas un signe qu'il
 // faut exporter cette fonction plus largement pour l'aider à le faire.
 //
 // Combine deux valeurs dont on connaît l'ordre relatif d'ancienneté, en ne déléguant à
@@ -126,7 +126,7 @@ export function useDebouncedFlushQueue<T>(options: UseDebouncedFlushQueueOptions
       if (failureCountRef.current >= threshold) {
         console.error(
           `Échecs répétés (${failureCountRef.current}) sur "${key}" — probablement pas transitoire, `
-          + 'voir PROCESSUS-erreurs-avalees.md.'
+          + 'voir docs/processus/PROCESSUS-erreurs-avalees.md.'
         );
         durableFailureRef.current = true;
         latestOptionsRef.current.onDurableFailure?.(failureCountRef.current);

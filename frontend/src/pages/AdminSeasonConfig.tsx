@@ -8,7 +8,7 @@ import { db } from '../services/firebaseConfig';
 import { doc, getDoc, setDoc, deleteField, collection, getDocs, query, where, updateDoc } from 'firebase/firestore';
 import { recomputeSeasonBaseline, type SeasonBaselineResult } from '../utils/classementScore';
 
-// ✅ CONCEPTION-classement-saisonnier.md — décision point 1 : la fenêtre de la saison
+// ✅ docs/plans/CONCEPTION-classement-saisonnier.md — décision point 1 : la fenêtre de la saison
 // n'est plus codée en dur (1er septembre → 31 mai) mais réglée ici par l'admin, pour
 // pouvoir démarrer la première saison le jour du lancement réel de l'appli plutôt
 // qu'une date arbitraire. Un seul document de config, nouveau pattern dans ce projet

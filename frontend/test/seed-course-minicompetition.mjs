@@ -1,7 +1,7 @@
 // Seed ponctuel (émulateurs locaux uniquement) : mêmes comptes que seed-emulator.mjs
 // (moniteur + client), plus un bloc quotidien actif et une mini-compétition qui le
 // référence — prérequis pour tester la file d'attente "blocs de mini-compétition" de
-// ClientCourseSession.tsx (PROCESSUS-erreurs-avalees.md §3, useDebouncedFlushQueue),
+// ClientCourseSession.tsx (docs/processus/PROCESSUS-erreurs-avalees.md §3, useDebouncedFlushQueue),
 // jamais couverte par e2e-course-flow.mjs (qui ne valide qu'un exercice).
 // La mini-compétition est créée directement via firebase-admin plutôt que par le
 // formulaire moniteur (Moniteur/MiniCompetitions/MiniCompetitionForm.tsx) : ce chantier

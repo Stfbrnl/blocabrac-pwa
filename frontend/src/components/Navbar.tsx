@@ -82,7 +82,7 @@ const Navbar: React.FC = () => {
     }
   }, [user]);
 
-  // ✅ Chantier 3 (PLAN-spark-images-competition.md) : IndexedDB est rattaché à
+  // ✅ Chantier 3 (docs/plans/PLAN-spark-images-competition.md) : IndexedDB est rattaché à
   // l'origine du site, pas au compte connecté — sur un appareil partagé (poste admin,
   // téléphone prêté), les données du compte précédent doivent disparaître à la
   // déconnexion. Ordre strict imposé par l'API Firestore : signOut avant terminate
@@ -105,12 +105,12 @@ const Navbar: React.FC = () => {
     return null;
   }
 
-  // ✅ Écran live TV (CONCEPTION-ecran-live-competition.md §4) : "rendue hors du
+  // ✅ Écran live TV (docs/plans/CONCEPTION-ecran-live-competition.md §4) : "rendue hors du
   // layout habituel, pas de Navbar" — cette route s'ouvre dans une fenêtre HDMI
   // étendue dédiée à la TV de la salle, la Navbar n'y a aucun sens et mangerait
   // de l'espace sur un écran conçu pour être lu à 5 mètres. Préfixe plutôt
   // qu'égalité stricte depuis que la compétition est en paramètre d'URL
-  // (CONCEPTION-selecteur-marge-compteur-incremental.md §1) : le chemin exact varie
+  // (docs/plans/CONCEPTION-selecteur-marge-compteur-incremental.md §1) : le chemin exact varie
   // désormais selon la compétition affichée.
   if (location.pathname.startsWith('/admin/competitions/live-display/')) {
     return null;

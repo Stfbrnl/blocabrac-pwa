@@ -1,4 +1,4 @@
-// Migration ponctuelle : chantier écritures (SUIVI-quota-ecritures.md point 2).
+// Migration ponctuelle : chantier écritures (docs/suivi/SUIVI-quota-ecritures.md point 2).
 // `competition_participants` utilisait des ID auto-générés (addDoc). Le verrouillage
 // (submitted/submitted_at) déménage de competition_results (35 documents/grimpeur,
 // facturé par document) vers competition_participants (1 document) — pour que

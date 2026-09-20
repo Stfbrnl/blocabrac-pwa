@@ -35,7 +35,7 @@ interface ClassementRow {
   bestColorRank: number;
   score: number;
   bouldersValidated: number;
-  // ✅ Classement de saison (CONCEPTION-classement-saisonnier.md) : mêmes métriques,
+  // ✅ Classement de saison (docs/plans/CONCEPTION-classement-saisonnier.md) : mêmes métriques,
   // dérivées de `season.colorCounts`/`season.score` — voir "mode" plus bas pour la
   // bascule d'affichage. Pas de lecture Firestore supplémentaire : ces champs vivent
   // déjà sur le même document `classement_profiles` chargé pour le classement général.
@@ -51,7 +51,7 @@ interface RankedUser {
   last_name?: string;
   gender?: string;
   // ✅ Catégorie FFME déjà dérivée, écrite par Register.tsx/ClientProfile.tsx/
-  // AdminUsers.tsx (SUIVI-date-de-naissance.md §3 / relecture ClaudeNav) : la date de
+  // AdminUsers.tsx (docs/suivi/SUIVI-date-de-naissance.md §3 / relecture ClaudeNav) : la date de
   // naissance brute n'est plus stockée sur ce document largement lisible.
   ffmeCategory?: string;
   // ✅ Repli uniquement : un profil pas encore repassé par une écriture depuis ce
@@ -91,7 +91,7 @@ const ClientClassement: React.FC = () => {
   const [sortKey, setSortKey] = useState<SortKey>('score');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   // ✅ Classement de saison : bascule d'affichage seulement, aucune nouvelle lecture
-  // Firestore (voir CONCEPTION-classement-saisonnier.md, "Écran de classement de saison").
+  // Firestore (voir docs/plans/CONCEPTION-classement-saisonnier.md, "Écran de classement de saison").
   const [mode, setMode] = useState<ClassementMode>('general');
 
   useEffect(() => {

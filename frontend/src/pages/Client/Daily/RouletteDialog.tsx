@@ -1,4 +1,4 @@
-// ✅ Bloc Roulette (CONCEPTION-roulette-et-defis.md, Partie 1) : dialog de tirage/relance,
+// ✅ Bloc Roulette (docs/plans/CONCEPTION-roulette-et-defis.md, Partie 1) : dialog de tirage/relance,
 // affichage de la proposition résolue, cas particuliers famille E (aucune écriture) et
 // famille C (chronomètre non persisté). AUCUN import Firestore ici — vérification
 // structurelle de la gratuité du tirage (§1.9 du document) : le composant ne reçoit que des

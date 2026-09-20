@@ -256,7 +256,7 @@ const ClientCourseSession: React.FC = () => {
     fetchSession();
   }, [user, sessionId, loadingAuth]);
 
-  // ✅ PROCESSUS-erreurs-avalees.md §3 (V2.48) : minuteur/pagehide/compteur d'échecs portés
+  // ✅ docs/processus/PROCESSUS-erreurs-avalees.md §3 (V2.48) : minuteur/pagehide/compteur d'échecs portés
   // par `useDebouncedFlushQueue` (même hook que ClientDaily.tsx/ClientCompetitions.tsx),
   // une instance par nature d'entrée (exercices / blocs de mini-compétition) puisqu'elles
   // n'ont pas le même payload à persister — chaque instance lie son propre "pagehide", donc

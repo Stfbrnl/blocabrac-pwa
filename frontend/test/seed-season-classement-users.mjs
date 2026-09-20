@@ -1,5 +1,5 @@
 // Seed ponctuel (émulateurs locaux uniquement) : admin + ouvreur + client, pour tester
-// le flux "classement de saison" de bout en bout (CONCEPTION-classement-saisonnier.md).
+// le flux "classement de saison" de bout en bout (docs/plans/CONCEPTION-classement-saisonnier.md).
 process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8080';
 process.env.FIREBASE_AUTH_EMULATOR_HOST = 'localhost:9099';
 

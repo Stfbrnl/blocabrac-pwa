@@ -1,4 +1,4 @@
-// Chantier 4 (PLAN-spark-images-competition.md) : nettoyage des images Cloudinary
+// Chantier 4 (docs/plans/PLAN-spark-images-competition.md) : nettoyage des images Cloudinary
 // orphelines (bloc supprimé/remplacé après le Chantier 2, image jamais nettoyée côté
 // Cloudinary puisque l'upload non signé ne peut pas être supprimé depuis le navigateur).
 //
@@ -64,7 +64,7 @@ function readServiceAccount() {
 // exécution à l'autre, y compris depuis une machine CI vierge à chaque run (la
 // GitHub Action commit ce fichier après chaque exécution — voir le workflow).
 //
-// ✅ Retour ClaudeNav (19/08/2026, PROCESSUS-erreurs-avalees.md, étendu depuis
+// ✅ Retour ClaudeNav (19/08/2026, docs/processus/PROCESSUS-erreurs-avalees.md, étendu depuis
 // reconcile-classement-profiles.js) : le risque est ici PLUS grave que pour ce
 // dernier — `state.json` alimente directement le garde-fou anti-chute (comparaison au
 // run précédent). Un run local contre l'émulateur y écrirait un nombre de références

@@ -124,19 +124,19 @@ export default function AppRoutes() {
         <Route path="/admin/competitions/list" element={<ProtectedRoute role="admin"><AdminCompetitionList /></ProtectedRoute>} />
         <Route path="/admin/competitions/register" element={<ProtectedRoute role="admin"><AdminCompetitionRegistration /></ProtectedRoute>} />
         <Route path="/admin/competitions/stats" element={<ProtectedRoute role="admin"><AdminCompetitionStats /></ProtectedRoute>} />
-        {/* ✅ Écran live TV (CONCEPTION-ecran-live-competition.md) : hors du layout
+        {/* ✅ Écran live TV (docs/plans/CONCEPTION-ecran-live-competition.md) : hors du layout
             habituel (pas de Navbar, voir Navbar.tsx), ouvert en fenêtre séparée
             depuis AdminCompetitionManagement.tsx. */}
-        {/* ✅ Compétition en paramètre d'URL (CONCEPTION-selecteur-marge-compteur-incremental.md
+        {/* ✅ Compétition en paramètre d'URL (docs/plans/CONCEPTION-selecteur-marge-compteur-incremental.md
             §1, 16/08/2026) : plus de sélecteur interne à l'écran, l'admin choisit
             depuis AdminCompetitionManagement.tsx. */}
         <Route path="/admin/competitions/live-display/:competitionId" element={<ProtectedRoute role="admin"><AdminCompetitionLiveDisplay /></ProtectedRoute>} />
-        {/* ✅ Écran juge (ADDENDUM-mode-ffme-finale-annee.md §3) : admin OU ouvreur,
+        {/* ✅ Écran juge (docs/plans/ADDENDUM-mode-ffme-finale-annee.md §3) : admin OU ouvreur,
             accessible depuis les deux espaces (boutons dans AdminCompetitionManagement.tsx
             et Ouvreur/CompetitionBoulders/CompetitionBouldersList.tsx). */}
         <Route path="/competitions/judge-entry/:competitionId" element={<ProtectedRoute allowedRoles={['admin', 'ouvreur']}><CompetitionJudgeEntry /></ProtectedRoute>} />
         <Route path="/admin/announcements" element={<ProtectedRoute role="admin"><AdminAnnouncements /></ProtectedRoute>} />
-        {/* ✅ CONCEPTION-classement-saisonnier.md, point 1 : fenêtre de saison paramétrable. */}
+        {/* ✅ docs/plans/CONCEPTION-classement-saisonnier.md, point 1 : fenêtre de saison paramétrable. */}
         <Route path="/admin/season-config" element={<ProtectedRoute role="admin"><AdminSeasonConfig /></ProtectedRoute>} />
       </Routes>
     </Suspense>

@@ -59,7 +59,7 @@ interface Competition {
   registered_count: number;
   minLevel?: Level; // ✅ Nouveau : Niveau minimum
   maxLevel?: Level; // ✅ Nouveau : Niveau maximum
-  // ✅ Écran live TV (CONCEPTION-ecran-live-competition.md §7) : diffusion optionnelle,
+  // ✅ Écran live TV (docs/plans/CONCEPTION-ecran-live-competition.md §7) : diffusion optionnelle,
   // verrouillée côté règles dès que status quitte "à venir" (voir firestore.rules).
   liveDisplayEnabled?: boolean;
   // ✅ Chantier "comptes de points" : verrouillé côté UI dès que status quitte "à venir"
@@ -206,7 +206,7 @@ const AdminCompetitionManagement: React.FC = () => {
     setOpenEditDialog(true);
   };
 
-  // ✅ CONCEPTION-ecran-live-competition.md §7 : liveDisplayEnabled n'est modifiable
+  // ✅ docs/plans/CONCEPTION-ecran-live-competition.md §7 : liveDisplayEnabled n'est modifiable
   // que tant que la compétition est "à venir" (verrouillé côté règles au-delà —
   // voir firestore.rules). Le formulaire d'édition désactive le switch dans ce cas,
   // mais on garde ce garde-fou ici pour ne jamais envoyer une valeur différente de
@@ -285,7 +285,7 @@ const AdminCompetitionManagement: React.FC = () => {
     }
   };
 
-  // ✅ CONCEPTION-classement-saisonnier.md, "Le bouton admin Générer le roster" : lit
+  // ✅ docs/plans/CONCEPTION-classement-saisonnier.md, "Le bouton admin Générer le roster" : lit
   // l'archive de saison la plus récente (classement_saisons, IDs "YYYY-YYYY" — se
   // trient lexicographiquement dans le bon ordre, voir le doc de conception "Points
   // mineurs") et amorce le roster de cette compétition en mode officiel. N'écrase
@@ -459,7 +459,7 @@ const AdminCompetitionManagement: React.FC = () => {
                     >
                       Gérer les inscriptions
                     </Button>
-                    {/* ✅ Écran live TV (CONCEPTION-ecran-live-competition.md §7) :
+                    {/* ✅ Écran live TV (docs/plans/CONCEPTION-ecran-live-competition.md §7) :
                         n'apparaît que pour les compétitions diffusées. window.open
                         (pas navigate) : l'admin garde son poste de travail, la TV
                         reçoit une fenêtre séparée en mode HDMI étendu (jamais miroir,
@@ -478,7 +478,7 @@ const AdminCompetitionManagement: React.FC = () => {
                         Ouvrir l'affichage TV
                       </Button>
                     )}
-                    {/* ✅ Écran juge (ADDENDUM-mode-ffme-finale-annee.md §3) : n'apparaît
+                    {/* ✅ Écran juge (docs/plans/ADDENDUM-mode-ffme-finale-annee.md §3) : n'apparaît
                         que pour les compétitions en mode de comptage "Officiel" — seul
                         mode où ces 4 champs par bloc (top/essais/zone/essais-zone) ont un
                         sens. Même écran accessible depuis l'espace Ouvreur (voir
@@ -493,7 +493,7 @@ const AdminCompetitionManagement: React.FC = () => {
                         Saisie juge
                       </Button>
                     )}
-                    {/* ✅ CONCEPTION-classement-saisonnier.md, "Le bouton admin Générer
+                    {/* ✅ docs/plans/CONCEPTION-classement-saisonnier.md, "Le bouton admin Générer
                         le roster" : même restriction que "Saisie juge" — le roster
                         automatique n'a de sens que pour la Finale (mode officiel). */}
                     {competition.scoring_mode === 'officiel' && (
@@ -596,7 +596,7 @@ const AdminCompetitionManagement: React.FC = () => {
                 </FormControl>
               </Box>
 
-              {/* ✅ Écran live TV (CONCEPTION-ecran-live-competition.md §7) : diffusion
+              {/* ✅ Écran live TV (docs/plans/CONCEPTION-ecran-live-competition.md §7) : diffusion
                   optionnelle par compétition, à décider avant le déclenchement — voir le
                   Tooltip sur le switch du dialogue d'édition pour le verrouillage. */}
               <FormControlLabel
@@ -719,7 +719,7 @@ const AdminCompetitionManagement: React.FC = () => {
                 </FormControl>
               </Box>
 
-              {/* ✅ Écran live TV (CONCEPTION-ecran-live-competition.md §7) : verrouillé
+              {/* ✅ Écran live TV (docs/plans/CONCEPTION-ecran-live-competition.md §7) : verrouillé
                   côté règles dès que la compétition quitte "à venir" (firestore.rules)
                   — le switch est désactivé ici pour ne pas laisser croire qu'un
                   changement serait pris en compte. */}

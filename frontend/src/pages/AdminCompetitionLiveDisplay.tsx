@@ -18,18 +18,18 @@ import {
   type CustomScoringTable,
 } from '../utils/competitionClassement';
 
-// ✅ Étapes 5 à 7 de CONCEPTION-ecran-live-competition.md §8 : route + layout nu +
+// ✅ Étapes 5 à 7 de docs/plans/CONCEPTION-ecran-live-competition.md §8 : route + layout nu +
 // Wake Lock (étape 5, V2.31), listeners temps réel + recalcul groupé (étape 6),
 // mise en page grand écran + rotation par catégorie (étape 7). Étape 8 (répétition
 // matérielle à froid) est hors périmètre d'un agent — matériel physique.
 //
-// ✅ CONCEPTION-selecteur-marge-compteur-incremental.md §1 (16/08/2026) : le
+// ✅ docs/plans/CONCEPTION-selecteur-marge-compteur-incremental.md §1 (16/08/2026) : le
 // sélecteur de compétition interne à cet écran a été supprimé au profit d'un
 // paramètre d'URL (/live-display/:competitionId). Changer de compétition via un
 // simple Select remontait `LiveCompetitionView` (key={competition.id}) et repayait
 // les 3 240 documents du snapshot initial à chaque clic — un geste qui semblait
 // anodin mais qui, répété quelques fois, faisait franchir le budget mesuré de 3
-// remontages (§3 de CONCEPTION-ecran-live-competition.md). Le choix se fait
+// remontages (§3 de docs/plans/CONCEPTION-ecran-live-competition.md). Le choix se fait
 // maintenant depuis AdminCompetitionManagement.tsx (bouton "Ouvrir l'affichage
 // TV", un par compétition diffusée) : changer de compétition redevient ce que
 // c'est réellement, ouvrir une autre fenêtre — le coût reste visible au lieu
@@ -135,7 +135,7 @@ const LiveCompetitionView: React.FC<{ competition: Competition }> = ({ competiti
   // scheduleRecompute, au prix de deux paires d'états dont une seule est jamais
   // utilisée pour une compétition donnée.
   //
-  // ✅ ADDENDUM-mode-ffme-finale-annee.md §1/§2 (16/08/2026) : le mode "Officiel" cible
+  // ✅ docs/plans/ADDENDUM-mode-ffme-finale-annee.md §1/§2 (16/08/2026) : le mode "Officiel" cible
   // en réalité le format "Finale de l'année" (10 grimpeurs, 5 blocs) — pas la
   // compétition à 90/35 pour laquelle la rotation par catégorie d'âge avait été conçue.
   // Groupé par genre, pas par âge (une seule catégorie "open" à cette échelle) — voir plus bas,
@@ -273,7 +273,7 @@ const LiveCompetitionView: React.FC<{ competition: Competition }> = ({ competiti
     return currentPage.entries.map((_, i) => i + 1);
   }, [currentPage]);
 
-  // ✅ Mode "Officiel" (ADDENDUM-mode-ffme-finale-annee.md §1/§2) : pas de rotation, les
+  // ✅ Mode "Officiel" (docs/plans/ADDENDUM-mode-ffme-finale-annee.md §1/§2) : pas de rotation, les
   // deux groupes (Hommes/Femmes — ou tout autre découpage de "gender") tiennent côte à
   // côte sur un seul écran à cette échelle (5 lignes max chacun). Filtre "au moins un
   // top ou une zone" conservé (§B.4 du document précédent, toujours valable) : au tout
@@ -292,7 +292,7 @@ const LiveCompetitionView: React.FC<{ competition: Competition }> = ({ competiti
       </Typography>
 
       {/* ✅ Pédagogie suggérée par relecture ClaudeNav (voir
-          HANDOFF-branding-navbar-2026-08-16.md) : le mode "Officiel" classe par
+          docs/handoffs/HANDOFF-branding-navbar-2026-08-16.md) : le mode "Officiel" classe par
           tops/zones/essais, pas par un score affiché à l'écran (contrairement aux
           3 autres modes) — un spectateur qui ne connaît pas cette règle voit un
           classement qui bouge sans comprendre pourquoi. Une phrase suffit, pas
@@ -305,7 +305,7 @@ const LiveCompetitionView: React.FC<{ competition: Competition }> = ({ competiti
       )}
 
       {isOfficialMode ? (
-        // ✅ Mode "Officiel" — ADDENDUM-mode-ffme-finale-annee.md §1/§2 : pas de
+        // ✅ Mode "Officiel" — docs/plans/ADDENDUM-mode-ffme-finale-annee.md §1/§2 : pas de
         // rotation (deux classements de 5 lignes tiennent ensemble sur un seul écran),
         // groupé par genre (pas par âge : une seule catégorie "open" à cette échelle).
         officialGenderGroups.length === 0 ? (
@@ -454,7 +454,7 @@ const AdminCompetitionLiveDisplay: React.FC = () => {
       try {
         const snap = await getDoc(doc(db, 'competitions', competitionId));
         if (cancelled) return;
-        // ✅ Mêmes deux conditions qu'avant (§7 de CONCEPTION-ecran-live-competition.md,
+        // ✅ Mêmes deux conditions qu'avant (§7 de docs/plans/CONCEPTION-ecran-live-competition.md,
         // "Implications sur l'écran live") : une compétition non "en cours" ou non
         // diffusée n'a rien à faire sur cet écran, qu'elle existe ou non.
         if (!snap.exists() || snap.data().status !== 'en cours' || snap.data().liveDisplayEnabled !== true) {

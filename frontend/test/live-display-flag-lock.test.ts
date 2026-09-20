@@ -1,4 +1,4 @@
-// ✅ Verrouillage de `liveDisplayEnabled` (écran live TV, CONCEPTION-ecran-live-competition.md
+// ✅ Verrouillage de `liveDisplayEnabled` (écran live TV, docs/plans/CONCEPTION-ecran-live-competition.md
 // §7) : une fois la compétition déclenchée (status != 'à venir'), le drapeau ne doit plus
 // pouvoir changer — y compris pour admin/ouvreur, à la différence du verrouillage de
 // competition_results qui les exempte. C'est la garantie de consentement : un client ne voit

@@ -44,8 +44,8 @@ const ClientProfile: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  // ✅ PLAN-premiers-ascensionnistes.md §3 : consentement dédié (distinct de
-  // classementOptIn), stocké dans `user_ludic_state` (PLAN-etat-ludique-hors-users.md est
+  // ✅ docs/plans/PLAN-premiers-ascensionnistes.md §3 : consentement dédié (distinct de
+  // classementOptIn), stocké dans `user_ludic_state` (docs/plans/PLAN-etat-ludique-hors-users.md est
   // déjà engagé) plutôt que sur "users" — voir services/ludicState.ts.
   const [firstAscentOptIn, setFirstAscentOptIn] = useState(false);
   const navigate = useNavigate();
@@ -116,7 +116,7 @@ const ClientProfile: React.FC = () => {
       // synchronisée en même temps que "users", sans étape de saisie en plus pour le
       // client — un client ne peut pas lire toute la collection "users" (règles
       // Firestore), d'où cette fiche allégée séparée.
-      // ✅ Fuite corrigée (SUIVI-date-de-naissance.md §3 / relecture ClaudeNav) :
+      // ✅ Fuite corrigée (docs/suivi/SUIVI-date-de-naissance.md §3 / relecture ClaudeNav) :
       // "classement_profiles" est lisible par tout compte connecté, donc on n'y écrit
       // plus la date de naissance brute — seulement la catégorie FFME qui en est
       // dérivée, seule donnée dont ClientClassement.tsx a réellement besoin.
@@ -258,7 +258,7 @@ const ClientProfile: React.FC = () => {
             }
             label="Apparaître dans le classement des grimpeurs"
           />
-          {/* ✅ CONCEPTION-classement-saisonnier.md, décision §3 : désactiver ce réglage
+          {/* ✅ docs/plans/CONCEPTION-classement-saisonnier.md, décision §3 : désactiver ce réglage
               retire aussi de la qualification à la Finale, pas seulement du classement
               public — sans ce texte, l'effet serait invisible pour le grimpeur. */}
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
@@ -275,7 +275,7 @@ const ClientProfile: React.FC = () => {
             }
             label="Apparaître dans les premiers ascensionnistes des blocs difficiles"
           />
-          {/* ✅ PLAN-premiers-ascensionnistes.md §6 : le consentement est vérifié au moment
+          {/* ✅ docs/plans/PLAN-premiers-ascensionnistes.md §6 : le consentement est vérifié au moment
               de la validation, pas rétroactivement — l'activer ne fait pas apparaître le
               grimpeur dans les listes des blocs déjà validés avant. */}
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>

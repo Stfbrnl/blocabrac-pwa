@@ -10,7 +10,7 @@ import { db } from '../services/firebaseConfig';
 import { collection, doc, getDoc, getDocs, query, where, setDoc, writeBatch } from 'firebase/firestore';
 import { applyCompetitionValidationUpdate, type CompetitionValidationState } from '../utils/competitionValidation';
 
-// ✅ Écran juge (ADDENDUM-mode-ffme-finale-annee.md §3) : pour le format "Finale de
+// ✅ Écran juge (docs/plans/ADDENDUM-mode-ffme-finale-annee.md §3) : pour le format "Finale de
 // l'année" (10 grimpeurs, 5 blocs, passages consécutifs sous le regard de tous pour un
 // titre annuel), l'autodéclaration côté client n'a pas le même statut qu'une compétition
 // conviviale à 90 participants — un juge (admin ou ouvreur) saisit les résultats de TOUS

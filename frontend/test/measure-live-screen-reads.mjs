@@ -1,4 +1,4 @@
-// ✅ §3 de CONCEPTION-ecran-live-competition.md : personne n'avait chiffré le coût en
+// ✅ §3 de docs/plans/CONCEPTION-ecran-live-competition.md : personne n'avait chiffré le coût en
 // lectures de l'écran live avant ce script. Même protocole que measure-competition-reads*.mjs
 // (émulateur, vrai client SDK signé admin) : deux requêtes (`competition_results` et
 // `competition_participants` filtrées sur `competition_id`) simulant les deux `onSnapshot`
@@ -11,7 +11,7 @@
 // (mesurées par measure-competition-writes-after.mjs : 82 écritures competition_results +
 // 1 verrouillage competition_participants par grimpeur) est rejouée en delta par-dessus,
 // comme si l'écran avait été ouvert dès le début. Les deux pires cas cumulés, pas un
-// scénario réaliste unique — c'est le choix de CONCEPTION-ecran-live-competition.md §3.
+// scénario réaliste unique — c'est le choix de docs/plans/CONCEPTION-ecran-live-competition.md §3.
 //
 // Les écritures sont faites via le SDK admin (pas de sign-in par grimpeur) : la facturation
 // des lectures d'un onSnapshot ne dépend pas de qui a écrit le document, seulement du
@@ -168,7 +168,7 @@ async function main() {
   console.log('---');
   console.log(`TOTAL lectures écran live (${N_PARTICIPANTS} participants, ${N_BOULDERS} blocs, ${N_REMONTAGES} remontages) : ${totalReads}`);
   console.log(`Plafond quotidien Spark : 50000 lectures`);
-  console.log(`Rappel lectures côté grimpeurs (mesuré séparément, HANDOFF-quota-ecritures-version-2026-08-15.md) : ~11000`);
+  console.log(`Rappel lectures côté grimpeurs (mesuré séparément, docs/handoffs/HANDOFF-quota-ecritures-version-2026-08-15.md) : ~11000`);
   console.log(`Total soirée estimé : ${totalReads + 11000} lectures (${((totalReads + 11000) / 50000 * 100).toFixed(1)}% du plafond)`);
 }
 

@@ -4,8 +4,8 @@
 // continu. Contre l'app + les émulateurs locaux, jamais la production.
 //
 // ✅ Mêle Playwright (UI) et firebase-admin (assertion backend directe sur
-// user_ludic_state.wallCounts — PLAN-etat-ludique-hors-users.md, passe C : plus sur
-// users) — PROCESSUS-erreurs-avalees.md §4 : "tout compteur incrémental doit avoir une
+// user_ludic_state.wallCounts — docs/plans/PLAN-etat-ludique-hors-users.md, passe C : plus sur
+// users) — docs/processus/PROCESSUS-erreurs-avalees.md §4 : "tout compteur incrémental doit avoir une
 // assertion e2e sur sa valeur résultante", wallCounts étant précisément celui qui avait
 // silencieusement cessé de s'écrire (bug de transaction V2.44→V2.46).
 import { chromium } from 'playwright';
@@ -143,7 +143,7 @@ async function main() {
   });
 
   await step('Backend : user_ludic_state.wallCounts reflète la validation (compteur muet sans cette assertion)', async () => {
-    // ✅ PLAN-etat-ludique-hors-users.md, passe C : wallCounts ne vit plus que dans
+    // ✅ docs/plans/PLAN-etat-ludique-hors-users.md, passe C : wallCounts ne vit plus que dans
     // user_ludic_state (plus de users.wallCounts à vérifier).
     const { uid } = await adminAuth.getUserByEmail(CLIENT_EMAIL);
     const ludicSnap = await adminDb.collection('user_ludic_state').doc(uid).get();
@@ -153,7 +153,7 @@ async function main() {
 
   await step('Client : Bloc Roulette -> "J\'ai relevé le défi"', async () => {
     // ✅ Troisième compteur incrémental du projet (après colorCounts/wallCounts) :
-    // PROCESSUS-erreurs-avalees.md §4 impose une assertion e2e sur sa valeur résultante.
+    // docs/processus/PROCESSUS-erreurs-avalees.md §4 impose une assertion e2e sur sa valeur résultante.
     await gotoAndWait(clientP, '/client/daily', 'Mon Blocabrac quotidien');
     await clientP.getByRole('button', { name: 'Bloc Roulette', exact: true }).click();
     const valider = clientP.getByRole('button', { name: "J'ai relevé le défi" });
@@ -168,7 +168,7 @@ async function main() {
   });
 
   await step('Backend : user_ludic_state.rouletteChallengesCompleted + rouletteRecentChallenges écrits', async () => {
-    // ✅ PLAN-etat-ludique-hors-users.md, passe C : plus de copie sur users, uniquement
+    // ✅ docs/plans/PLAN-etat-ludique-hors-users.md, passe C : plus de copie sur users, uniquement
     // user_ludic_state.
     const { uid } = await adminAuth.getUserByEmail(CLIENT_EMAIL);
     const data = (await adminDb.collection('user_ludic_state').doc(uid).get()).data() || {};

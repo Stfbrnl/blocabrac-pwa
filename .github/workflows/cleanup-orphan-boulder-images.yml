@@ -1,6 +1,6 @@
 name: Nettoyage images Cloudinary orphelines
 
-# Chantier 4 (PLAN-spark-images-competition.md) : supprime mensuellement les images de
+# Chantier 4 (docs/plans/PLAN-spark-images-competition.md) : supprime mensuellement les images de
 # blocs qui ne sont plus référencées par aucun document Firestore "boulders" et qui ont
 # plus de 7 jours (voir scripts/cleanup-orphan-boulder-images.js pour tous les
 # garde-fous — mode simulation par défaut, ce workflow passe explicitement --delete).

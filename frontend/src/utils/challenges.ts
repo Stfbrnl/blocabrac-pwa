@@ -1,4 +1,4 @@
-// ✅ Défis entre potes (CONCEPTION-roulette-et-defis.md, Partie 2) : logique pure de
+// ✅ Défis entre potes (docs/plans/CONCEPTION-roulette-et-defis.md, Partie 2) : logique pure de
 // progression et de détermination du vainqueur pour les 4 structures de défi.
 //
 // Module pur, comme roulette.ts : AUCUN import Firestore ici. Le document `challenges/{id}`

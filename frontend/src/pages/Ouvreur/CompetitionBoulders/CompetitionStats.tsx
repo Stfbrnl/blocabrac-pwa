@@ -8,7 +8,7 @@ import { collection, query, where, getDocs } from 'firebase/firestore';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '../../../services/firebaseConfig';
 import { getSeasonAge, getFfmeCategory, OPEN_CATEGORY } from '../../../utils/ageCategory';
-// ✅ Extrait dans competitionClassement.ts (CONCEPTION-ecran-live-competition.md §1) :
+// ✅ Extrait dans competitionClassement.ts (docs/plans/CONCEPTION-ecran-live-competition.md §1) :
 // ce calcul existait en double avec AdminCompetitionStats.tsx.
 import {
   getClassementByCategory as computeClassementByCategory,

@@ -1,4 +1,4 @@
-// PLAN-etat-ludique-hors-users.md, Passe B : peuple `user_ludic_state/{uid}` depuis les
+// docs/plans/PLAN-etat-ludique-hors-users.md, Passe B : peuple `user_ludic_state/{uid}` depuis les
 // quatre champs legacy encore portés par `users/{uid}` (weeklyGoalItems, wallCounts,
 // rouletteChallengesCompleted, rouletteRecentChallenges). Ne touche jamais `users` — ce
 // script prépare la passe C (retrait), il ne la fait pas.
@@ -16,7 +16,7 @@
 //   node backfill-ludic-state.js --uid <uid> → un seul compte (débogage)
 //
 // ✅ Garde-fou structurel (retour ClaudeNav 17/09/2026, suite à un incident constaté en
-// simulation — voir HANDOFF-ludic-state-backfill-simulation-2026-09-17.md) : CE SCRIPT
+// simulation — voir docs/handoffs/HANDOFF-ludic-state-backfill-simulation-2026-09-17.md) : CE SCRIPT
 // N'ÉCRASE JAMAIS UN CHAMP DÉJÀ PRÉSENT DANS `user_ludic_state`, même avec `--fix`. Il ne
 // fait que COMBLER une absence — exactement le même principe directionnel que le garde-fou
 // de `purge-legacy-ludic-fields.js` (qui ne supprime jamais un champ absent ailleurs), lu

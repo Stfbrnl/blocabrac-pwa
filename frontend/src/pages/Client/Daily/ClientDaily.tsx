@@ -85,11 +85,11 @@ interface Boulder {
   type?: string;
   is_child_route?: boolean;
   is_active?: boolean;
-  // ✅ PLAN-premiers-ascensionnistes.md : reste 'daily'/false pour tout bloc affiché ici (la
+  // ✅ docs/plans/PLAN-premiers-ascensionnistes.md : reste 'daily'/false pour tout bloc affiché ici (la
   // requête filtre déjà type=='daily'), mais lu explicitement par prudence — voir §5 du plan.
   competition_active?: boolean;
   firstAscents?: FirstAscentEntry[];
-  // ✅ PLAN-ouvreur-createur-bloc.md : qui a réellement OUVERT le bloc (distinct de
+  // ✅ docs/plans/PLAN-ouvreur-createur-bloc.md : qui a réellement OUVERT le bloc (distinct de
   // `created_by`, qui a saisi), dénormalisé — jamais lu ici pour un bloc de compétition
   // (cette page ne charge que type=='daily', voir la requête plus bas).
   openedBy?: { uid: string; displayName: string } | null;
@@ -130,7 +130,7 @@ const ClientDaily: React.FC = () => {
     wallCounts?: WallCounts;
     rouletteChallengesCompleted?: number;
     rouletteRecentChallenges?: RouletteCompletion[];
-    // ✅ PLAN-premiers-ascensionnistes.md §3 : consentement dédié (distinct de
+    // ✅ docs/plans/PLAN-premiers-ascensionnistes.md §3 : consentement dédié (distinct de
     // classementOptIn), lu ici pour être vérifié sans lecture supplémentaire au moment
     // du clic "Réussi".
     firstAscentOptIn?: boolean;
@@ -158,7 +158,7 @@ const ClientDaily: React.FC = () => {
     return composed || uid;
   };
 
-  // ✅ Compteur incrémental (CONCEPTION-selecteur-marge-compteur-incremental.md §3) :
+  // ✅ Compteur incrémental (docs/plans/CONCEPTION-selecteur-marge-compteur-incremental.md §3) :
   // remplace l'ancien cache en mémoire préchargé au montage (historique complet des
   // réussites, un `getDocs` non borné qui grossissait avec l'ancienneté du compte —
   // voir git blame pour l'ancienne version). Une validation ne lit plus désormais que
@@ -173,7 +173,7 @@ const ClientDaily: React.FC = () => {
   // ni échec). `success`/`attempts` alimentent le delta de classement (uniquement si
   // `success` est vrai) ; `createdAt` sert à préserver la date de première écriture du
   // document (voir `resolvePreviousResultState` — correctif du bug où `createdAt` était
-  // réécrit à chaque édition, cf. RELECTURE-classement-saisonnier.md §1).
+  // réécrit à chaque édition, cf. docs/handoffs/RELECTURE-classement-saisonnier.md §1).
   const previousStateCacheRef = useRef<Map<string, { attempts: number; success: boolean; createdAt: string } | null>>(new Map());
 
   // ✅ Chantier écritures point 5 : classement_profiles est un résumé dérivé, pas la
@@ -182,7 +182,7 @@ const ClientDaily: React.FC = () => {
   // flush sur fermeture de la modale de détail et sur "pagehide" — le résultat du bloc
   // lui-même (client_boulder_results) continue d'être écrit immédiatement.
   //
-  // ✅ PROCESSUS-erreurs-avalees.md §3 (V2.48) : le minuteur/pagehide/compteur d'échecs
+  // ✅ docs/processus/PROCESSUS-erreurs-avalees.md §3 (V2.48) : le minuteur/pagehide/compteur d'échecs
   // qui vivaient ici en refs éparpillées sont maintenant portés par `useDebouncedFlushQueue`
   // (générique, réutilisé par ClientCompetitions.tsx/ClientCourseSession.tsx) — une seule
   // clé ('classement'), un seul payload `ClassementFlushPending` fusionné par addition (voir
@@ -192,7 +192,7 @@ const ClientDaily: React.FC = () => {
   // 19/08 (lecture après écriture, silencieusement avalée) ne peut plus se reproduire ici.
   const CLASSEMENT_DEBOUNCE_MS = 3000;
 
-  // ✅ Défis entre potes (CONCEPTION-roulette-et-defis.md, Partie 2, §2.4) : défis actifs de
+  // ✅ Défis entre potes (docs/plans/CONCEPTION-roulette-et-defis.md, Partie 2, §2.4) : défis actifs de
   // l'utilisateur, chargés UNE FOIS au montage (cache-first, jamais relus par validation —
   // voir l'useEffect plus bas), gardés en mémoire.
   const activeChallengesRef = useRef<Array<{
@@ -215,7 +215,7 @@ const ClientDaily: React.FC = () => {
     persist: async (_key, pending) => {
       if (!user) return;
       const classementProfileRef = doc(db, 'classement_profiles', user.uid);
-      // ✅ PLAN-etat-ludique-hors-users.md, passe C : seule cible de wallCounts désormais
+      // ✅ docs/plans/PLAN-etat-ludique-hors-users.md, passe C : seule cible de wallCounts désormais
       // (plus de double écriture sur "users" — retiré après vérification en production de
       // la passe A/B). Toujours dans la liste des LECTURES de la transaction, jamais un
       // `get()` en ligne (voir firestoreTransaction.ts).
@@ -238,7 +238,7 @@ const ClientDaily: React.FC = () => {
         { classementProfileRef, userLudicRef, challengeRefs }
       ));
     },
-    // ✅ Niveau 3 (PROCESSUS-erreurs-avalees.md §2) : réutilise l'état error/Alert déjà
+    // ✅ Niveau 3 (docs/processus/PROCESSUS-erreurs-avalees.md §2) : réutilise l'état error/Alert déjà
     // présent sur cet écran plutôt qu'un nouveau Snackbar.
     onDurableFailure: () => {
       setError("Ta progression (classement, murs, défis) n'arrive pas à s'enregistrer depuis plusieurs tentatives. Tes validations de blocs restent bien enregistrées — réessaie plus tard ou recharge la page.");
@@ -292,7 +292,7 @@ const ClientDaily: React.FC = () => {
             lastName: data.last_name || '',
           };
           // ✅ Bloc Roulette : niveau depuis "users" (identité/droits, reste à sa place —
-          // PLAN-etat-ludique-hors-users.md) ; wallCounts + suivi des défis relevés viennent
+          // docs/plans/PLAN-etat-ludique-hors-users.md) ; wallCounts + suivi des défis relevés viennent
           // de `user_ludic_state` via ludicState.ts (passe C : plus de repli sur "users",
           // la passe B a backfillé tous les comptes existants avant ce retrait). Lus ici
           // pour être réécrits sans relecture au moment du "J'ai relevé le défi".
@@ -490,7 +490,7 @@ const ClientDaily: React.FC = () => {
     }
   };
 
-  // ✅ "J'ai relevé le défi" (V2.55, version hybride ; PLAN-etat-ludique-hors-users.md pour
+  // ✅ "J'ai relevé le défi" (V2.55, version hybride ; docs/plans/PLAN-etat-ludique-hors-users.md pour
   // l'emplacement) : une écriture via ludicState.ts (double écriture user_ludic_state +
   // users tant que la passe C n'a pas eu lieu) — compteur + liste plafonnée des 10 derniers
   // défis, recomposée depuis `selfProfileRef.current` (aucune relecture Firestore : l'état a
@@ -595,7 +595,7 @@ const ClientDaily: React.FC = () => {
     [boulders]
   );
 
-  // ✅ Bloc Roulette / compteur par mur (CONCEPTION-roulette-et-defis.md §1.7.B) : même
+  // ✅ Bloc Roulette / compteur par mur (docs/plans/CONCEPTION-roulette-et-defis.md §1.7.B) : même
   // principe que `colorById` — le mur COURANT du bloc, jamais un mur figé à la validation.
   const wallById = useMemo(
     () => new Map(boulders.map((b) => [b.id, b.wall])),
@@ -613,7 +613,7 @@ const ClientDaily: React.FC = () => {
   // usages distincts par les appelants : le delta de classement (qui n'utilise
   // `attempts` que si `success` était vrai) et la préservation de `createdAt` (qui en a
   // besoin quel que soit `success` — un document créé par un clic "Échoué" a quand même
-  // une vraie date de première écriture). Correctif RELECTURE-classement-saisonnier.md
+  // une vraie date de première écriture). Correctif docs/handoffs/RELECTURE-classement-saisonnier.md
   // §1 : avant ce correctif, `createdAt` était réécrit à "maintenant" à CHAQUE édition
   // (même setDoc que `updatedAt`), donc inutilisable pour savoir quand une validation a
   // réellement eu lieu — un prérequis du classement de saison.
@@ -680,7 +680,7 @@ const ClientDaily: React.FC = () => {
       if (colorCountDelta !== 0) delta.seasonColorDeltas.set(color, colorCountDelta);
     }
 
-    // ✅ Défis entre potes (CONCEPTION-roulette-et-defis.md §2.2/§2.4) : même transition
+    // ✅ Défis entre potes (docs/plans/CONCEPTION-roulette-et-defis.md §2.2/§2.4) : même transition
     // succès/échec, répercutée sur chaque défi actif concerné — jamais de relecture des
     // autres participants, jamais de recalcul depuis l'historique. "seuil" ne compte que la
     // couleur ciblée ; "fenetre" ignore la couleur (métrique "blocs") ou réutilise le même
@@ -723,7 +723,7 @@ const ClientDaily: React.FC = () => {
   };
 
 
-  // ✅ PLAN-premiers-ascensionnistes.md §6 : écriture IMMÉDIATE (pas débouncée, contrairement
+  // ✅ docs/plans/PLAN-premiers-ascensionnistes.md §6 : écriture IMMÉDIATE (pas débouncée, contrairement
   // au flush classement/murs/défis) — déclenchée par le clic "Réussi", déjà immédiat, et
   // unique par bloc sur toute sa vie (≤5 écritures). Relit le bloc FRAÎCHEMENT dans une petite
   // transaction dédiée (jamais l'état `boulders` en mémoire, potentiellement périmé si un
@@ -919,7 +919,7 @@ const ClientDaily: React.FC = () => {
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
       {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
 
-      {/* ✅ Bloc Roulette (CONCEPTION-roulette-et-defis.md, Partie 1) : tirage 100% gratuit,
+      {/* ✅ Bloc Roulette (docs/plans/CONCEPTION-roulette-et-defis.md, Partie 1) : tirage 100% gratuit,
           aucun appel Firestore déclenché par ces boutons ni par "relancer" — voir
           handleOpenRoulette/handleOpenDeathRoulette et l'en-tête de utils/roulette.ts. */}
       <Box sx={{ mb: 3, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
@@ -1080,7 +1080,7 @@ const ClientDaily: React.FC = () => {
               <Typography variant="body2" sx={{ mb: 2 }}>
                 <strong>Créé par:</strong> {getUserFullName(selectedBoulder.created_by)}
               </Typography>
-              {/* ✅ PLAN-ouvreur-createur-bloc.md §4 (décision) : n'apparaît que si renseigné —
+              {/* ✅ docs/plans/PLAN-ouvreur-createur-bloc.md §4 (décision) : n'apparaît que si renseigné —
                   un bloc ancien ou sans ouvreur désigné n'affiche simplement rien. */}
               {selectedBoulder.openedBy && (
                 <Typography variant="body2" sx={{ mb: 2 }}>
@@ -1088,7 +1088,7 @@ const ClientDaily: React.FC = () => {
                 </Typography>
               )}
 
-              {/* ✅ PLAN-premiers-ascensionnistes.md §7 : uniquement sur la fiche de détail
+              {/* ✅ docs/plans/PLAN-premiers-ascensionnistes.md §7 : uniquement sur la fiche de détail
                   (pas sur la vignette du mur), et jamais sur un bloc de compétition (§5) —
                   un bloc désactivé conserve sa liste (palmarès du mur précédent), le document
                   n'étant jamais supprimé (invariant V2.56). */}

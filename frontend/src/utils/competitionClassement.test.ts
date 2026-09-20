@@ -250,7 +250,7 @@ describe('rankOfficialEntries (§B.4 : égalités massives sur l\'écran live)',
   });
 });
 
-// ✅ ADDENDUM-mode-ffme-finale-annee.md §2, "Vérifiabilité à la main — à exploiter" :
+// ✅ docs/plans/ADDENDUM-mode-ffme-finale-annee.md §2, "Vérifiabilité à la main — à exploiter" :
 // jeu de test correspondant à une finale plausible (10 grimpeurs, 5 blocs), classement
 // attendu calculé À LA MAIN puis figé ici — la meilleure garantie disponible à cette
 // échelle contre un bug de comparateur, et bon marché puisque le classement complet se

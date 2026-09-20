@@ -40,7 +40,7 @@ interface Boulder {
   is_active: boolean;
   difficulty_level?: 'Plus' | 'Égal' | 'Moins';
   points_value?: number; // ✅ Mode de comptage "Blocs validés" uniquement
-  openedBy?: { uid: string; displayName: string } | null; // ✅ PLAN-ouvreur-createur-bloc.md
+  openedBy?: { uid: string; displayName: string } | null; // ✅ docs/plans/PLAN-ouvreur-createur-bloc.md
 }
 
 const colorRatings: { value: string; label: string }[] = colorGrades.map(
@@ -384,7 +384,7 @@ export default function CompetitionBouldersList(): JSX.Element {
               >
                 Réorganiser les numéros
               </Button>
-              {/* ✅ Écran juge (ADDENDUM-mode-ffme-finale-annee.md §3) : même écran que
+              {/* ✅ Écran juge (docs/plans/ADDENDUM-mode-ffme-finale-annee.md §3) : même écran que
                   celui accessible depuis AdminCompetitionManagement.tsx, uniquement pour
                   les compétitions en mode de comptage "Officiel". */}
               {competitions.find(c => c.id === selectedCompetition)?.scoring_mode === 'officiel' && (

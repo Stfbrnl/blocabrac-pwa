@@ -1,6 +1,6 @@
 // ✅ Mode de comptage "Officiel FFME/coupe du monde" (competitionClassement.ts) :
 // invariants de saisie extraits en fonction pure — testable sans monter ClientCompetitions.tsx
-// — sur retour de ClaudeNav (CONCEPTION-mode-ffme-et-garde-fou-reconciliation.md §B.2,
+// — sur retour de ClaudeNav (docs/plans/CONCEPTION-mode-ffme-et-garde-fou-reconciliation.md §B.2,
 // 16/08/2026) : "le contrôle doit être en amont, à la saisie, pas en aval au calcul".
 // Une saisie incohérente (top sans zone, essais-zone > essais-top) produirait des
 // classements inexplicables et incorrigibles a posteriori — personne ne peut deviner

@@ -1,10 +1,10 @@
-// ✅ PROCESSUS-erreurs-avalees.md §3 (V2.48) : logique d'écriture du flush débounced de
+// ✅ docs/processus/PROCESSUS-erreurs-avalees.md §3 (V2.48) : logique d'écriture du flush débounced de
 // ClientDaily.tsx (classement_profiles + user_ludic_state.wallCounts + challenges.progress),
 // extraite en fonction PURE — aucun import Firestore ici, seulement des données et des
 // références déjà résolues. C'est cette extraction qui permet à `runReadThenWriteTransaction`
 // (voir firestoreTransaction.ts) d'imposer l'ordre lectures/écritures par la signature plutôt
 // que par la discipline : cette fonction ne reçoit jamais `tx`, elle ne PEUT pas relire.
-// ✅ PLAN-etat-ludique-hors-users.md, passe C : wallCounts vit uniquement dans
+// ✅ docs/plans/PLAN-etat-ludique-hors-users.md, passe C : wallCounts vit uniquement dans
 // user_ludic_state désormais (plus de double écriture/repli sur "users" — retiré après
 // vérification en production de la passe A/B, voir git blame pour la version transitoire).
 import type { DocumentReference, DocumentData } from 'firebase/firestore';

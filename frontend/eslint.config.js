@@ -19,7 +19,7 @@ export default defineConfig([
       globals: globals.browser,
     },
     rules: {
-      // ✅ Processus "erreurs avalées" (PROCESSUS-erreurs-avalees.md §1/§6, V2.46 → V2.49) :
+      // ✅ Processus "erreurs avalées" (docs/processus/PROCESSUS-erreurs-avalees.md §1/§6, V2.46 → V2.49) :
       // détecte un `catch (err)` dont `err` n'est jamais lu — presque toujours le signe d'une
       // erreur rattrapée puis ignorée. Passé de "warn" (mode rapport) à "error" une fois
       // l'inventaire existant confirmé vide (0 résultat, voir §1) — désormais bloquant : tout

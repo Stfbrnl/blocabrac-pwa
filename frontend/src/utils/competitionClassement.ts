@@ -4,7 +4,7 @@ import { getSeasonAge, getFfmeCategory } from './ageCategory';
 export type { ScoringMode, CustomScoringTable };
 
 // ✅ Extrait de AdminCompetitionStats.tsx / Ouvreur/CompetitionBoulders/CompetitionStats.tsx
-// (CONCEPTION-ecran-live-competition.md §1) : ce calcul existait en double, et un
+// (docs/plans/CONCEPTION-ecran-live-competition.md §1) : ce calcul existait en double, et un
 // troisième écran (l'affichage live) en aurait fait un troisième exemplaire — trois
 // vérités possibles le jour où le barème change, potentiellement en pleine compétition.
 // Modèle : classementScore.ts (classement quotidien).
@@ -174,7 +174,7 @@ export interface OfficialScoreEntry<P extends ParticipantBase = ParticipantBase>
 // ⚠️ Ordre issu de ma connaissance générale du format IFSC/coupe du monde, PAS d'une
 // lecture du règlement FFME en vigueur — à vérifier avant une compétition officielle
 // qui s'appuierait dessus pour départager un classement final (retour de ClaudeNav,
-// CONCEPTION-mode-ffme-et-garde-fou-reconciliation.md §B, 16/08/2026).
+// docs/plans/CONCEPTION-mode-ffme-et-garde-fou-reconciliation.md §B, 16/08/2026).
 const compareOfficialTotals = (a: OfficialTotals, b: OfficialTotals): number => {
   if (b.tops !== a.tops) return b.tops - a.tops;
   if (b.zones !== a.zones) return b.zones - a.zones;

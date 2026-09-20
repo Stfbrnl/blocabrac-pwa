@@ -1,4 +1,4 @@
-// ✅ Bloc Roulette (CONCEPTION-roulette-et-defis.md, Partie 1 — étapes 1+2+3 du §3) : tirage
+// ✅ Bloc Roulette (docs/plans/CONCEPTION-roulette-et-defis.md, Partie 1 — étapes 1+2+3 du §3) : tirage
 // ludique d'une proposition de défi individuel parmi un catalogue fixe de 46 entrées.
 //
 // Module pur : AUCUN import Firestore ici (ni `firebase/firestore`, ni `services/firebaseConfig`).
@@ -281,7 +281,7 @@ export interface DrawInput {
   userLevel: Level | undefined;
   // ✅ Limité à la session en cours (successResults de ClientDaily.tsx), pas l'historique
   // complet — décision actée pour rester "gratuit" (aucune lecture Firestore au tirage), voir
-  // CONCEPTION-roulette-et-defis.md §1.4 et la discussion de conception du 18/08/2026.
+  // docs/plans/CONCEPTION-roulette-et-defis.md §1.4 et la discussion de conception du 18/08/2026.
   validatedBoulderIds: Set<string>;
   wallCounts: WallCounts;
   recentProposalIds: string[]; // anti-lassitude, ~10 derniers ids tirés (localStorage)

@@ -1,4 +1,4 @@
-// PLAN-etat-ludique-hors-users.md, Passe C (point de non-retour du plan, §6) : supprime
+// docs/plans/PLAN-etat-ludique-hors-users.md, Passe C (point de non-retour du plan, §6) : supprime
 // les quatre champs legacy de `users/{uid}` (weeklyGoalItems, wallCounts,
 // rouletteChallengesCompleted, rouletteRecentChallenges) une fois que `user_ludic_state`
 // est confirmé comme SEULE source lue par l'application déployée.

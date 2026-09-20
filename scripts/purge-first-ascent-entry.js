@@ -1,4 +1,4 @@
-// PLAN-premiers-ascensionnistes.md §4 : retire les entrées d'un grimpeur donné de toutes les
+// docs/plans/PLAN-premiers-ascensionnistes.md §4 : retire les entrées d'un grimpeur donné de toutes les
 // listes `boulders/{id}.firstAscents` où il figure — pour honorer une demande explicite de
 // retrait après désactivation du consentement (`firstAscentOptIn`). Le retrait du
 // consentement N'EST PAS rétroactif tout seul (voir ClientProfile.tsx) : le nom reste sur les

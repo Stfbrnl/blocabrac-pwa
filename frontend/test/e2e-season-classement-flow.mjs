@@ -1,5 +1,5 @@
 // Script Playwright ponctuel : vérifie le flux "classement de saison" de bout en bout
-// (CONCEPTION-classement-saisonnier.md) — config admin de la fenêtre, validation client
+// (docs/plans/CONCEPTION-classement-saisonnier.md) — config admin de la fenêtre, validation client
 // comptabilisée dans season.*, suivi en direct, texte d'aide opt-in, bouton "Générer le
 // roster" avant/après clôture. Contre l'app + les émulateurs locaux, jamais la
 // production. Mêle Playwright (UI) et firebase-admin (assertions backend + invocation

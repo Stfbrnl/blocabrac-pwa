@@ -1,7 +1,7 @@
 // ✅ Verrouillage des résultats de compétition (Chantier 1 de
-// PLAN-spark-images-competition.md, ClientCompetitions.tsx), déplacé sur
+// docs/plans/PLAN-spark-images-competition.md, ClientCompetitions.tsx), déplacé sur
 // competition_participants au chantier écritures point 2
-// (SUIVI-quota-ecritures.md) : le verrou (submitted/submitted_at) vit
+// (docs/suivi/SUIVI-quota-ecritures.md) : le verrou (submitted/submitted_at) vit
 // désormais sur la participation (1 document) plutôt que dupliqué sur chacun
 // des ~35 documents de résultats (facturé par écriture). Un grimpeur peut
 // modifier son résultat tant que sa participation n'est pas verrouillée, mais
@@ -160,7 +160,7 @@ describe('competition_results : verrouillage à la soumission', () => {
     await assertFails(setDoc(doc(db, 'competition_results', RESULT_ID), baseResultData()));
   });
 
-  // ✅ Écran juge (ADDENDUM-mode-ffme-finale-annee.md §3) : un admin/ouvreur saisit les
+  // ✅ Écran juge (docs/plans/ADDENDUM-mode-ffme-finale-annee.md §3) : un admin/ouvreur saisit les
   // résultats DE TOUS LES GRIMPEURS, pas seulement les siens — donc une CRÉATION (pas
   // une simple mise à jour, voir le test "peut modifier" plus haut) avec un user_id qui
   // n'est pas le sien. Confirmé par les règles telles qu'écrites (accès admin/ouvreur

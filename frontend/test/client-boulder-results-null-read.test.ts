@@ -1,5 +1,5 @@
 // ✅ Garde-fou "resource == null ||" sur client_boulder_results (chantier compteur
-// incrémental, CONCEPTION-selecteur-marge-compteur-incremental.md §3) : ClientDaily.tsx
+// incrémental, docs/plans/CONCEPTION-selecteur-marge-compteur-incremental.md §3) : ClientDaily.tsx
 // lit désormais l'ancien état d'UN SEUL bloc par un getDoc() direct sur son ID
 // déterministe ("${uid}_${boulderId}") avant d'écrire le nouveau résultat. Pour un
 // bloc jamais validé, ce document n'existe pas — sans le garde-fou, "resource.data.userId"

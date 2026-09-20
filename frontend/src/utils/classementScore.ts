@@ -30,7 +30,7 @@ export const summarizeValidatedResults = (results: ValidatedBoulderResult[]): Sc
   return { score, bouldersValidated: results.length, bestColorRank };
 };
 
-// ✅ Compteur incrémental (CONCEPTION-selecteur-marge-compteur-incremental.md §3) :
+// ✅ Compteur incrémental (docs/plans/CONCEPTION-selecteur-marge-compteur-incremental.md §3) :
 // un compteur de blocs validés PAR COULEUR, tenu à jour par petites variations plutôt
 // que recalculé depuis l'historique complet à chaque validation. `summarizeValidatedResults`
 // ci-dessus reste la référence "recalcul complet depuis zéro" — utilisée par le script de
@@ -68,7 +68,7 @@ export const scoreDeltaForValidation = (
 };
 
 // ✅ Redémarrage du classement de saison (V2.56, Modèle A — voir
-// HANDOFF-redemarrage-saison-2026-09-06.md + RETOUR-redemarrage-saison-modele-a.md).
+// docs/handoffs/HANDOFF-redemarrage-saison-2026-09-06.md + docs/handoffs/RETOUR-redemarrage-saison-modele-a.md).
 // Recalcule le CRÉDIT DE DÉPART d'un grimpeur au moment d'un redémarrage : la somme de
 // ses validations existantes (`client_boulder_results`, succès uniquement) des blocs
 // encore posés, avec le nombre d'essais d'origine et la couleur ACTUELLE du bloc.
@@ -102,7 +102,7 @@ export const recomputeSeasonBaseline = (
   return { score, colorCounts };
 };
 
-// ✅ Classement de saison (CONCEPTION-classement-saisonnier.md) : détermine si une date
+// ✅ Classement de saison (docs/plans/CONCEPTION-classement-saisonnier.md) : détermine si une date
 // (ISO complète, ex. `new Date().toISOString()`) tombe dans la fenêtre de saison
 // `[debut, fin]` (dates ISO "YYYY-MM-DD", bornes incluses, lues depuis
 // `app_config/classement_saison`). Comparaison lexicographique, valide pour ce format.

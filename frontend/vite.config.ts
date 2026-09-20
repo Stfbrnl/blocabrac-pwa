@@ -16,7 +16,7 @@ const pkgVersion = JSON.parse(
   readFileSync(fileURLToPath(new URL('./package.json', import.meta.url)), 'utf-8')
 ).version as string;
 
-// ✅ Garde-fou en plus du numéro ci-dessus (voir SUIVI-remontages-et-version.md
+// ✅ Garde-fou en plus du numéro ci-dessus (voir docs/suivi/SUIVI-remontages-et-version.md
 // point 3) : contrairement au numéro de version, bumpé manuellement dans
 // package.json et donc oubliable, le hash de commit est automatiquement
 // toujours exact. Affiché en détail secondaire (info-bulle), pas en
@@ -53,7 +53,7 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       VitePWA({
-        // ✅ V2.62 (CORRECTIF-bandeau-mode-prompt.md) : 'autoUpdate' activait le nouveau
+        // ✅ V2.62 (docs/processus/CORRECTIF-bandeau-mode-prompt.md) : 'autoUpdate' activait le nouveau
         // SW tout seul dès son installation — le bandeau (onNeedReload) dépendait alors
         // d'une course entre cette activation et le montage de React, perdue sur un
         // démarrage à froid (constaté sur Android : jamais de bandeau, saut direct à la
