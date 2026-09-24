@@ -42,6 +42,99 @@ service cloud.firestore {
              (data.openerNote is string && data.openerNote.size() <= 300);
     }
 
+    // ========== Carnet de méthodes (PLAN-anecdote-methodes-missions.md §B) ==========
+    // ✅ Vocabulaire FIXE et COURT (§B.3, §B.5) — c'est précisément ce qui rend les règles
+    // ci-dessous étanches, contrairement à `firstAscents` (liste libre, non bornable par clé).
+    // Toute modification doit être répercutée à l'identique dans gymConfig.ts (climbingMethods).
+    function methodVocabulary() {
+      return ['dynamique', 'crochet_talon', 'crochet_pointe', 'inversee', 'reglette', 'pince', 'opposition', 'coordination'];
+    }
+
+    // Delta d'UNE clé de methodCounts entre l'ancien et le nouveau document. get(key, 0)
+    // traite une clé absente (jamais votée) comme 0 des deux côtés — piège V2.27 évité.
+    function methodDelta(oldCounts, newCounts, key) {
+      return newCounts.get(key, 0) - oldCounts.get(key, 0);
+    }
+
+    // ✅ Le SENS du delta doit correspondre à ce qu'un (re)vote légitime peut produire : +1
+    // seulement si CE grimpeur n'avait pas encore cette méthode dans son vote précédent
+    // (`priorMethods`, lu par isValidMethodVoteUpdate ci-dessous sur SON PROPRE document
+    // client_boulder_results — jamais celui d'un autre), -1 seulement s'il l'avait. Un saut
+    // de plus d'un cran (double vote, triple vote...) est rejeté par construction : aucune
+    // des trois branches ne matche un delta de 2.
+    function isConsistentMethodDelta(oldCounts, newCounts, priorMethods, key) {
+      let d = methodDelta(oldCounts, newCounts, key);
+      return d == 0 ||
+             (d == 1 && !(key in priorMethods)) ||
+             (d == -1 && (key in priorMethods));
+    }
+
+    // ✅ Les 8 clés du vocabulaire, unrollées une à une (le langage des règles n'a pas de
+    // boucle) — vérifie qu'AUCUNE ne s'écarte du sens attendu.
+    function isValidMethodCountsDelta(oldCounts, newCounts, priorMethods) {
+      return isConsistentMethodDelta(oldCounts, newCounts, priorMethods, 'dynamique') &&
+             isConsistentMethodDelta(oldCounts, newCounts, priorMethods, 'crochet_talon') &&
+             isConsistentMethodDelta(oldCounts, newCounts, priorMethods, 'crochet_pointe') &&
+             isConsistentMethodDelta(oldCounts, newCounts, priorMethods, 'inversee') &&
+             isConsistentMethodDelta(oldCounts, newCounts, priorMethods, 'reglette') &&
+             isConsistentMethodDelta(oldCounts, newCounts, priorMethods, 'pince') &&
+             isConsistentMethodDelta(oldCounts, newCounts, priorMethods, 'opposition') &&
+             isConsistentMethodDelta(oldCounts, newCounts, priorMethods, 'coordination');
+    }
+
+    // Nombre de clés qui passent à +1 (méthodes nouvellement ajoutées à CE vote) — borne le
+    // §B.5 "au plus 3 méthodes incrémentées dans une même écriture", que isConsistentMethodDelta
+    // seul ne borne pas (rien n'empêche d'ajouter 8 méthodes jamais votées en une fois).
+    function methodAddedCount(oldCounts, newCounts) {
+      return (methodDelta(oldCounts, newCounts, 'dynamique') == 1 ? 1 : 0) +
+             (methodDelta(oldCounts, newCounts, 'crochet_talon') == 1 ? 1 : 0) +
+             (methodDelta(oldCounts, newCounts, 'crochet_pointe') == 1 ? 1 : 0) +
+             (methodDelta(oldCounts, newCounts, 'inversee') == 1 ? 1 : 0) +
+             (methodDelta(oldCounts, newCounts, 'reglette') == 1 ? 1 : 0) +
+             (methodDelta(oldCounts, newCounts, 'pince') == 1 ? 1 : 0) +
+             (methodDelta(oldCounts, newCounts, 'opposition') == 1 ? 1 : 0) +
+             (methodDelta(oldCounts, newCounts, 'coordination') == 1 ? 1 : 0);
+    }
+
+    function methodRemovedCount(oldCounts, newCounts) {
+      return (methodDelta(oldCounts, newCounts, 'dynamique') == -1 ? 1 : 0) +
+             (methodDelta(oldCounts, newCounts, 'crochet_talon') == -1 ? 1 : 0) +
+             (methodDelta(oldCounts, newCounts, 'crochet_pointe') == -1 ? 1 : 0) +
+             (methodDelta(oldCounts, newCounts, 'inversee') == -1 ? 1 : 0) +
+             (methodDelta(oldCounts, newCounts, 'reglette') == -1 ? 1 : 0) +
+             (methodDelta(oldCounts, newCounts, 'pince') == -1 ? 1 : 0) +
+             (methodDelta(oldCounts, newCounts, 'opposition') == -1 ? 1 : 0) +
+             (methodDelta(oldCounts, newCounts, 'coordination') == -1 ? 1 : 0);
+    }
+
+    // ✅ Point décisif (§B.5) : lit SON PROPRE ancien vote (`client_boulder_results`, jamais
+    // celui d'un autre uid) pour valider le delta. Un get() dans une règle, à l'intérieur
+    // d'une transaction, voit l'état d'AVANT la transaction (jamais l'écriture jumelle sur
+    // client_boulder_results faite dans la MÊME transaction) — vérifié empiriquement sur
+    // l'émulateur (voir le test "modification de vote" de firestore.rules.test.ts), pas
+    // supposé. C'est ce qui permet à methodVoteWrite.ts d'écrire les deux documents dans une
+    // seule transaction atomique sans que cette règle ne se retrouve à comparer un document
+    // contre lui-même après coup.
+    function isValidMethodVoteUpdate(docId) {
+      let oldCounts = resource.data.get('methodCounts', {});
+      let newCounts = request.resource.data.get('methodCounts', {});
+      let oldVotes = resource.data.get('methodVotes', 0);
+      let newVotes = request.resource.data.get('methodVotes', 0);
+      let priorRef = /databases/$(database)/documents/client_boulder_results/$(request.auth.uid + '_' + docId);
+      let priorMethods = exists(priorRef) ? get(priorRef).data.get('methods', []) : [];
+      let addedCount = methodAddedCount(oldCounts, newCounts);
+      let removedCount = methodRemovedCount(oldCounts, newCounts);
+      let newMethodsCount = priorMethods.size() + addedCount - removedCount;
+      let wasVoting = priorMethods.size() > 0;
+      let willBeVoting = newMethodsCount > 0;
+      return newCounts.diff(oldCounts).affectedKeys().hasOnly(methodVocabulary()) &&
+             isValidMethodCountsDelta(oldCounts, newCounts, priorMethods) &&
+             newMethodsCount <= 3 &&
+             ((wasVoting == willBeVoting && newVotes == oldVotes) ||
+              (!wasVoting && willBeVoting && newVotes == oldVotes + 1) ||
+              (wasVoting && !willBeVoting && newVotes == oldVotes - 1));
+    }
+
     // ✅ Tout compte doit toujours porter le rôle "client" (les 3 autres rôles
     // s'additionnant par-dessus) : "Mon espace personnel" (protégé par role="client")
     // héberge désormais "Potes de grimpe", ouvert à tout le monde y compris le staff.
@@ -221,8 +314,17 @@ service cloud.firestore {
                       isUserRole("ouvreur"));
       allow create: if request.auth != null &&
                       request.resource.data.userId == request.auth.uid;
+      // ✅ PLAN-anecdote-methodes-missions.md §B.5 : `methods` (vote du grimpeur pour le
+      // carnet de méthodes) est un champ ordinaire de ce document, déjà couvert par la
+      // règle "propriétaire" existante — seule sa FORME est bornée ici (vocabulaire fixe,
+      // 3 maximum), la cohérence du DELTA appliqué à boulders.methodCounts se joue côté
+      // `boulders` (isValidMethodVoteUpdate, qui relit ce document via get()).
       allow update: if request.auth != null &&
-                      (resource.data.userId == request.auth.uid ||
+                      ((resource.data.userId == request.auth.uid &&
+                        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['methods']) ||
+                         (request.resource.data.methods is list &&
+                          request.resource.data.methods.size() <= 3 &&
+                          request.resource.data.methods.hasOnly(methodVocabulary())))) ||
                        isUserRole("admin"));
       allow delete: if request.auth != null &&
                       (resource.data.userId == request.auth.uid ||
@@ -407,7 +509,15 @@ service cloud.firestore {
                         request.resource.data.firstAscents.size() == resource.data.get('firstAscents', []).size() + 1 &&
                         isAppendOnly4(resource.data.get('firstAscents', []), request.resource.data.firstAscents) &&
                         request.resource.data.firstAscents[resource.data.get('firstAscents', []).size()].uid == request.auth.uid &&
-                        request.resource.data.firstAscents[resource.data.get('firstAscents', []).size()].keys().hasOnly(['uid', 'displayName', 'at'])));
+                        request.resource.data.firstAscents[resource.data.get('firstAscents', []).size()].keys().hasOnly(['uid', 'displayName', 'at'])) ||
+                       // ✅ PLAN-anecdote-methodes-missions.md §B.5/§B.6 : carnet de méthodes — même
+                       // exclusion des blocs de compétition que firstAscents (§B.6 : "les méthodes
+                       // renseignent sur la difficulté, comme les premiers ascensionnistes").
+                       (isUserRole("client") &&
+                        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['methodCounts', 'methodVotes']) &&
+                        resource.data.type == 'daily' &&
+                        !resource.data.get('competition_active', false) &&
+                        isValidMethodVoteUpdate(docId)));
     }
 
     match /client_course_results/{docId} {

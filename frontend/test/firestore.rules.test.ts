@@ -9,7 +9,7 @@ import {
   assertSucceeds,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { setDoc, doc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { setDoc, doc, getDoc, updateDoc, deleteDoc, runTransaction, type Firestore } from 'firebase/firestore';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 
@@ -963,5 +963,190 @@ describe('boulders : openerNote (anecdote d\'ouvreur)', () => {
       type: 'daily', wall: 'Dalle', number: 1, color: 'jaune',
     }));
     await assertSucceeds(updateDoc(doc(ouvreurDb, 'boulders', BOULDER_ID), { openerNote: null }));
+  });
+});
+
+// ✅ docs/plans/PLAN-anecdote-methodes-missions.md §B.5 : forme du vote (client_boulder_results.methods).
+describe('client_boulder_results : methods (carnet de méthodes)', () => {
+  const RESULT_ID = `${CLIENT_UID}_boulder-methodes-forme`;
+
+  async function seedResult() {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'client_boulder_results', RESULT_ID), {
+        userId: CLIENT_UID, boulderId: 'boulder-methodes-forme', success: true, attempts: 1,
+      });
+    });
+  }
+
+  it('le propriétaire peut écrire jusqu\'à 3 méthodes du vocabulaire', async () => {
+    await seedResult();
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertSucceeds(updateDoc(doc(clientDb, 'client_boulder_results', RESULT_ID), {
+      methods: ['dynamique', 'pince', 'opposition'],
+    }));
+  });
+
+  it('rejette plus de 3 méthodes', async () => {
+    await seedResult();
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertFails(updateDoc(doc(clientDb, 'client_boulder_results', RESULT_ID), {
+      methods: ['dynamique', 'pince', 'opposition', 'coordination'],
+    }));
+  });
+
+  it('rejette une méthode hors vocabulaire', async () => {
+    await seedResult();
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertFails(updateDoc(doc(clientDb, 'client_boulder_results', RESULT_ID), {
+      methods: ['pas-une-vraie-methode'],
+    }));
+  });
+
+  it('methods absente ou vide est acceptée', async () => {
+    await seedResult();
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertSucceeds(updateDoc(doc(clientDb, 'client_boulder_results', RESULT_ID), { methods: [] }));
+  });
+});
+
+// ✅ docs/plans/PLAN-anecdote-methodes-missions.md §B — le point décisif (§B.5) est la
+// validation du DELTA appliqué à boulders.methodCounts/methodVotes par rapport au vote
+// précédent du grimpeur (client_boulder_results.methods). Ces tests vérifient en particulier
+// que get() dans une règle, DANS une transaction, voit l'état D'AVANT la transaction — jamais
+// l'écriture jumelle faite dans la MÊME transaction sur l'autre document (vérifié ici, pas
+// supposé) : c'est cette propriété qui permet à methodVoteWrite.ts d'écrire les deux
+// documents atomiquement sans que la règle ne finisse par se comparer à elle-même.
+describe('boulders : methodCounts / methodVotes (carnet de méthodes)', () => {
+  const BOULDER_ID = 'boulder-methodes-1';
+  const clientResultPath = (uid: string) => ['client_boulder_results', `${uid}_${BOULDER_ID}`] as const;
+
+  async function seedBoulder(overrides: Record<string, unknown> = {}) {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'boulders', BOULDER_ID), {
+        type: 'daily', color: 'rouge', wall: 'Dalle', number: 5,
+        ...overrides,
+      });
+    });
+  }
+
+  async function seedClientResult(uid: string, methods: string[] | undefined) {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const [col, id] = clientResultPath(uid);
+      await setDoc(doc(context.firestore(), col, id), {
+        userId: uid, boulderId: BOULDER_ID, success: true, attempts: 1,
+        ...(methods !== undefined ? { methods } : {}),
+      });
+    });
+  }
+
+  // Reproduit exactement ce que fait ClientDaily.tsx via runReadThenWriteTransaction /
+  // methodVoteWrite.ts : les deux documents écrits dans UNE SEULE transaction.
+  function voteViaTransaction(
+    clientDb: Firestore,
+    uid: string,
+    newMethods: string[],
+    methodCountsPatch: Record<string, number>,
+    methodVotes: number
+  ) {
+    const [col, id] = clientResultPath(uid);
+    return runTransaction(clientDb, async (tx) => {
+      tx.set(doc(clientDb, col, id), { methods: newMethods }, { merge: true });
+      tx.set(doc(clientDb, 'boulders', BOULDER_ID), { methodCounts: methodCountsPatch, methodVotes }, { merge: true });
+    });
+  }
+
+  it('premier vote : jusqu\'à 3 méthodes en une fois, methodVotes passe à 1', async () => {
+    await seedBoulder();
+    await seedClientResult(CLIENT_UID, []);
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertSucceeds(voteViaTransaction(clientDb, CLIENT_UID, ['dynamique', 'pince'], { dynamique: 1, pince: 1 }, 1));
+  });
+
+  it('rejette plus de 3 méthodes en un seul vote', async () => {
+    await seedBoulder();
+    await seedClientResult(CLIENT_UID, []);
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertFails(voteViaTransaction(
+      clientDb, CLIENT_UID,
+      ['dynamique', 'pince', 'opposition', 'coordination'],
+      { dynamique: 1, pince: 1, opposition: 1, coordination: 1 },
+      1
+    ));
+  });
+
+  it('rejette une clé de methodCounts hors vocabulaire', async () => {
+    await seedBoulder();
+    await seedClientResult(CLIENT_UID, []);
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertFails(voteViaTransaction(clientDb, CLIENT_UID, ['dynamique'], { 'pas-une-vraie-methode': 1 }, 1));
+  });
+
+  it('rejette un delta de plus d\'un cran sur une même clé', async () => {
+    await seedBoulder();
+    await seedClientResult(CLIENT_UID, []);
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertFails(voteViaTransaction(clientDb, CLIENT_UID, ['dynamique'], { dynamique: 2 }, 1));
+  });
+
+  it('rejette le retrait d\'une méthode que ce grimpeur n\'a jamais votée', async () => {
+    await seedBoulder({ methodCounts: { dynamique: 1 }, methodVotes: 1 });
+    await seedClientResult(CLIENT_UID, []); // ce grimpeur n'a lui-même jamais voté
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertFails(voteViaTransaction(clientDb, CLIENT_UID, [], { dynamique: 0 }, 0));
+  });
+
+  it('⚠️ point décisif : un grimpeur ne peut pas retirer une méthode votée par un AUTRE grimpeur', async () => {
+    // CLIENT_UID a déjà voté "dynamique" ; OTHER_CLIENT_UID n'a jamais voté sur ce bloc.
+    await seedBoulder({ methodCounts: { dynamique: 1 }, methodVotes: 1 });
+    await seedClientResult(CLIENT_UID, ['dynamique']);
+    await seedClientResult(OTHER_CLIENT_UID, []);
+    const otherDb = testEnv.authenticatedContext(OTHER_CLIENT_UID).firestore();
+    await assertFails(voteViaTransaction(otherDb, OTHER_CLIENT_UID, [], { dynamique: 0 }, 0));
+  });
+
+  it('modification de vote : décrémente l\'ancienne méthode, incrémente la nouvelle, methodVotes inchangé (§B.6)', async () => {
+    await seedBoulder({ methodCounts: { dynamique: 1 }, methodVotes: 1 });
+    await seedClientResult(CLIENT_UID, ['dynamique']);
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertSucceeds(voteViaTransaction(clientDb, CLIENT_UID, ['pince'], { dynamique: 0, pince: 1 }, 1));
+  });
+
+  it('rejette une modification de vote qui touche à tort methodVotes', async () => {
+    await seedBoulder({ methodCounts: { dynamique: 1 }, methodVotes: 1 });
+    await seedClientResult(CLIENT_UID, ['dynamique']);
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertFails(voteViaTransaction(clientDb, CLIENT_UID, ['pince'], { dynamique: 0, pince: 1 }, 2));
+  });
+
+  it('retrait complet : decrémente et fait redescendre methodVotes', async () => {
+    await seedBoulder({ methodCounts: { dynamique: 1 }, methodVotes: 1 });
+    await seedClientResult(CLIENT_UID, ['dynamique']);
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertSucceeds(voteViaTransaction(clientDb, CLIENT_UID, [], { dynamique: 0 }, 0));
+  });
+
+  it('exclut un bloc de compétition (type "competition")', async () => {
+    await seedBoulder({ type: 'competition' });
+    await seedClientResult(CLIENT_UID, []);
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertFails(voteViaTransaction(clientDb, CLIENT_UID, ['dynamique'], { dynamique: 1 }, 1));
+  });
+
+  it('exclut un bloc quotidien réutilisé activement en compétition (competition_active)', async () => {
+    await seedBoulder({ competition_active: true });
+    await seedClientResult(CLIENT_UID, []);
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertFails(voteViaTransaction(clientDb, CLIENT_UID, ['dynamique'], { dynamique: 1 }, 1));
+  });
+
+  it('le staff (ouvreur/admin) garde son accès libre sur boulders, y compris methodCounts', async () => {
+    await seedBoulder();
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'users', 'ouvreur-1'), { roles: ['ouvreur'] });
+    });
+    const ouvreurDb = testEnv.authenticatedContext('ouvreur-1').firestore();
+    await assertSucceeds(updateDoc(doc(ouvreurDb, 'boulders', BOULDER_ID), {
+      methodCounts: { dynamique: 42 }, methodVotes: 42,
+    }));
   });
 });

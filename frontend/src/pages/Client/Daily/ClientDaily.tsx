@@ -13,6 +13,8 @@ import {
 } from '../../../utils/classementFlushWrites';
 import { buildFirstAscentWrite } from '../../../utils/firstAscentWrites';
 import type { FirstAscentEntry } from '../../../utils/firstAscents';
+import { buildMethodVoteWrite } from '../../../utils/methodVoteWrite';
+import { summarizeMethodVotes } from '../../../utils/methodVote';
 import {
   Container, Typography, Box, Button, CircularProgress, Alert,
   Dialog, DialogTitle, DialogContent, DialogActions,
@@ -21,7 +23,7 @@ import {
   useMediaQuery
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
-import { walls as wallList, colorGrades, mysteryColorHexKey, mysteryColorHex, logoPath, storageKeyPrefix, firstAscentColors } from '../../../config/gymConfig';
+import { walls as wallList, colorGrades, mysteryColorHexKey, mysteryColorHex, logoPath, storageKeyPrefix, firstAscentColors, climbingMethods, MAX_METHODS_PER_VOTE } from '../../../config/gymConfig';
 import { getBoulderImageUrl } from '../../../services/imageStorage';
 import CasinoIcon from '@mui/icons-material/Casino';
 import { levelOrder, type Level } from '../../../utils/competitionEligibility';
@@ -97,6 +99,10 @@ interface Boulder {
   // mouvement, nom donné au bloc, avertissement) — même traitement que openedBy, jamais
   // lue ici pour un bloc de compétition (cette page ne charge que type=='daily').
   openerNote?: string | null;
+  // ✅ docs/plans/PLAN-anecdote-methodes-missions.md §B : agrégat du carnet de méthodes,
+  // affiché à tous (§B.1) — jamais lu ici pour un bloc de compétition (voir plus bas).
+  methodCounts?: Record<string, number>;
+  methodVotes?: number;
 }
 
 // ✅ Chantier 2 : image_public_id (Cloudinary) prioritaire, repli sur l'ancien
@@ -116,6 +122,10 @@ const ClientDaily: React.FC = () => {
   const [proposedDifficulties, setProposedDifficulties] = useState<Record<string, string>>({});
   const [reportTypesSelected, setReportTypesSelected] = useState<Record<string, string>>({});
   const [successResults, setSuccessResults] = useState<Record<string, boolean>>({});
+  // ✅ docs/plans/PLAN-anecdote-methodes-missions.md §B.6 : sélection courante du carnet de
+  // méthodes par bloc, seedée depuis le dernier vote connu au moment du clic "Réussi" (voir
+  // resolvePreviousResultState) — jamais avant, jamais obligatoire.
+  const [selectedMethods, setSelectedMethods] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -178,7 +188,9 @@ const ClientDaily: React.FC = () => {
   // `success` est vrai) ; `createdAt` sert à préserver la date de première écriture du
   // document (voir `resolvePreviousResultState` — correctif du bug où `createdAt` était
   // réécrit à chaque édition, cf. docs/handoffs/RELECTURE-classement-saisonnier.md §1).
-  const previousStateCacheRef = useRef<Map<string, { attempts: number; success: boolean; createdAt: string } | null>>(new Map());
+  // ✅ §B.6 du plan : `methods` ajouté au même cache/à la même lecture — aucun coût
+  // supplémentaire, c'est le même document déjà lu pour attempts/success/createdAt.
+  const previousStateCacheRef = useRef<Map<string, { attempts: number; success: boolean; createdAt: string; methods: string[] } | null>>(new Map());
 
   // ✅ Chantier écritures point 5 : classement_profiles est un résumé dérivé, pas la
   // donnée source — pas besoin d'être exact à la seconde près. Les deltas sont accumulés
@@ -621,7 +633,7 @@ const ClientDaily: React.FC = () => {
   // §1 : avant ce correctif, `createdAt` était réécrit à "maintenant" à CHAQUE édition
   // (même setDoc que `updatedAt`), donc inutilisable pour savoir quand une validation a
   // réellement eu lieu — un prérequis du classement de saison.
-  const resolvePreviousResultState = async (uid: string, boulderId: string): Promise<{ attempts: number; success: boolean; createdAt: string } | null> => {
+  const resolvePreviousResultState = async (uid: string, boulderId: string): Promise<{ attempts: number; success: boolean; createdAt: string; methods: string[] } | null> => {
     const cached = previousStateCacheRef.current.get(boulderId);
     if (cached !== undefined) return cached;
     try {
@@ -631,7 +643,8 @@ const ClientDaily: React.FC = () => {
       return {
         attempts: data.attempts || 1,
         success: !!data.success,
-        createdAt: data.createdAt || new Date().toISOString() // ✅ repli si un doc antérieur au correctif n'a jamais eu ce champ correctement peuplé
+        createdAt: data.createdAt || new Date().toISOString(), // ✅ repli si un doc antérieur au correctif n'a jamais eu ce champ correctement peuplé
+        methods: data.methods || [] // ✅ §B.6 : carnet de méthodes, même lecture, zéro coût supplémentaire
       };
     } catch (err) {
       console.error("Erreur lors de la lecture de l'ancien résultat:", err);
@@ -722,8 +735,8 @@ const ClientDaily: React.FC = () => {
   // `applyClassementDelta`, qui ne tourne que si le bloc a une couleur). Sans couleur,
   // il n'y a pas de delta de classement à appliquer, mais `createdAt` doit quand même
   // être mémorisé pour la prochaine édition de ce même bloc dans la session.
-  const cachePreviousResultState = (boulderId: string, success: boolean, resultAttempts: number, createdAt: string) => {
-    previousStateCacheRef.current.set(boulderId, { attempts: resultAttempts, success, createdAt });
+  const cachePreviousResultState = (boulderId: string, success: boolean, resultAttempts: number, createdAt: string, methods: string[]) => {
+    previousStateCacheRef.current.set(boulderId, { attempts: resultAttempts, success, createdAt, methods });
   };
 
 
@@ -768,6 +781,46 @@ const ClientDaily: React.FC = () => {
     }
   };
 
+  // ✅ docs/plans/PLAN-anecdote-methodes-missions.md §B.5/§B.6 : écriture IMMÉDIATE à chaque
+  // coche/décoche (pas de débounce — le plan ne le prévoit pas, et l'interaction reste rare,
+  // 3 cases maximum). Relit TOUJOURS les deux documents FRAÎCHEMENT dans une transaction
+  // dédiée (jamais l'état local `selectedMethods`/`boulders` en mémoire) : c'est cette
+  // fraîcheur qui permet à firestore.rules de valider le delta par un get() sur
+  // client_boulder_results, qui ne voit que l'état d'AVANT la transaction (voir
+  // firestore.rules, isValidMethodVoteUpdate — vérifié empiriquement sur l'émulateur).
+  // Échec silencieux côté utilisateur (console) sur l'agrégat seulement : en cas d'erreur, la
+  // sélection locale est annulée pour ne pas afficher une coche qui n'a pas été enregistrée.
+  const handleMethodToggle = async (boulderId: string, method: string) => {
+    if (!user) return;
+    const current = selectedMethods[boulderId] || [];
+    const isSelected = current.includes(method);
+    if (!isSelected && current.length >= MAX_METHODS_PER_VOTE) return;
+    const newMethods = isSelected ? current.filter((m) => m !== method) : [...current, method];
+    setSelectedMethods((prev) => ({ ...prev, [boulderId]: newMethods }));
+    const clientResultRef = doc(db, 'client_boulder_results', `${user.uid}_${boulderId}`);
+    const boulderRef = doc(db, 'boulders', boulderId);
+    try {
+      await runReadThenWriteTransaction(db, { clientResult: clientResultRef, boulder: boulderRef }, (readData) => buildMethodVoteWrite(
+        newMethods,
+        {
+          clientResult: readData.clientResult as { methods?: string[] } | undefined,
+          boulder: readData.boulder as { methodCounts?: Record<string, number>; methodVotes?: number } | undefined,
+        },
+        { clientResultRef, boulderRef }
+      ));
+      const freshSnap = await getDoc(boulderRef);
+      if (freshSnap.exists()) {
+        const fresh = freshSnap.data();
+        const patch = { methodCounts: fresh.methodCounts, methodVotes: fresh.methodVotes };
+        setBoulders((prev) => prev.map((b) => (b.id === boulderId ? { ...b, ...patch } : b)));
+        setSelectedBoulder((prev) => (prev && prev.id === boulderId ? { ...prev, ...patch } : prev));
+      }
+    } catch (err) {
+      console.error('Erreur lors du vote de méthode:', err);
+      setSelectedMethods((prev) => ({ ...prev, [boulderId]: current }));
+    }
+  };
+
   const handleValidateSuccess = async (boulderId: string, success: boolean) => {
     if (!user) return;
     const candidate = {
@@ -798,15 +851,24 @@ const ClientDaily: React.FC = () => {
       // ✅ createdAt préservé depuis la première écriture de ce document (jamais
       // réécrit ensuite) — updatedAt continue de refléter chaque édition.
       const createdAt = previousResultState?.createdAt ?? new Date().toISOString();
+      // ✅ §B.6 : `setDoc` sans merge REMPLACE tout le document — sans ce report explicite
+      // (même geste que `createdAt` juste au-dessus), un vote du carnet de méthodes déjà
+      // enregistré serait silencieusement effacé à la prochaine validation de ce bloc.
+      const methods = previousResultState?.methods ?? [];
       await setDoc(doc(db, 'client_boulder_results', resultId), {
         userId: user.uid,
         boulderId,
         ...candidate,
         createdAt,
+        methods,
         updatedAt: new Date().toISOString()
       });
       lastPersistedResultRef.current[boulderId] = candidate;
-      cachePreviousResultState(boulderId, candidate.success, candidate.attempts, createdAt);
+      cachePreviousResultState(boulderId, candidate.success, candidate.attempts, createdAt, methods);
+      // ✅ §B.6 : le carnet de méthodes ne se propose qu'"après le clic Réussi" — la
+      // sélection affichée part de ce qui est déjà voté, jamais d'une case vide qui ferait
+      // perdre le fil d'un vote antérieur à une session précédente.
+      setSelectedMethods(prev => ({ ...prev, [boulderId]: methods }));
       setSuccessResults(prev => ({ ...prev, [boulderId]: success }));
       setSuccess('Réussite enregistrée!');
       setTimeout(() => setSuccess(null), 3000);
@@ -856,15 +918,19 @@ const ClientDaily: React.FC = () => {
       // ✅ createdAt préservé depuis la première écriture de ce document (jamais
       // réécrit ensuite) — updatedAt continue de refléter chaque édition.
       const createdAt = previousResultState?.createdAt ?? new Date().toISOString();
+      // ✅ §B.6 : même report explicite qu'dans handleValidateSuccess — setDoc sans merge
+      // remplace tout le document, "Enregistrer" ne doit pas effacer un vote déjà en place.
+      const methods = previousResultState?.methods ?? [];
       await setDoc(doc(db, 'client_boulder_results', resultId), {
         userId: user.uid,
         boulderId,
         ...candidate,
         createdAt,
+        methods,
         updatedAt: new Date().toISOString()
       });
       lastPersistedResultRef.current[boulderId] = candidate;
-      cachePreviousResultState(boulderId, candidate.success, candidate.attempts, createdAt);
+      cachePreviousResultState(boulderId, candidate.success, candidate.attempts, createdAt, methods);
       if (classementColor) {
         const previousClassementState = previousResultState?.success ? { attempts: previousResultState.attempts } : null;
         applyClassementDelta(classementColor, previousClassementState, candidate.success, candidate.attempts, createdAt, wallById.get(boulderId), boulderId);
@@ -1100,6 +1166,25 @@ const ClientDaily: React.FC = () => {
                 </Typography>
               )}
 
+              {/* ✅ docs/plans/PLAN-anecdote-methodes-missions.md §B.1/§B.4 : visible de tous
+                  (pas seulement après un clic "Réussi", contrairement au vote lui-même
+                  plus bas) — c'est justement l'info qui aide AVANT de grimper. Rien sous le
+                  seuil de votes (summarizeMethodVotes renvoie null). */}
+              {(() => {
+                const methodSummary = summarizeMethodVotes(selectedBoulder.methodCounts, selectedBoulder.methodVotes);
+                if (!methodSummary) return null;
+                return (
+                  <Box sx={{ mb: 2, p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                    <Typography variant="subtitle2" sx={{ mb: 1 }}>🧗 Méthodes utilisées ({selectedBoulder.methodVotes} vote{(selectedBoulder.methodVotes || 0) > 1 ? 's' : ''})</Typography>
+                    {methodSummary.map((entry) => (
+                      <Typography key={entry.value} variant="body2">
+                        {entry.percent}% — {entry.label}
+                      </Typography>
+                    ))}
+                  </Box>
+                );
+              })()}
+
               {/* ✅ docs/plans/PLAN-premiers-ascensionnistes.md §7 : uniquement sur la fiche de détail
                   (pas sur la vignette du mur), et jamais sur un bloc de compétition (§5) —
                   un bloc désactivé conserve sa liste (palmarès du mur précédent), le document
@@ -1154,6 +1239,34 @@ const ClientDaily: React.FC = () => {
                   ❌ Échoué
                 </Button>
               </Box>
+
+              {/* ✅ docs/plans/PLAN-anecdote-methodes-missions.md §B.6 : le choix des méthodes
+                  ne se propose qu'après le clic "Réussi", jamais avant, jamais obligatoire —
+                  jamais pour un bloc de compétition non plus (cette page ne charge que
+                  type=='daily', voir la requête plus haut). */}
+              {successResults[selectedBoulder.id] === true && (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="body2" sx={{ mb: 1 }}>
+                    Méthode(s) utilisée(s) (3 maximum) :
+                  </Typography>
+                  <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                    {climbingMethods.map((m) => {
+                      const current = selectedMethods[selectedBoulder.id] || [];
+                      const isSelected = current.includes(m.value);
+                      return (
+                        <Chip
+                          key={m.value}
+                          label={m.label}
+                          clickable
+                          color={isSelected ? 'primary' : 'default'}
+                          disabled={!isSelected && current.length >= MAX_METHODS_PER_VOTE}
+                          onClick={() => handleMethodToggle(selectedBoulder.id, m.value)}
+                        />
+                      );
+                    })}
+                  </Box>
+                </Box>
+              )}
 
               <FormControl fullWidth sx={{ mb: 2 }}>
                 <InputLabel id="nombre-d-essais-select-label">Nombre d'essais</InputLabel>

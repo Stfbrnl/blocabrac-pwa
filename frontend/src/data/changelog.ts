@@ -11,6 +11,16 @@ export interface ChangelogEntry {
 // tout l'historique ici, l'historique complet vit dans les commits git.
 export const changelog: ChangelogEntry[] = [
   {
+    version: '2.67',
+    date: '2026-09-24',
+    title: 'Carnet de méthodes',
+    items: [
+      'Sur la fiche d\'un bloc, vous pouvez désormais indiquer la ou les méthodes utilisées pour le réussir (crochet de talon, réglette, dynamique...), jusqu\'à 3 par bloc.',
+      'Une fois qu\'assez de grimpeurs ont voté, la fiche affiche les méthodes les plus utilisées — de quoi se préparer avant de grimper.',
+      'Votre choix reste modifiable tant que vous revenez sur votre validation.',
+    ],
+  },
+  {
     version: '2.66',
     date: '2026-09-24',
     title: 'Anecdote d\'ouvreur',

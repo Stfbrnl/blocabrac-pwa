@@ -70,6 +70,36 @@ export const mysteryColorHex = '#808080';
 export const difficultyTypes: string[] = ['technique', 'équilibre', 'force', 'engagement'];
 export const difficultyLevels: Array<'Plus' | 'Égal' | 'Moins'> = ['Plus', 'Égal', 'Moins'];
 
+export interface ClimbingMethod {
+  value: string;
+  label: string;
+}
+
+// ✅ docs/plans/PLAN-anecdote-methodes-missions.md §B.3 : vocabulaire FIXE du carnet de
+// méthodes — jamais de texte libre (sinon aucune agrégation ni règle Firestore fiable
+// n'est possible, voir firestore.rules). `value` est aussi la clé stockée dans
+// `boulders.methodCounts` et `client_boulder_results.methods` : toute modification de ces
+// valeurs doit être répercutée dans firestore.rules (methodVocabulary()) à l'identique.
+// Le fork « Grimpe ! » en voudra sans doute d'autres — d'où gymConfig.ts, jamais une
+// constante enfouie dans un composant.
+export const climbingMethods: ClimbingMethod[] = [
+  { value: 'dynamique', label: 'Dynamique' },
+  { value: 'crochet_talon', label: 'Crochet de talon' },
+  { value: 'crochet_pointe', label: 'Crochet de pointe' },
+  { value: 'inversee', label: 'Inversée' },
+  { value: 'reglette', label: 'Réglette' },
+  { value: 'pince', label: 'Pince' },
+  { value: 'opposition', label: 'Opposition' },
+  { value: 'coordination', label: 'Coordination' },
+];
+
+// ✅ §B.6 : 3 méthodes maximum par vote, sinon tout le monde coche tout.
+export const MAX_METHODS_PER_VOTE = 3;
+
+// ✅ §B.4 : rien n'est affiché sous ce seuil de votes ("100 % ont utilisé X" sur un seul
+// vote est trompeur).
+export const METHOD_VOTES_DISPLAY_THRESHOLD = 3;
+
 // Clé de préfixe pour les entrées localStorage propres à la salle (ex. thème).
 export const storageKeyPrefix = 'blocabrac';
 
