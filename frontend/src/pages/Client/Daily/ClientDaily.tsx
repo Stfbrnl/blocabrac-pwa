@@ -93,6 +93,10 @@ interface Boulder {
   // `created_by`, qui a saisi), dénormalisé — jamais lu ici pour un bloc de compétition
   // (cette page ne charge que type=='daily', voir la requête plus bas).
   openedBy?: { uid: string; displayName: string } | null;
+  // ✅ PLAN-anecdote-methodes-missions.md §A : anecdote libre de l'ouvreur (intention de
+  // mouvement, nom donné au bloc, avertissement) — même traitement que openedBy, jamais
+  // lue ici pour un bloc de compétition (cette page ne charge que type=='daily').
+  openerNote?: string | null;
 }
 
 // ✅ Chantier 2 : image_public_id (Cloudinary) prioritaire, repli sur l'ancien
@@ -1085,6 +1089,14 @@ const ClientDaily: React.FC = () => {
               {selectedBoulder.openedBy && (
                 <Typography variant="body2" sx={{ mb: 2 }}>
                   <strong>Ouvert par:</strong> {selectedBoulder.openedBy.displayName}
+                </Typography>
+              )}
+
+              {/* ✅ docs/plans/PLAN-anecdote-methodes-missions.md §A.3 : n'apparaît que si
+                  renseigné — même traitement que "Ouvert par" juste au-dessus. */}
+              {selectedBoulder.openerNote && (
+                <Typography variant="body2" sx={{ mb: 2, fontStyle: 'italic' }}>
+                  « {selectedBoulder.openerNote} »
                 </Typography>
               )}
 

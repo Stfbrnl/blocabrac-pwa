@@ -27,6 +27,10 @@ interface BoulderAnnotations {
 
 type DifficultyLevel = 'Plus' | 'Égal' | 'Moins';
 
+// ✅ PLAN-anecdote-methodes-missions.md §A.2 : plafond miroir de la contrainte
+// firestore.rules (isValidOpenerNote).
+const OPENER_NOTE_MAX = 300;
+
 // ✅ PLAN-ouvreur-createur-bloc.md §2 : même distinction que DailyBoulderForm.tsx —
 // qui a ouvert le bloc, dénormalisé, nullable, modifiable après coup. Non affiché
 // tant que le bloc reste `type: 'competition'` (cotation cachée) : voir ClientCompetitions.tsx.
@@ -50,6 +54,10 @@ interface Boulder {
   difficulty_level?: DifficultyLevel;
   points_value?: number; // ✅ Mode de comptage "Blocs validés" uniquement
   openedBy?: OpenedBy | null;
+  // ✅ PLAN-anecdote-methodes-missions.md §A.3 : masqué pendant l'épreuve, comme openedBy —
+  // ClientCompetitions.tsx ne lit jamais ce champ. Redevient visible via ClientDaily.tsx
+  // une fois "Terminer la compétition" appliqué (type devient 'daily').
+  openerNote?: string | null;
 }
 
 interface Competition {
@@ -136,6 +144,7 @@ export default function CompetitionBoulderForm(): JSX.Element {
     difficulty_level: DifficultyLevel;
     points_value: string;
     openedByUid: string;
+    openerNote: string;
   }>({
     number: '',
     wall: '',
@@ -150,7 +159,8 @@ export default function CompetitionBoulderForm(): JSX.Element {
     },
     difficulty_level: 'Égal',
     points_value: '',
-    openedByUid: ''
+    openedByUid: '',
+    openerNote: ''
   });
   const [currentMode, setCurrentMode] = useState<'start' | 'end'>('start');
   const [isUploading, setIsUploading] = useState<boolean>(false);
@@ -194,7 +204,8 @@ export default function CompetitionBoulderForm(): JSX.Element {
             annotations: data.annotations || { start_holds: [], end_holds: [] },
             difficulty_level: data.difficulty_level || 'Égal',
             points_value: data.points_value !== undefined ? String(data.points_value) : '',
-            openedByUid: data.openedBy?.uid || ''
+            openedByUid: data.openedBy?.uid || '',
+            openerNote: data.openerNote || ''
           });
         }
       } catch (error: unknown) {
@@ -351,6 +362,10 @@ export default function CompetitionBoulderForm(): JSX.Element {
       alert('Veuillez placer au moins 2 cercles jaunes (départ) et 2 cercles verts (fin).');
       return;
     }
+    if (formData.openerNote.length > OPENER_NOTE_MAX) {
+      alert(`L'anecdote d'ouvreur est limitée à ${OPENER_NOTE_MAX} caractères.`);
+      return;
+    }
 
     try {
       setIsUploading(true);
@@ -420,6 +435,8 @@ export default function CompetitionBoulderForm(): JSX.Element {
         is_active: true,
         difficulty_level: formData.difficulty_level,
         openedBy,
+        // ✅ PLAN-anecdote-methodes-missions.md §A.3 : même convention que DailyBoulderForm.tsx.
+        openerNote: formData.openerNote.trim() || null,
         // ✅ N'écrit ce champ que dans le mode qui s'en sert : évite de laisser une
         // ancienne valeur sur un bloc si la compétition change plus tard de mode.
         ...(formData.points_value ? { points_value: parseInt(formData.points_value, 10) } : {}),
@@ -558,6 +575,21 @@ export default function CompetitionBoulderForm(): JSX.Element {
               Non affiché aux grimpeurs tant que la compétition n'est pas terminée (cotation cachée).
             </Typography>
           </FormControl>
+
+          {/* ✅ PLAN-anecdote-methodes-missions.md §A.3 : même masquage que "Ouvert par" tant
+              que la cotation reste cachée. */}
+          <TextField
+            label="Anecdote d'ouvreur"
+            multiline
+            rows={2}
+            value={formData.openerNote}
+            onChange={(e: ChangeEvent<HTMLInputElement>): void => setFormData({ ...formData, openerNote: e.target.value })}
+            margin="normal"
+            fullWidth
+            disabled={isUploading}
+            error={formData.openerNote.length > OPENER_NOTE_MAX}
+            helperText={`${formData.openerNote.length}/${OPENER_NOTE_MAX} — non affiché aux grimpeurs tant que la compétition n'est pas terminée.`}
+          />
 
           <FormControl fullWidth margin="normal" disabled={isUploading}>
             <InputLabel id="types-de-difficulte-multiple-select-label">Types de difficulté (multiple)</InputLabel>

@@ -32,6 +32,16 @@ service cloud.firestore {
              hasRoleUid(data.openedBy.uid, "ouvreur");
     }
 
+    // ✅ PLAN-anecdote-methodes-missions.md §A.2 : anecdote libre de l'ouvreur, plafonnée
+    // à 300 caractères — `boulders` est chargé en masse par mur, une note sans plafond
+    // reproduirait le problème qui a fait sortir les images base64 du document. `null` et
+    // l'absence du champ sont valides (piège V2.27, même court-circuit que isValidOpenedBy).
+    function isValidOpenerNote(data) {
+      return !('openerNote' in data) ||
+             data.openerNote == null ||
+             (data.openerNote is string && data.openerNote.size() <= 300);
+    }
+
     // ✅ Tout compte doit toujours porter le rôle "client" (les 3 autres rôles
     // s'additionnant par-dessus) : "Mon espace personnel" (protégé par role="client")
     // héberge désormais "Potes de grimpe", ouvert à tout le monde y compris le staff.
@@ -357,10 +367,13 @@ service cloud.firestore {
                      isUserRole("moniteur"));
       // ✅ PLAN-ouvreur-createur-bloc.md §5 : isValidOpenedBy() ajoute une seule contrainte
       // sur la création (isValidOpenedBy(request.resource.data)) — les autres champs restent
-      // libres pour le staff comme avant.
+      // libres pour le staff comme avant. PLAN-anecdote-methodes-missions.md §A.2 : même
+      // traitement pour isValidOpenerNote() (aucune lecture supplémentaire, contrairement à
+      // isValidOpenedBy — pas de get() dans cette fonction).
       allow create: if request.auth != null &&
                       (isUserRole("ouvreur") || isUserRole("admin")) &&
-                      isValidOpenedBy(request.resource.data);
+                      isValidOpenedBy(request.resource.data) &&
+                      isValidOpenerNote(request.resource.data);
       allow delete: if request.auth != null &&
                       (isUserRole("ouvreur") ||
                        isUserRole("admin"));
@@ -381,7 +394,11 @@ service cloud.firestore {
                        // majorité des modifications (couleur, consignes, etc.) ne le touchent
                        // pas et restent au coût d'avant.
                        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['openedBy']) ||
-                        isValidOpenedBy(request.resource.data)) ||
+                        isValidOpenedBy(request.resource.data)) &&
+                       // ✅ PLAN-anecdote-methodes-missions.md §A.2 : pas de get() dans
+                       // isValidOpenerNote(), donc pas besoin de la borner à affectedKeys()
+                       // pour préserver le coût — appliquée à chaque écriture staff.
+                       isValidOpenerNote(request.resource.data) ||
                        (isUserRole("client") &&
                         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['firstAscents']) &&
                         resource.data.type == 'daily' &&

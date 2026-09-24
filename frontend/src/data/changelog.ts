@@ -11,6 +11,16 @@ export interface ChangelogEntry {
 // tout l'historique ici, l'historique complet vit dans les commits git.
 export const changelog: ChangelogEntry[] = [
   {
+    version: '2.66',
+    date: '2026-09-24',
+    title: 'Anecdote d\'ouvreur',
+    items: [
+      'La fiche d\'un bloc quotidien peut désormais porter un mot libre de l\'ouvreur : intention de mouvement, nom donné au bloc, avertissement.',
+      'N\'apparaît que si l\'ouvreur l\'a renseigné.',
+      'Jamais affiché pendant une compétition tant que la cotation reste cachée, comme « Ouvert par ».',
+    ],
+  },
+  {
     version: '2.65',
     date: '2026-09-17',
     title: 'Ouvert par',

@@ -35,6 +35,11 @@ interface BoulderAnnotations {
 
 type DifficultyLevel = 'Plus' | 'Égal' | 'Moins';
 
+// ✅ PLAN-anecdote-methodes-missions.md §A.2 : plafond miroir de la contrainte
+// firestore.rules (isValidOpenerNote) — le contrôle formulaire n'est qu'un confort,
+// la vraie limite est côté serveur.
+const OPENER_NOTE_MAX = 300;
+
 // ✅ PLAN-ouvreur-createur-bloc.md §2 : qui a réellement OUVERT le bloc sur le
 // mur, distinct de `created_by` (qui l'a SAISI dans l'appli — déjà existant,
 // automatique). Nom dénormalisé à la saisie pour un affichage client à coût nul
@@ -59,6 +64,9 @@ interface Boulder {
   is_child_route?: boolean;
   difficulty_level?: DifficultyLevel;
   openedBy?: OpenedBy | null;
+  // ✅ PLAN-anecdote-methodes-missions.md §A.2 : intention de mouvement/avertissement,
+  // texte libre de l'ouvreur — plafonné à 300 caractères (formulaire + règles).
+  openerNote?: string | null;
 }
 
 interface ColorRating {
@@ -139,6 +147,7 @@ export default function DailyBoulderForm(): JSX.Element {
     difficulty_level: DifficultyLevel;
     is_child_route: boolean;
     openedByUid: string;
+    openerNote: string;
   }>({
     number: '',
     color: '',
@@ -152,7 +161,8 @@ export default function DailyBoulderForm(): JSX.Element {
     },
     difficulty_level: 'Égal',
     is_child_route: false,
-    openedByUid: ''
+    openedByUid: '',
+    openerNote: ''
   });
   const [currentMode, setCurrentMode] = useState<'start' | 'end'>('start');
   // ✅ Menu déroulant alimenté par les comptes ouvreurs (fusion role/roles[], §2 du plan).
@@ -225,7 +235,8 @@ export default function DailyBoulderForm(): JSX.Element {
       },
       difficulty_level: boulder.difficulty_level || 'Égal',
       is_child_route: boulder.is_child_route || false,
-      openedByUid: boulder.openedBy?.uid || ''
+      openedByUid: boulder.openedBy?.uid || '',
+      openerNote: boulder.openerNote || ''
     });
   };
 
@@ -341,7 +352,8 @@ export default function DailyBoulderForm(): JSX.Element {
       // ✅ Repart sur l'utilisateur connecté s'il est ouvreur (même logique qu'au
       // premier montage), pas sur une case vide — évite une saisie répétée entre
       // deux créations par le même ouvreur.
-      openedByUid: (user && ouvreurOptions.some((o) => o.uid === user.uid)) ? user.uid : ''
+      openedByUid: (user && ouvreurOptions.some((o) => o.uid === user.uid)) ? user.uid : '',
+      openerNote: ''
     });
     setEditingBoulder(null);
     // ✅ Force le remontage de l'<input type="file"> natif : c'est ce qui
@@ -375,6 +387,10 @@ export default function DailyBoulderForm(): JSX.Element {
     }
     if (formData.annotations.start_holds.length < 2 || formData.annotations.end_holds.length < 2) {
       alert('Veuillez placer au moins 2 cercles jaunes (départ) et 2 cercles verts (fin).');
+      return;
+    }
+    if (formData.openerNote.length > OPENER_NOTE_MAX) {
+      alert(`L'anecdote d'ouvreur est limitée à ${OPENER_NOTE_MAX} caractères.`);
       return;
     }
 
@@ -452,6 +468,9 @@ export default function DailyBoulderForm(): JSX.Element {
         difficulty_level: formData.difficulty_level,
         is_child_route: formData.is_child_route,
         openedBy,
+        // ✅ PLAN-anecdote-methodes-missions.md §A.2 : chaîne vide → null, même convention
+        // que openedBy (pas de "non renseigné" bruyant côté lecture, voir ClientDaily.tsx).
+        openerNote: formData.openerNote.trim() || null,
         // ✅ Ne pas écraser la date/l'auteur de création d'origine lors d'une modification
         ...(editingBoulder
           ? {}
@@ -590,6 +609,22 @@ export default function DailyBoulderForm(): JSX.Element {
               Visible des grimpeurs sur la fiche du bloc — modifiable à tout moment, y compris après coup.
             </Typography>
           </FormControl>
+
+          {/* ✅ PLAN-anecdote-methodes-missions.md §A : intention de mouvement, nom donné au
+              bloc, avertissement — texte libre, jamais obligatoire. Visible des grimpeurs
+              uniquement si renseigné (voir ClientDaily.tsx). */}
+          <TextField
+            label="Anecdote d'ouvreur"
+            multiline
+            rows={2}
+            value={formData.openerNote}
+            onChange={(e: ChangeEvent<HTMLInputElement>): void => setFormData({ ...formData, openerNote: e.target.value })}
+            margin="normal"
+            fullWidth
+            disabled={isUploading}
+            error={formData.openerNote.length > OPENER_NOTE_MAX}
+            helperText={`${formData.openerNote.length}/${OPENER_NOTE_MAX} — ex. « Mouvement inspiré de Fontainebleau, attention au rétablissement. »`}
+          />
 
           <FormControl fullWidth margin="normal" disabled={isUploading}>
             <InputLabel id="types-de-difficulte-multiple-select-label">Types de difficulté (multiple)</InputLabel>

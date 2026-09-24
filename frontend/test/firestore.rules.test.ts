@@ -912,3 +912,56 @@ describe('boulders : openedBy (attribution à un ouvreur)', () => {
     }));
   });
 });
+
+// ✅ docs/plans/PLAN-anecdote-methodes-missions.md §A.4 : `boulders` est chargé en masse par
+// mur, donc le plafond de 300 caractères doit être une vraie limite serveur, pas seulement
+// un confort de formulaire. Piège V2.27 : ne jamais planter sur un champ absent/null.
+describe('boulders : openerNote (anecdote d\'ouvreur)', () => {
+  const BOULDER_ID = 'boulder-anecdote-1';
+
+  async function seedOuvreur() {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'users', 'ouvreur-1'), { roles: ['ouvreur'] });
+    });
+  }
+
+  it('un ouvreur peut créer un bloc avec une note de 300 caractères ou moins', async () => {
+    await seedOuvreur();
+    const ouvreurDb = testEnv.authenticatedContext('ouvreur-1').firestore();
+    await assertSucceeds(setDoc(doc(ouvreurDb, 'boulders', BOULDER_ID), {
+      type: 'daily', wall: 'Dalle', number: 1, color: 'jaune',
+      openerNote: 'a'.repeat(300),
+    }));
+  });
+
+  it('rejette une note de plus de 300 caractères, à la création', async () => {
+    await seedOuvreur();
+    const ouvreurDb = testEnv.authenticatedContext('ouvreur-1').firestore();
+    await assertFails(setDoc(doc(ouvreurDb, 'boulders', BOULDER_ID), {
+      type: 'daily', wall: 'Dalle', number: 1, color: 'jaune',
+      openerNote: 'a'.repeat(301),
+    }));
+  });
+
+  it('rejette une note de plus de 300 caractères, en modification', async () => {
+    await seedOuvreur();
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'boulders', BOULDER_ID), {
+        type: 'daily', wall: 'Dalle', number: 1, color: 'jaune',
+      });
+    });
+    const ouvreurDb = testEnv.authenticatedContext('ouvreur-1').firestore();
+    await assertFails(updateDoc(doc(ouvreurDb, 'boulders', BOULDER_ID), {
+      openerNote: 'a'.repeat(301),
+    }));
+  });
+
+  it('openerNote absente ou null est acceptée (valeur par défaut légitime)', async () => {
+    await seedOuvreur();
+    const ouvreurDb = testEnv.authenticatedContext('ouvreur-1').firestore();
+    await assertSucceeds(setDoc(doc(ouvreurDb, 'boulders', BOULDER_ID), {
+      type: 'daily', wall: 'Dalle', number: 1, color: 'jaune',
+    }));
+    await assertSucceeds(updateDoc(doc(ouvreurDb, 'boulders', BOULDER_ID), { openerNote: null }));
+  });
+});
