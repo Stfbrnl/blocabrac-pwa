@@ -602,6 +602,10 @@ describe('client_badges : auto-attribution des badges couleur par le client', ()
       await setDoc(doc(db, 'badges', 'badge-manuel'), {
         name: 'Débutant', type: 'manual', criteria: 'Participe à 5 séances',
       });
+      // ✅ PLAN-anecdote-methodes-missions.md §C.6 : badge de mission, sans couleur/critère.
+      await setDoc(doc(db, 'badges', 'badge-missions'), {
+        name: 'Toutes missions', type: 'mission',
+      });
     });
   });
 
@@ -618,6 +622,14 @@ describe('client_badges : auto-attribution des badges couleur par le client', ()
     await assertSucceeds(setDoc(
       doc(db, 'client_badges', `${CLIENT_UID}_badge-auto`),
       autoPayload(CLIENT_UID, 'badge-auto'),
+    ));
+  });
+
+  it('le client peut s\'auto-attribuer un badge type:mission (§C.6)', async () => {
+    const db = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertSucceeds(setDoc(
+      doc(db, 'client_badges', `${CLIENT_UID}_badge-missions`),
+      autoPayload(CLIENT_UID, 'badge-missions'),
     ));
   });
 

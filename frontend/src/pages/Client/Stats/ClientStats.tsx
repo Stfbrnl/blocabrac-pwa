@@ -452,9 +452,18 @@ const ClientStats: React.FC = () => {
         );
         const catalogSnapshot = await getDocs(collection(db, 'badges'));
         const awardedNow: ClientBadge[] = [];
+        // ✅ PLAN-anecdote-methodes-missions.md §C.6 : `type: 'mission'` ajouté à côté de
+        // `type: 'automatic'` — EXCLU de `computeBadgeActive` (un badge sans `criteria.color`
+        // y est "toujours actif", ce qui aurait auto-attribué le badge de mission à tout le
+        // monde dès la première ouverture de cet écran). Son propre critère : au moins une
+        // grille hebdomadaire complétée (`weeklyMissionsCompleted`, déjà lu ci-dessus via
+        // `getLudicState`, aucune lecture supplémentaire).
         for (const catalogDoc of catalogSnapshot.docs) {
           const data = catalogDoc.data();
-          if (data.type !== 'automatic' || ownedBadgeIds.has(catalogDoc.id)) continue;
+          if (ownedBadgeIds.has(catalogDoc.id)) continue;
+          const isAutomatic = data.type === 'automatic';
+          const isMission = data.type === 'mission';
+          if (!isAutomatic && !isMission) continue;
           const criteria: Badge = {
             id: catalogDoc.id,
             name: data.name || 'Badge',
@@ -463,7 +472,10 @@ const ClientStats: React.FC = () => {
             color: data.color,
             criteria: data.criteria,
           };
-          if (!computeBadgeActive(criteria, validatedExistingByColorLocal, inventoryByColor)) continue;
+          const active = isAutomatic
+            ? computeBadgeActive(criteria, validatedExistingByColorLocal, inventoryByColor)
+            : (ludicState.weeklyMissionsCompleted || 0) >= 1;
+          if (!active) continue;
           try {
             await setDoc(doc(db, 'client_badges', `${user.uid}_${catalogDoc.id}`), {
               userId: user.uid,

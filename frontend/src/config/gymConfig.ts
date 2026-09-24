@@ -100,6 +100,33 @@ export const MAX_METHODS_PER_VOTE = 3;
 // vote est trompeur).
 export const METHOD_VOTES_DISPLAY_THRESHOLD = 3;
 
+export type WallCategory = 'devers' | 'reta' | 'dalle' | 'autre';
+
+export interface WallCategoryInfo {
+  category: WallCategory;
+  // ✅ docs/plans/PLAN-anecdote-methodes-missions.md §C.7 : "murs enfants" — ne comptent pour
+  // AUCUNE mission (ni M2 ni M5/M6/M7) pour un grimpeur de 10 ans ou plus.
+  kidsOnly: boolean;
+}
+
+// ✅ §C.7 : classification confirmée par l'utilisateur en session (24/09/2026) — ne PAS
+// recopier les exemples illustratifs du document de plan lui-même ("Réta Enfants", "Grotte
+// des enfants"), qui ne correspondent pas aux valeurs réelles de `walls` ci-dessus.
+export const wallCategories: Record<string, WallCategoryInfo> = {
+  'Grotte Adultes': { category: 'devers', kidsOnly: false },
+  'Caverne des petits': { category: 'autre', kidsOnly: true },
+  'Güllich': { category: 'dalle', kidsOnly: false },
+  'Réta Adultes': { category: 'reta', kidsOnly: false },
+  "Réta d'initiation": { category: 'reta', kidsOnly: true },
+  'Grande Face': { category: 'autre', kidsOnly: false },
+  'Dalle': { category: 'dalle', kidsOnly: false },
+  // ✅ Le 15° ne compte délibérément PAS comme dévers/toit (trop proche de la verticale) —
+  // seuls les 30° et 40° comptent, confirmé par l'utilisateur.
+  'Dévers 15°': { category: 'autre', kidsOnly: false },
+  'Dévers 30°': { category: 'devers', kidsOnly: false },
+  'Dévers 40°': { category: 'devers', kidsOnly: false },
+};
+
 // Clé de préfixe pour les entrées localStorage propres à la salle (ex. thème).
 export const storageKeyPrefix = 'blocabrac';
 

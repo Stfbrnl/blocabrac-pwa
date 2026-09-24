@@ -7,6 +7,7 @@ import {
   type ClassementFlushRefs,
 } from './classementFlushWrites';
 import type { DocumentReference, DocumentData } from 'firebase/firestore';
+import type { WeeklyMissionsState, MissionKey } from './weeklyMissions';
 
 // Références factices : jamais déréférencées par la fonction testée (comparées par
 // identité uniquement), un objet quelconque suffit.
@@ -112,6 +113,75 @@ describe('buildClassementFlushWrites', () => {
     );
     expect(writes.some((w) => w.ref === refs.challengeRefs.get('c1'))).toBe(false);
   });
+
+  // ✅ PLAN-anecdote-methodes-missions.md §C.5
+  it('écrit weeklyMissions combiné avec wallCounts dans UNE seule écriture user_ludic_state', () => {
+    const writes = buildClassementFlushWrites(
+      'u1',
+      {
+        ...emptyClassementFlushPending(),
+        wallDeltas: new Map([['Dalle', 1]]),
+        missionsNewlyDone: new Set<MissionKey>(['M1']),
+        wallsNewlyVisited: new Set(['Dalle']),
+        missionsFige: { level: 'rouge', countsChildWalls: false },
+      },
+      { userLudic: { weeklyMissions: { isoWeek: '2026-W39', level: 'rouge', countsChildWalls: false, done: [], walls: [], completedAt: null } }, challenges: new Map() },
+      refs
+    );
+    const ludicWrites = writes.filter((w) => w.ref === refs.userLudicRef);
+    expect(ludicWrites).toHaveLength(1);
+    expect(ludicWrites[0].data.wallCounts).toEqual({ Dalle: 1 });
+    expect(ludicWrites[0].data.weeklyMissions.done).toEqual(['M1']);
+    expect(ludicWrites[0].data.weeklyMissions.walls).toEqual(['Dalle']);
+  });
+
+  it('ouvre une nouvelle semaine (repli figé) quand la grille stockée est d\'une semaine passée', () => {
+    const writes = buildClassementFlushWrites(
+      'u1',
+      { ...emptyClassementFlushPending(), missionsNewlyDone: new Set<MissionKey>(['M8']), missionsFige: { level: 'noir', countsChildWalls: false } },
+      { userLudic: { weeklyMissions: { isoWeek: '2020-W01', level: 'jaune', countsChildWalls: true, done: ['M1', 'M2'], walls: ['Dalle'], completedAt: null } }, challenges: new Map() },
+      refs
+    );
+    const ludicWrite = writes.find((w) => w.ref === refs.userLudicRef);
+    expect(ludicWrite?.data.weeklyMissions.level).toBe('noir');
+    expect(ludicWrite?.data.weeklyMissions.countsChildWalls).toBe(false);
+    expect(ludicWrite?.data.weeklyMissions.done).toEqual(['M8']);
+    expect(ludicWrite?.data.weeklyMissions.walls).toEqual([]);
+  });
+
+  it('incrémente weeklyMissionsCompleted seulement au moment où la grille passe à 8/8', () => {
+    const almost: WeeklyMissionsState = { isoWeek: '2026-W39', level: 'rouge', countsChildWalls: false, done: ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7'], walls: [], completedAt: null };
+    const writes = buildClassementFlushWrites(
+      'u1',
+      { ...emptyClassementFlushPending(), missionsNewlyDone: new Set<MissionKey>(['M8']), missionsFige: { level: 'rouge', countsChildWalls: false } },
+      { userLudic: { weeklyMissions: almost, weeklyMissionsCompleted: 2 }, challenges: new Map() },
+      refs
+    );
+    const ludicWrite = writes.find((w) => w.ref === refs.userLudicRef);
+    expect(ludicWrite?.data.weeklyMissionsCompleted).toBe(3);
+    expect(ludicWrite?.data.weeklyMissions.completedAt).not.toBeNull();
+  });
+
+  it('ne touche pas weeklyMissionsCompleted quand la grille n\'est pas encore complète', () => {
+    const writes = buildClassementFlushWrites(
+      'u1',
+      { ...emptyClassementFlushPending(), missionsNewlyDone: new Set<MissionKey>(['M1']), missionsFige: { level: 'rouge', countsChildWalls: false } },
+      { userLudic: { weeklyMissions: { isoWeek: '2026-W39', level: 'rouge', countsChildWalls: false, done: [], walls: [], completedAt: null }, weeklyMissionsCompleted: 2 }, challenges: new Map() },
+      refs
+    );
+    const ludicWrite = writes.find((w) => w.ref === refs.userLudicRef);
+    expect(ludicWrite?.data.weeklyMissionsCompleted).toBeUndefined();
+  });
+
+  it('n\'écrit rien sur weeklyMissions sans missionsFige (rien à ouvrir)', () => {
+    const writes = buildClassementFlushWrites(
+      'u1',
+      { ...emptyClassementFlushPending(), missionsNewlyDone: new Set<MissionKey>(['M1']), missionsFige: null },
+      { challenges: new Map() },
+      refs
+    );
+    expect(writes.some((w) => w.ref === refs.userLudicRef)).toBe(false);
+  });
 });
 
 describe('mergeClassementFlushPending', () => {
@@ -133,5 +203,14 @@ describe('mergeClassementFlushPending', () => {
     const incoming = { ...emptyClassementFlushPending(), blocDesigneScores: new Map([['c1', 400]]) };
     const merged = mergeClassementFlushPending(prev, incoming);
     expect(merged.blocDesigneScores.get('c1')).toBe(400);
+  });
+
+  it('unionne missionsNewlyDone/wallsNewlyVisited et conserve missionsFige', () => {
+    const prev = { ...emptyClassementFlushPending(), missionsNewlyDone: new Set<MissionKey>(['M1']), wallsNewlyVisited: new Set(['Dalle']), missionsFige: { level: 'rouge', countsChildWalls: false } };
+    const incoming = { ...emptyClassementFlushPending(), missionsNewlyDone: new Set<MissionKey>(['M3']), wallsNewlyVisited: new Set(['Güllich']) };
+    const merged = mergeClassementFlushPending(prev, incoming);
+    expect(merged.missionsNewlyDone).toEqual(new Set(['M1', 'M3']));
+    expect(merged.wallsNewlyVisited).toEqual(new Set(['Dalle', 'Güllich']));
+    expect(merged.missionsFige).toEqual({ level: 'rouge', countsChildWalls: false });
   });
 });

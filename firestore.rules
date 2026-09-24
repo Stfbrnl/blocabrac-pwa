@@ -433,12 +433,17 @@ service cloud.firestore {
                        // Auto-attribution des badges "couleur" par le client lui-même
                        // (ClientStats.tsx, V2.53) : uniquement ses propres badges, uniquement
                        // ceux flaggés type:"automatic" dans le catalogue, avec l'ID canonique.
+                       // ✅ PLAN-anecdote-methodes-missions.md §C.6 : "mission" ajouté au même
+                       // motif — badge de mission, sans couleur, attribué par son propre chemin
+                       // (grille hebdomadaire complétée au moins une fois), jamais évalué par la
+                       // boucle des badges couleur (computeBadgeActive traiterait un badge sans
+                       // couleur comme "toujours actif", d'où le type distinct).
                        (request.resource.data.userId == request.auth.uid &&
                         request.resource.data.awardedBy == "auto" &&
                         clientBadgeId == request.auth.uid + "_" + request.resource.data.badgeId &&
                         request.resource.data.keys().hasOnly(["userId", "badgeId", "awardedAt", "awardedBy", "awardedByName"]) &&
                         exists(/databases/$(database)/documents/badges/$(request.resource.data.badgeId)) &&
-                        get(/databases/$(database)/documents/badges/$(request.resource.data.badgeId)).data.type == "automatic"));
+                        get(/databases/$(database)/documents/badges/$(request.resource.data.badgeId)).data.type in ["automatic", "mission"]));
       allow update, delete: if false; // Interdit la modification/suppression des badges attribués
     }
 

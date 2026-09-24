@@ -23,7 +23,7 @@ import {
   useMediaQuery
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
-import { walls as wallList, colorGrades, mysteryColorHexKey, mysteryColorHex, logoPath, storageKeyPrefix, firstAscentColors, climbingMethods, MAX_METHODS_PER_VOTE } from '../../../config/gymConfig';
+import { walls as wallList, colorGrades, mysteryColorHexKey, mysteryColorHex, logoPath, storageKeyPrefix, firstAscentColors, climbingMethods, MAX_METHODS_PER_VOTE, wallCategories } from '../../../config/gymConfig';
 import { getBoulderImageUrl } from '../../../services/imageStorage';
 import CasinoIcon from '@mui/icons-material/Casino';
 import { levelOrder, type Level } from '../../../utils/competitionEligibility';
@@ -33,7 +33,14 @@ import {
   type DrawResult, type WallCounts, type RouletteCompletion,
 } from '../../../utils/roulette';
 import RouletteDialog, { type RouletteChosenBoulder } from './RouletteDialog';
-import { getLudicState, incrementRouletteCompleted } from '../../../services/ludicState';
+import { getLudicState, incrementRouletteCompleted, updateLudicState } from '../../../services/ludicState';
+import {
+  resolveWeeklyMissionsState, applyValidationToWeeklyMissions, applyDeclarativeMission,
+  isAtLevelCeiling, isWeeklyMissionsGridComplete, describeMission,
+  MISSION_KEYS, MISSION_M4_BIS_LABEL, WEEKLY_MISSIONS_WALLS_TARGET,
+  type WeeklyMissionsState,
+} from '../../../utils/weeklyMissions';
+import { getSeasonAge } from '../../../utils/ageCategory';
 
 // ✅ Bloc Roulette : clé localStorage de l'anti-lassitude (§1.5) — les ~10 derniers ids de
 // propositions tirées, exclus du tirage suivant. Préfixée comme les autres clés de la salle
@@ -148,6 +155,11 @@ const ClientDaily: React.FC = () => {
     // classementOptIn), lu ici pour être vérifié sans lecture supplémentaire au moment
     // du clic "Réussi".
     firstAscentOptIn?: boolean;
+    // ✅ docs/plans/PLAN-anecdote-methodes-missions.md §C : grille hebdomadaire, résolue une
+    // fois au montage (resolveWeeklyMissionsState — jamais recalculée en cours de semaine, voir
+    // §C.3.c) puis tenue à jour localement à chaque mission nouvellement accomplie.
+    weeklyMissions?: WeeklyMissionsState;
+    weeklyMissionsCompleted?: number;
   }>({});
   // ✅ Ref-de-state (même discipline que `activeChallengesRef`/`lastPersistedResultRef`) :
   // `handleValiderRoulette` doit repartir de l'état LE PLUS RÉCENT pour recomposer la liste
@@ -313,12 +325,24 @@ const ClientDaily: React.FC = () => {
           // la passe B a backfillé tous les comptes existants avant ce retrait). Lus ici
           // pour être réécrits sans relecture au moment du "J'ai relevé le défi".
           const ludicState = await getLudicState(user.uid);
+          // ✅ docs/plans/PLAN-anecdote-methodes-missions.md §C.3.c/§C.7 : niveau et "compte
+          // comme enfant" figés UNE SEULE FOIS ici, à l'ouverture de la page — jamais
+          // recalculés en cours de semaine. `getSeasonAge` est le seul point de dérivation de
+          // l'âge (voir CLAUDE.md, section "age vs dateOfBirth") ; `data` est déjà en mémoire,
+          // aucune lecture supplémentaire. Âge inconnu → traité comme adulte (§C.7).
+          const seasonAge = getSeasonAge(data.dateOfBirth, data.age);
+          const countsChildWalls = seasonAge !== undefined && seasonAge < 10;
+          const weeklyMissions = resolveWeeklyMissionsState(
+            ludicState.weeklyMissions, new Date(), data.level || 'jaune', countsChildWalls
+          );
           setSelfProfile({
             level: data.level,
             wallCounts: ludicState.wallCounts,
             rouletteChallengesCompleted: ludicState.rouletteChallengesCompleted,
             rouletteRecentChallenges: ludicState.rouletteRecentChallenges,
             firstAscentOptIn: ludicState.firstAscentOptIn,
+            weeklyMissions,
+            weeklyMissionsCompleted: ludicState.weeklyMissionsCompleted || 0,
           });
         }
       } catch (ownErr) {
@@ -529,17 +553,54 @@ const ClientDaily: React.FC = () => {
       at: new Date().toISOString(),
     };
     setOpenRoulette(false);
+    // ✅ docs/plans/PLAN-anecdote-methodes-missions.md §C.2/§C.5 : M8, fondue dans cette même
+    // écriture (voir incrementRouletteCompleted). `missionsFige` retombe sur le niveau/l'âge
+    // déjà figés cette semaine si la grille a été résolue, sinon sur le niveau brut — la
+    // fonction ré-ouvre une semaine si besoin (resolveWeeklyMissionsState), aucune lecture ici.
+    const missionsFige = {
+      level: selfProfileRef.current.weeklyMissions?.level ?? selfProfileRef.current.level ?? 'jaune',
+      countsChildWalls: selfProfileRef.current.weeklyMissions?.countsChildWalls ?? false,
+    };
     try {
-      const { rouletteChallengesCompleted, rouletteRecentChallenges } = await incrementRouletteCompleted(
+      const { rouletteChallengesCompleted, rouletteRecentChallenges, weeklyMissions, weeklyMissionsCompleted } = await incrementRouletteCompleted(
         user.uid,
         selfProfileRef.current,
-        entry
+        entry,
+        missionsFige
       );
-      setSelfProfile((prev) => ({ ...prev, rouletteChallengesCompleted, rouletteRecentChallenges }));
+      setSelfProfile((prev) => ({ ...prev, rouletteChallengesCompleted, rouletteRecentChallenges, weeklyMissions, weeklyMissionsCompleted }));
       setSuccess(`Bravo, ${rouletteChallengesCompleted}ᵉ défi Roulette relevé !`);
     } catch (err) {
       console.error('Erreur lors de l\'enregistrement du défi Roulette relevé:', err);
       setError("Le défi n'a pas pu être enregistré — réessaie dans un instant.");
+    }
+  };
+
+  // ✅ §C.3.b (décision retenue) : M4 bis, réservée au grimpeur déjà au plafond (rose) —
+  // réutilise le motif déclaratif de la Roulette ("J'ai relevé le défi"), sa propre écriture
+  // dédiée (pas de flux existant à réutiliser ici, contrairement à M8) mais un cas rare par
+  // construction (un seul grimpeur de la salle au rose permanent au moment du plan).
+  const handleMissionM4Bis = async () => {
+    if (!user) return;
+    const base = selfProfile.weeklyMissions;
+    if (!base || base.done.includes('M4')) return;
+    const wasComplete = isWeeklyMissionsGridComplete(base);
+    const next = applyDeclarativeMission(base, 'M4');
+    const justCompleted = !wasComplete && isWeeklyMissionsGridComplete(next);
+    try {
+      await updateLudicState(user.uid, {
+        weeklyMissions: next,
+        ...(justCompleted ? { weeklyMissionsCompleted: (selfProfile.weeklyMissionsCompleted || 0) + 1 } : {}),
+      });
+      setSelfProfile((prev) => ({
+        ...prev,
+        weeklyMissions: next,
+        weeklyMissionsCompleted: justCompleted ? (prev.weeklyMissionsCompleted || 0) + 1 : prev.weeklyMissionsCompleted,
+      }));
+      setSuccess('Mission "M4 bis" validée !');
+    } catch (err) {
+      console.error('Erreur lors de la validation de la mission M4 bis:', err);
+      setError("La mission n'a pas pu être enregistrée — réessaie dans un instant.");
     }
   };
 
@@ -823,6 +884,38 @@ const ClientDaily: React.FC = () => {
 
   const handleValidateSuccess = async (boulderId: string, success: boolean) => {
     if (!user) return;
+
+    // ✅ docs/plans/PLAN-anecdote-methodes-missions.md §C.3.a — POINT DÉCISIF : M1 doit être
+    // évaluée sur le GESTE, pas sur une écriture. Depuis V2.28, reclique "Réussi" sur un bloc
+    // déjà validé à l'identique ne produit AUCUNE écriture (voir le contrôle de dédoublonnage
+    // juste en dessous) — donc cette évaluation tourne ICI, avant ce contrôle, inconditionnellement.
+    // Conséquence assumée (§C.3.a) : M1 est trivialement cochable en recliquant un bouton — même
+    // doctrine de confiance que le reste du projet (saison, Roulette). ⚠️ Si les missions
+    // rapportent un jour des points au classement, M1 devra être restreinte aux validations dont
+    // `createdAt` tombe dans la semaine — ne pas l'oublier, la note est aussi dans CLAUDE.md.
+    const currentMissions = selfProfile.weeklyMissions;
+    if (currentMissions) {
+      const boulderWallForMissions = wallById.get(boulderId);
+      const wallInfo = boulderWallForMissions ? wallCategories[boulderWallForMissions] : undefined;
+      const nextMissions = applyValidationToWeeklyMissions(currentMissions, {
+        color: colorById.get(boulderId),
+        wall: boulderWallForMissions,
+        success,
+        attempts: attempts[boulderId] || 1,
+        wallInfo,
+      });
+      const newlyDone = nextMissions.done.filter((m) => !currentMissions.done.includes(m));
+      const newlyVisited = nextMissions.walls.filter((w) => !currentMissions.walls.includes(w));
+      if (newlyDone.length > 0 || newlyVisited.length > 0) {
+        setSelfProfile((prev) => ({ ...prev, weeklyMissions: nextMissions }));
+        const missionDelta = emptyClassementFlushPending();
+        newlyDone.forEach((m) => missionDelta.missionsNewlyDone.add(m));
+        newlyVisited.forEach((w) => missionDelta.wallsNewlyVisited.add(w));
+        missionDelta.missionsFige = { level: currentMissions.level, countsChildWalls: currentMissions.countsChildWalls };
+        classementQueue.enqueue('classement', missionDelta);
+      }
+    }
+
     const candidate = {
       success,
       rating: ratings[boulderId] || 0,
@@ -1005,6 +1098,57 @@ const ClientDaily: React.FC = () => {
           🎲 {selfProfile.rouletteChallengesCompleted} défi{(selfProfile.rouletteChallengesCompleted || 0) > 1 ? 's' : ''} Roulette relevé{(selfProfile.rouletteChallengesCompleted || 0) > 1 ? 's' : ''}
         </Typography>
       )}
+
+      {/* ✅ docs/plans/PLAN-anecdote-methodes-missions.md §C.8 : grille à 8 cases pour tout le
+          monde — un grimpeur au plafond voit M4 bis à la place de M4 (§C.3.b), avec un bouton
+          déclaratif identique à celui de la Roulette. Le niveau figé est rappelé explicitement
+          (describeMission), sinon un grimpeur qui progresse en cours de semaine ne comprend
+          pas pourquoi ses cases ne bougent pas. */}
+      {selfProfile.weeklyMissions && (() => {
+        const missions = selfProfile.weeklyMissions;
+        const atCeiling = isAtLevelCeiling(missions.level);
+        return (
+          <Card variant="outlined" sx={{ mb: 3 }}>
+            <CardContent>
+              <Typography variant="h6" sx={{ mb: 0.5 }}>🎯 Missions de la semaine</Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+                Calées sur ton niveau {missions.level} — nouvelle grille lundi.
+              </Typography>
+              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 1 }}>
+                {MISSION_KEYS.map((key) => {
+                  const isM4Bis = key === 'M4' && atCeiling;
+                  const done = missions.done.includes(key);
+                  const label = isM4Bis ? MISSION_M4_BIS_LABEL : describeMission(key, missions);
+                  return (
+                    <Box key={key} sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5 }}>
+                      <Typography component="span">{done ? '✅' : '⬜'}</Typography>
+                      <Box>
+                        <Typography variant="body2">
+                          {label}
+                          {key === 'M2' && !done && ` (${missions.walls.length}/${WEEKLY_MISSIONS_WALLS_TARGET})`}
+                        </Typography>
+                        {isM4Bis && !done && (
+                          <Button size="small" variant="outlined" sx={{ mt: 0.5 }} onClick={handleMissionM4Bis}>
+                            C'est fait
+                          </Button>
+                        )}
+                      </Box>
+                    </Box>
+                  );
+                })}
+              </Box>
+              {isWeeklyMissionsGridComplete(missions) && (
+                <Typography variant="body2" color="success.main" sx={{ mt: 1.5 }}>
+                  🏅 Grille complétée
+                  {(selfProfile.weeklyMissionsCompleted || 0) > 0 &&
+                    ` — ${selfProfile.weeklyMissionsCompleted} semaine${(selfProfile.weeklyMissionsCompleted || 0) > 1 ? 's' : ''} complétée${(selfProfile.weeklyMissionsCompleted || 0) > 1 ? 's' : ''} au total`}
+                </Typography>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })()}
+
       <RouletteDialog
         open={openRoulette}
         isDeath={rouletteIsDeath}

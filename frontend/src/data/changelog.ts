@@ -11,6 +11,16 @@ export interface ChangelogEntry {
 // tout l'historique ici, l'historique complet vit dans les commits git.
 export const changelog: ChangelogEntry[] = [
   {
+    version: '2.68',
+    date: '2026-09-24',
+    title: 'Missions hebdomadaires',
+    items: [
+      'Une nouvelle grille de 8 missions à réaliser chaque semaine, calée sur votre niveau : un bloc à votre niveau max, 4 murs différents, un flash, un bloc plus difficile, un bloc en dévers, en rétablissement, en dalle, un défi Roulette relevé.',
+      'La grille se réinitialise chaque lundi. La compléter offre un badge — pas de points au classement.',
+      'Visible sur "Mon Blocabrac quotidien", sous les boutons de la Roulette.',
+    ],
+  },
+  {
     version: '2.67',
     date: '2026-09-24',
     title: 'Carnet de méthodes',

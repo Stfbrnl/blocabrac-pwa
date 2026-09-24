@@ -12,6 +12,7 @@ import { doc, getDoc, setDoc, type PartialWithFieldValue } from 'firebase/firest
 import { db } from './firebaseConfig';
 import { addRouletteCompletion, type WallCounts, type RouletteCompletion } from '../utils/roulette';
 import type { WeeklyGoalItem } from '../utils/weeklyGoal';
+import { resolveWeeklyMissionsState, applyDeclarativeMission, isWeeklyMissionsGridComplete, type WeeklyMissionsState } from '../utils/weeklyMissions';
 
 export interface LudicState {
   weeklyGoalItems?: WeeklyGoalItem[] | null;
@@ -22,6 +23,11 @@ export interface LudicState {
   // ascensionnistes" (distinct de `classementOptIn`, qui couvre le classement général) —
   // défaut false (personne n'apparaît sans l'avoir choisi), réglable depuis "Mes informations".
   firstAscentOptIn?: boolean;
+  // ✅ PLAN-anecdote-methodes-missions.md §C.4 : grille hebdomadaire, réinitialisée sans cron
+  // (resolveWeeklyMissionsState, dérivée de la semaine ISO courante) — voir §C.5 pour la
+  // discipline d'écriture (toujours fondue dans une écriture déjà prévue par ailleurs).
+  weeklyMissions?: WeeklyMissionsState;
+  weeklyMissionsCompleted?: number;
 }
 
 const ludicRef = (uid: string) => doc(db, 'user_ludic_state', uid);
@@ -43,13 +49,30 @@ export const updateLudicState = async (
 // déjà en mémoire de l'appelant plutôt qu'un `increment()` Firestore — cohérent avec le
 // reste du module (aucune lecture ici), `current` doit être l'état déjà résolu par
 // `getLudicState`.
+//
+// ✅ PLAN-anecdote-methodes-missions.md §C.2/§C.5 : M8 ("activer et réussir une roulette")
+// est évaluée ICI et fondue dans cette MÊME écriture — "M8 est évaluée dans le gestionnaire
+// de la roulette, qui écrit déjà user_ludic_state", jamais une écriture séparée.
+// `missionsFige` (niveau/âge figés à l'ouverture de la semaine, résolus par l'appelant à
+// partir de son propre état — voir ClientDaily.tsx) sert de repli si la grille stockée
+// appartient à une semaine ISO déjà passée (resolveWeeklyMissionsState s'en charge).
 export const incrementRouletteCompleted = async (
   uid: string,
   current: LudicState,
-  entry: RouletteCompletion
-): Promise<{ rouletteChallengesCompleted: number; rouletteRecentChallenges: RouletteCompletion[] }> => {
+  entry: RouletteCompletion,
+  missionsFige: { level: string; countsChildWalls: boolean }
+): Promise<{
+  rouletteChallengesCompleted: number;
+  rouletteRecentChallenges: RouletteCompletion[];
+  weeklyMissions: WeeklyMissionsState;
+  weeklyMissionsCompleted: number;
+}> => {
   const rouletteChallengesCompleted = (current.rouletteChallengesCompleted || 0) + 1;
   const rouletteRecentChallenges = addRouletteCompletion(current.rouletteRecentChallenges, entry);
-  await updateLudicState(uid, { rouletteChallengesCompleted, rouletteRecentChallenges });
-  return { rouletteChallengesCompleted, rouletteRecentChallenges };
+  const baseMissions = resolveWeeklyMissionsState(current.weeklyMissions, new Date(), missionsFige.level, missionsFige.countsChildWalls);
+  const wasComplete = isWeeklyMissionsGridComplete(baseMissions);
+  const weeklyMissions = applyDeclarativeMission(baseMissions, 'M8');
+  const weeklyMissionsCompleted = (current.weeklyMissionsCompleted || 0) + (!wasComplete && isWeeklyMissionsGridComplete(weeklyMissions) ? 1 : 0);
+  await updateLudicState(uid, { rouletteChallengesCompleted, rouletteRecentChallenges, weeklyMissions, weeklyMissionsCompleted });
+  return { rouletteChallengesCompleted, rouletteRecentChallenges, weeklyMissions, weeklyMissionsCompleted };
 };
