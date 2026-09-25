@@ -264,8 +264,6 @@ vérifié page par page) :
 - **Points de vigilance** : nouvel encadré « Une réussite ne se réécrit pas en revenant sur
   le bloc ».
 
----
-
 **Mise à jour du 25/09 au soir, pour V2.71.1**, régénéré, toujours 10 pages sans débordement :
 - « Effacer cet échec » ;
 - « Badge du grimpeur régulier » au tampon, avec le compteur de semaines ;
