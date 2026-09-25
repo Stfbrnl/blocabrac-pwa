@@ -11,6 +11,17 @@ export interface ChangelogEntry {
 // tout l'historique ici, l'historique complet vit dans les commits git.
 export const changelog: ChangelogEntry[] = [
   {
+    version: '2.71',
+    date: '2026-09-26',
+    title: 'La saison démarre le 1er novembre',
+    items: [
+      'Le classement de saison ouvrira le 1er novembre et se terminera le 31 mai : tout le monde part de zéro, seuls les blocs réussis pour la première fois pendant la saison compteront.',
+      'Le classement général, lui, compte dès maintenant et ne s\'arrête jamais : grimper en octobre n\'est pas perdu.',
+      'En fin de saison, les 10 meilleures grimpeuses et les 10 meilleurs grimpeurs (parmi ceux qui apparaissent au classement) seront qualifiés pour la Finale de l\'année, en juin.',
+      'Un « Échoué » cliqué par erreur ? « Effacer cet échec » sur la fiche du bloc. Et le badge du grimpeur régulier compte désormais vos semaines complètes.',
+    ],
+  },
+  {
     version: '2.70',
     date: '2026-09-25',
     title: 'Une carte de missions tamponnée',

@@ -44,7 +44,16 @@ const app = initializeApp(IS_EMULATOR ? { projectId: 'blocabrac' } : { credentia
 const db = getFirestore(app);
 
 // Miroir de `levelOrder` (frontend/src/utils/competitionEligibility.ts) — à tenir à jour à la main.
-const LEVEL_ORDER = ['jaune', 'vert', 'bleu', 'violet', 'rouge', 'noir', 'blanc', 'rose'];
+// RETOUR-v2701-v2702.md §5 : un avertissement permanent apprend à ignorer les avertissements.
+// Les écarts CONNUS et ACCEPTÉS sont listés ici, avec la raison et la date de la décision : ils
+// sont rappelés sur une ligne, sans compter comme avertissements — une nouvelle ligne ⚠️ saute
+// alors aux yeux. N'ajouter une entrée que sur décision explicite de l'utilisateur.
+const KNOWN_EXCEPTIONS = {
+  'client_badges/HGtxU7N6cCU00WCFtjcv':
+    'ancien format (client_id/badge_id), badge-expert remis en mai 2026 au compte de test « Maurice Tartanpion », conservé volontairement (décision du 25/09/2026)',
+};
+
+const LEVEL_ORDER =['jaune', 'vert', 'bleu', 'violet', 'rouge', 'noir', 'blanc', 'rose'];
 const BADGE_COLORS = ['violet', 'rouge', 'noir', 'blanc', 'rose'];
 
 async function main() {
@@ -98,7 +107,12 @@ async function main() {
   console.log(`client_badges : ${linksSnap.size} lien(s), ${orphans.length} orphelin(s), ${legacy.length} à l'ancien format`);
   for (const d of orphans) errors.push(`client_badges/${d.id} pointe vers un badge absent : "${d.data().badgeId}".`);
   for (const d of malformed) errors.push(`client_badges/${d.id} sans badgeId.`);
-  for (const d of legacy) warnings.push(`client_badges/${d.id} à l'ancien format (badge_id "${d.data().badge_id}") : ignoré par l'application.`);
+  const known = [];
+  for (const d of legacy) {
+    const key = `client_badges/${d.id}`;
+    if (KNOWN_EXCEPTIONS[key]) known.push(`${key} : ${KNOWN_EXCEPTIONS[key]}`);
+    else warnings.push(`${key} à l'ancien format (badge_id "${d.data().badge_id}") : ignoré par l'application.`);
+  }
 
   // Fenêtre de saison.
   if (!seasonSnap.exists) {
@@ -111,6 +125,7 @@ async function main() {
   }
 
   console.log('');
+  known.forEach((k) => console.log(`ℹ️  exception connue — ${k}`));
   warnings.forEach((w) => console.log(`⚠️  ${w}`));
   errors.forEach((e) => console.log(`❌ ${e}`));
   console.log(`\n${errors.length} erreur(s), ${warnings.length} avertissement(s).`);

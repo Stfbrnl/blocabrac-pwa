@@ -112,3 +112,25 @@ export const isWithinSeasonWindow = (dateISO: string, debut: string, fin: string
   const day = dateISO.slice(0, 10);
   return day >= debut && day <= fin;
 };
+
+// ✅ V2.71 (docs/handoffs/RETOUR-v2701-v2702.md §4.2) : phase de la saison vue par un grimpeur.
+// Quatre états : aucune fenêtre réglée, saison À VENIR (réglée mais `debut` pas encore atteint —
+// état nouveau avec le calendrier 1er novembre → 31 mai, réglé des semaines à l'avance),
+// en cours, terminée (fin dépassée ou clôture faite par compute-classement-saison.js).
+// `todayISO` : date du jour "YYYY-MM-DD" fournie par l'appelant (pure, testable).
+export type SeasonPhase = 'aucune' | 'a_venir' | 'en_cours' | 'terminee';
+
+export interface SeasonWindowConfig {
+  debut?: string;
+  fin?: string;
+  cloturee?: boolean;
+}
+
+export const seasonPhase = (config: SeasonWindowConfig | null | undefined, todayISO: string): SeasonPhase => {
+  if (!config || !config.debut || !config.fin) return 'aucune';
+  if (config.cloturee) return 'terminee';
+  const day = todayISO.slice(0, 10);
+  if (day < config.debut) return 'a_venir';
+  if (day > config.fin) return 'terminee';
+  return 'en_cours';
+};

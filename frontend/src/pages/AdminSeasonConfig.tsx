@@ -6,7 +6,13 @@ import {
 import { EmojiEvents as EmojiEventsIcon } from '@mui/icons-material';
 import { db } from '../services/firebaseConfig';
 import { doc, getDoc, setDoc, deleteField, collection, getDocs, query, where, updateDoc } from 'firebase/firestore';
-import { recomputeSeasonBaseline, type SeasonBaselineResult } from '../utils/classementScore';
+import { recomputeSeasonBaseline, seasonPhase, type SeasonBaselineResult } from '../utils/classementScore';
+
+const todayLocalISO = (): string => {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
 
 // ✅ docs/plans/CONCEPTION-classement-saisonnier.md — décision point 1 : la fenêtre de la saison
 // n'est plus codée en dur (1er septembre → 31 mai) mais réglée ici par l'admin, pour
@@ -240,13 +246,13 @@ const AdminSeasonConfig: React.FC = () => {
             fullWidth
             helperText="Habituellement le 31 mai — ajustable si besoin."
           />
-          {config.debut && config.fin && !config.cloturee && (
-            <Chip
-              size="small"
-              color="success"
-              label="Saison en cours"
-              sx={{ alignSelf: 'flex-start' }}
-            />
+          {/* V2.71 : une fenêtre réglée à l'avance (1er novembre) n'est pas « en cours ». Reflète
+              les dates saisies ; l'état réel est celui enregistré. */}
+          {seasonPhase(config, todayLocalISO()) === 'en_cours' && (
+            <Chip size="small" color="success" label="Saison en cours" sx={{ alignSelf: 'flex-start' }} />
+          )}
+          {seasonPhase(config, todayLocalISO()) === 'a_venir' && (
+            <Chip size="small" color="info" label="Saison à venir — rien ne compte avant la date de début" sx={{ alignSelf: 'flex-start' }} />
           )}
         </Box>
 
@@ -262,12 +268,16 @@ const AdminSeasonConfig: React.FC = () => {
           <Typography variant="h6" sx={{ mb: 1 }}>Redémarrer la saison</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             Remet le classement de saison à plat en gardant le crédit acquis : chaque grimpeur
-            repart de ses validations actuelles des blocs encore posés (rien à revalider), puis
-            la saison s'accumule à partir de la date de début ci-dessus et ne redescend plus
-            quand un mur change. Utile pendant le déploiement, tant que peu de grimpeurs sont
-            équipés. Renseignez d'abord les dates voulues, puis cliquez ici (pas besoin
-            d'« Enregistrer » avant).
+            repart de <strong>toutes</strong> ses réussites passées (blocs retirés compris, quelle que
+            soit leur date), puis la saison s'accumule à partir de la date de début ci-dessus et ne
+            redescend plus quand un mur change. Conçu pour le déploiement de l'application.
+            Renseignez d'abord les dates voulues, puis cliquez ici (pas besoin d'« Enregistrer » avant).
           </Typography>
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            Pour une <strong>nouvelle saison où tout le monde part de zéro</strong>, utilisez
+            « Enregistrer » ci-dessus, pas ce bouton : il donnerait à chacun tout son historique
+            en crédit de départ.
+          </Alert>
           <Button
             variant="outlined"
             color="warning"

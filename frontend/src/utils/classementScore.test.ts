@@ -5,6 +5,7 @@ import {
   scoreDeltaForValidation,
   isWithinSeasonWindow,
   recomputeSeasonBaseline,
+  seasonPhase,
   type ColorCounts,
   type ValidatedBoulderResult,
 } from './classementScore';
@@ -233,5 +234,34 @@ describe('recomputeSeasonBaseline (V2.56 — crédit de départ au redémarrage)
       new Map([['b-vert', 'vert'], ['b-rouge', 'vert'], ['b-retire', 'vert']]),
     );
     expect(colorCounts).toEqual({ vert: 3 });
+  });
+});
+
+describe("saison configurée à l'avance (V2.71, calendrier 1er novembre → 31 mai)", () => {
+  const nov = { debut: '2026-11-01', fin: '2027-05-31', cloturee: false };
+
+  it("isWithinSeasonWindow : une validation d'octobre ne compte pas pour une saison qui commence le 1er novembre", () => {
+    expect(isWithinSeasonWindow('2026-10-15T18:00:00.000Z', nov.debut, nov.fin)).toBe(false);
+    expect(isWithinSeasonWindow('2026-11-01T18:00:00.000Z', nov.debut, nov.fin)).toBe(true);
+  });
+
+  it('seasonPhase : aucune / à venir / en cours / terminée', () => {
+    expect(seasonPhase(null, '2026-09-25')).toBe('aucune');
+    expect(seasonPhase({ debut: '', fin: '' }, '2026-09-25')).toBe('aucune');
+    expect(seasonPhase(nov, '2026-09-25')).toBe('a_venir');
+    expect(seasonPhase(nov, '2026-10-31')).toBe('a_venir');
+    expect(seasonPhase(nov, '2026-11-01')).toBe('en_cours');
+    expect(seasonPhase(nov, '2027-05-31')).toBe('en_cours');
+    expect(seasonPhase(nov, '2027-06-01')).toBe('terminee');
+    expect(seasonPhase({ ...nov, cloturee: true }, '2027-06-02')).toBe('terminee');
+  });
+
+  it("recomputeSeasonBaseline IGNORE les dates : un « Redémarrer » crédite TOUT l'historique, jamais zéro", () => {
+    // RETOUR-v2701-v2702.md §4.2.1 supposait baseScore = 0 si aucune validation ne tombe dans
+    // la fenêtre. Faux : la fonction ne reçoit même pas de date. Pour une saison qui démarre à
+    // zéro, c'est « Enregistrer » qu'il faut utiliser, pas « Redémarrer la saison ».
+    const colorById = new Map([['b1', 'rouge'], ['b2', 'bleu']]);
+    const { score } = recomputeSeasonBaseline([{ boulderId: 'b1', attempts: 1 }, { boulderId: 'b2', attempts: 1 }], colorById);
+    expect(score).toBeGreaterThan(0);
   });
 });

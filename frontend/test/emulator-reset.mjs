@@ -10,6 +10,16 @@
 const PROJECT_ID = 'blocabrac';
 
 export async function resetEmulators() {
+  // RETOUR-v2701-v2702.md §5 : une fonction « vide tout » refuse de tourner hors d'un contexte
+  // explicitement émulateur — une garde déclarée, pas seulement une propriété du protocole.
+  const host = process.env.FIRESTORE_EMULATOR_HOST || '';
+  const authHost = process.env.FIREBASE_AUTH_EMULATOR_HOST || '';
+  if (!/^(localhost|127\.0\.0\.1):/.test(host) || !/^(localhost|127\.0\.0\.1):/.test(authHost)) {
+    throw new Error(
+      `resetEmulators() refusé : FIRESTORE_EMULATOR_HOST="${host}" / FIREBASE_AUTH_EMULATOR_HOST="${authHost}" ` +
+      'doivent tous deux pointer vers localhost.'
+    );
+  }
   const targets = [
     `http://localhost:8080/emulator/v1/projects/${PROJECT_ID}/databases/(default)/documents`,
     `http://localhost:9099/emulator/v1/projects/${PROJECT_ID}/accounts`,

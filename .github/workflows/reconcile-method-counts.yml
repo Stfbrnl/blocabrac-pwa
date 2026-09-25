@@ -1,0 +1,32 @@
+name: Réconciliation carnet de méthodes
+
+# docs/handoffs/RETOUR-v2701-v2702.md §2 : boulders/{id}.methodCounts / methodVotes (carnet de
+# méthodes, V2.67) sont des compteurs incrémentaux tenus par ClientDaily.tsx — le dernier du
+# projet qui n'avait pas de filet. Ce workflow relance mensuellement
+# scripts/reconcile-method-counts.js en --fix, qui recompte depuis
+# client_boulder_results.methods (garde-fou de dérive massive : échec visible, pas d'écriture).
+# Aucun fichier d'état : le détail des écarts est dans le journal du run.
+on:
+  schedule:
+    - cron: '45 3 1 * *' # 03h45 UTC le 1er du mois (après la réconciliation des profils à 03h30)
+  workflow_dispatch: {} # déclenchement manuel possible depuis l'onglet Actions
+
+permissions:
+  contents: read
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+
+      - run: npm ci
+
+      - name: Réconciliation des votes de méthodes
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+        run: node scripts/reconcile-method-counts.js --fix

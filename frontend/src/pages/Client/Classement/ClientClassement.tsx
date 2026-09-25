@@ -3,14 +3,27 @@ import {
   Container, Paper, Typography, Box, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, TableSortLabel, Chip, Card,
   CardContent, CircularProgress, useTheme, useMediaQuery, FormControl,
-  InputLabel, Select, MenuItem, IconButton, Tooltip, ToggleButtonGroup, ToggleButton
+  InputLabel, Select, MenuItem, IconButton, Tooltip, ToggleButtonGroup, ToggleButton, Alert
 } from '@mui/material';
 import { ArrowUpward as ArrowUpwardIcon, ArrowDownward as ArrowDownwardIcon } from '@mui/icons-material';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../../../services/firebaseConfig';
 import { getSeasonAge, getFfmeCategory, FFME_AGE_BANDS } from '../../../utils/ageCategory';
 import { levelOrder } from '../../../utils/competitionEligibility';
-import { summaryFromColorCounts, type ColorCounts } from '../../../utils/classementScore';
+import { summaryFromColorCounts, seasonPhase, type ColorCounts, type SeasonWindowConfig } from '../../../utils/classementScore';
+
+// Date du jour locale "YYYY-MM-DD" (les bornes de saison sont des jours calendaires de la salle).
+const todayLocalISO = (): string => {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
+// "1er novembre 2026" : toLocaleDateString ne met pas l'ordinal du premier du mois.
+const formatSeasonDay = (iso: string): string =>
+  new Date(`${iso}T12:00:00`)
+    .toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
+    .replace(/^1 /, '1er ');
 
 const levelColors: Record<string, string> = {
   jaune: '#FFFF00', vert: '#00FF00', bleu: '#0000FF', violet: '#800080',
@@ -93,6 +106,10 @@ const ClientClassement: React.FC = () => {
   // ✅ Classement de saison : bascule d'affichage seulement, aucune nouvelle lecture
   // Firestore (voir docs/plans/CONCEPTION-classement-saisonnier.md, "Écran de classement de saison").
   const [mode, setMode] = useState<ClassementMode>('general');
+  // ✅ V2.71 (RETOUR-v2701-v2702.md §4.2) : fenêtre de saison, lue UNE fois (même document que
+  // ClientDaily.tsx) pour distinguer « à venir » / « en cours » / « terminée » / « aucune » —
+  // plutôt qu'un classement de saison à zéro pour tout le monde, sans explication.
+  const [seasonConfig, setSeasonConfig] = useState<SeasonWindowConfig | null>(null);
 
   useEffect(() => {
     const fetchClassement = async () => {
@@ -147,6 +164,14 @@ const ClientClassement: React.FC = () => {
         });
 
         setRows(rowsData);
+
+        // Une lecture ratée de la fenêtre ne doit pas masquer le classement général.
+        try {
+          const seasonSnap = await getDoc(doc(db, 'app_config', 'classement_saison'));
+          setSeasonConfig(seasonSnap.exists() ? (seasonSnap.data() as SeasonWindowConfig) : null);
+        } catch (seasonErr) {
+          console.error('Erreur lors du chargement de la fenêtre de saison :', seasonErr);
+        }
       } catch (error) {
         console.error('Erreur lors du chargement du classement :', error);
       } finally {
@@ -169,6 +194,8 @@ const ClientClassement: React.FC = () => {
   // ✅ Classement de saison : plutôt que dupliquer le tri/rendu, on substitue les
   // métriques actives (score/bouldersValidated/bestColor/bestColorRank) selon le mode
   // AVANT le tri existant, qui reste inchangé pour les deux vues.
+  const phase = seasonPhase(seasonConfig, todayLocalISO());
+
   const displayRows: ClassementRow[] = mode === 'saison'
     ? rows.map((row) => ({
         ...row,
@@ -229,14 +256,34 @@ const ClientClassement: React.FC = () => {
           <ToggleButton value="general">Classement général</ToggleButton>
           <ToggleButton value="saison">Classement de saison</ToggleButton>
         </ToggleButtonGroup>
-        {mode === 'saison' && (
+        {mode === 'saison' && phase === 'en_cours' && seasonConfig?.debut && seasonConfig?.fin && (
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Blocs validés depuis le début de la saison en cours seulement — ce classement
+            Saison du {formatSeasonDay(seasonConfig.debut)} au {formatSeasonDay(seasonConfig.fin)} :
+            seuls les blocs réussis pour la première fois pendant la saison comptent — ce classement
             détermine les qualifiés pour la Finale de fin de saison.
           </Typography>
         )}
+        {mode === 'saison' && phase === 'a_venir' && seasonConfig?.debut && seasonConfig?.fin && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            La saison commence le {formatSeasonDay(seasonConfig.debut)} et se termine le{' '}
+            {formatSeasonDay(seasonConfig.fin)}. Seuls les blocs réussis pour la première fois à partir
+            du {formatSeasonDay(seasonConfig.debut)} compteront ; tout le monde part de zéro. Le
+            classement général, lui, compte dès maintenant.
+          </Alert>
+        )}
+        {mode === 'saison' && phase === 'terminee' && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            La saison est terminée. La prochaine sera annoncée ici ; le classement général, lui,
+            continue de compter.
+          </Alert>
+        )}
+        {mode === 'saison' && phase === 'aucune' && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Aucune saison n'est ouverte pour le moment. Le classement général, lui, continue de compter.
+          </Alert>
+        )}
 
-        {rows.length === 0 ? (
+        {mode === 'saison' && phase !== 'en_cours' ? null : rows.length === 0 ? (
           <Typography sx={{ mt: 2 }}>Aucun grimpeur n'apparaît pour l'instant dans le classement.</Typography>
         ) : isCompact ? (
           <Box>
