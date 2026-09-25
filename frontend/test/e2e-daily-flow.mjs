@@ -117,12 +117,15 @@ async function main() {
     await clientP.getByText(`Bloc n°${BOULDER_NUMBER}`, { exact: false }).click();
     await clientP.getByText(`Bloc n°${BOULDER_NUMBER} - ${WALL}`, { exact: false }).waitFor({ timeout: 10000 });
 
-    await clientP.getByRole('button', { name: '✅ Réussi' }).click();
-    await clientP.getByText('Réussite enregistrée', { exact: false }).waitFor({ timeout: 10000 });
-
+    // ✅ V2.69 : le nombre d'essais se choisit AVANT « Réussi » (plus de défaut à 1), et
+    // « Réussi » reste désactivé tant qu'il n'est pas choisi.
+    assert(await clientP.getByRole('button', { name: '✅ Réussi' }).isDisabled(), '« Réussi » doit être désactivé tant que le nombre d\'essais n\'est pas choisi');
     await clientP.locator('#nombre-d-essais-select').click();
     await clientP.getByRole('option', { name: '3 essais', exact: true }).click();
     await clientP.locator('[role="presentation"].MuiPopover-root').waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
+    await clientP.getByRole('button', { name: '✅ Réussi' }).click();
+    await clientP.getByText('Réussite enregistrée', { exact: false }).waitFor({ timeout: 10000 });
+    await clientP.getByText('Déjà validé le', { exact: false }).waitFor({ timeout: 10000 });
 
     // Note à 4 étoiles (input radio caché derrière le composant Rating) — cliquer sur
     // le <label> associé plutôt que sur l'input (visuellement masqué, non actionnable).

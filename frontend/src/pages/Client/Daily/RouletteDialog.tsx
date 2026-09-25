@@ -206,6 +206,14 @@ const RouletteDialog: React.FC<RouletteDialogProps> = ({ open, isDeath, result, 
             </Box>
           </>
         )}
+        {/* ✅ V2.69 (docs/handoffs/RETOUR-bug-missions-et-revalidation.md §2.9/§2.10) : même
+            famille visuelle que "J'ai testé ce bloc"/"Je l'ai refait" — bouton en contour, icône,
+            et cette ligne grise : un geste à la première personne n'écrit jamais de résultat. */}
+        {result && (
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
+            « J'ai relevé le défi » fait avancer ton compteur et tes missions — n'enregistre pas de résultat de bloc.
+          </Typography>
+        )}
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Fermer</Button>
@@ -217,10 +225,10 @@ const RouletteDialog: React.FC<RouletteDialogProps> = ({ open, isDeath, result, 
         {result && (
           // ✅ "J'ai relevé le défi" pour TOUTES les familles, famille E / roulette de la mort
           // comprises (décision utilisateur 06/09/2026). L'écriture déclenchée par `onValider`
-          // (côté ClientDaily) ne touche QUE `users/{uid}` (compteur + derniers défis), jamais
-          // `client_boulder_results` — l'invariant famille E (une réussite partielle ne doit
-          // pas fausser classement/badges/niveau) est préservé.
-          <Button variant="contained" startIcon={<CasinoIcon />} onClick={handleValider}>
+          // (côté ClientDaily) ne touche QUE `user_ludic_state/{uid}` (compteur, derniers défis,
+          // M8), jamais `client_boulder_results` — l'invariant famille E (une réussite partielle
+          // ne doit pas fausser classement/badges/niveau) est préservé.
+          <Button variant="outlined" startIcon={<CasinoIcon />} onClick={handleValider}>
             J'ai relevé le défi
           </Button>
         )}

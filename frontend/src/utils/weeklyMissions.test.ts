@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   isoWeekKey, resolveWeeklyMissionsState, applyValidationToWeeklyMissions,
-  applyDeclarativeMission, isWeeklyMissionsGridComplete, isAtLevelCeiling, describeMission,
+  applyDeclarativeMission, isWeeklyMissionsGridComplete, missionGestureAdvances, isAtLevelCeiling, describeMission,
   MISSION_KEYS, WEEKLY_MISSIONS_WALLS_TARGET, type WeeklyMissionsState,
 } from './weeklyMissions';
 import type { WallCategoryInfo } from '../config/gymConfig';
@@ -78,67 +78,67 @@ const baseState = (overrides: Partial<WeeklyMissionsState> = {}): WeeklyMissions
 
 describe('applyValidationToWeeklyMissions', () => {
   it('M1 : validation réussie sur un bloc de la couleur du niveau figé', () => {
-    const next = applyValidationToWeeklyMissions(baseState(), { color: 'rouge', wall: 'Dalle', success: true, attempts: 3, wallInfo: dalle });
+    const next = applyValidationToWeeklyMissions(baseState(), { color: 'rouge', wall: 'Dalle', neverTriedBefore: true, success: true, attempts: 3, wallInfo: dalle });
     expect(next.done).toContain('M1');
   });
 
   it('M1 : une couleur différente ne valide pas M1', () => {
-    const next = applyValidationToWeeklyMissions(baseState(), { color: 'violet', wall: 'Dalle', success: true, attempts: 1, wallInfo: dalle });
+    const next = applyValidationToWeeklyMissions(baseState(), { color: 'violet', wall: 'Dalle', neverTriedBefore: true, success: true, attempts: 1, wallInfo: dalle });
     expect(next.done).not.toContain('M1');
   });
 
   it('⚠️ recoupement voulu (§C.2) : flasher un bloc du niveau max valide M1 ET M3', () => {
-    const next = applyValidationToWeeklyMissions(baseState(), { color: 'rouge', wall: 'Dalle', success: true, attempts: 1, wallInfo: dalle });
+    const next = applyValidationToWeeklyMissions(baseState(), { color: 'rouge', wall: 'Dalle', neverTriedBefore: true, success: true, attempts: 1, wallInfo: dalle });
     expect(next.done).toContain('M1');
     expect(next.done).toContain('M3');
   });
 
   it('M3 : plancher — au niveau le plus bas (jaune), max-1 se rabat sur le niveau courant', () => {
-    const next = applyValidationToWeeklyMissions(baseState({ level: 'jaune' }), { color: 'jaune', wall: 'Dalle', success: true, attempts: 1, wallInfo: dalle });
+    const next = applyValidationToWeeklyMissions(baseState({ level: 'jaune' }), { color: 'jaune', wall: 'Dalle', neverTriedBefore: true, success: true, attempts: 1, wallInfo: dalle });
     expect(next.done).toContain('M3');
   });
 
   it('M3 : une couleur en dessous de max-1 ne valide pas M3', () => {
     // niveau figé rouge -> seuil M3 = violet (max-1). jaune est trop bas.
-    const next = applyValidationToWeeklyMissions(baseState(), { color: 'jaune', wall: 'Dalle', success: true, attempts: 1, wallInfo: dalle });
+    const next = applyValidationToWeeklyMissions(baseState(), { color: 'jaune', wall: 'Dalle', neverTriedBefore: true, success: true, attempts: 1, wallInfo: dalle });
     expect(next.done).not.toContain('M3');
   });
 
   it('M3 : plus d\'un essai ne valide pas M3 (ce n\'est pas un flash)', () => {
-    const next = applyValidationToWeeklyMissions(baseState(), { color: 'rouge', wall: 'Dalle', success: true, attempts: 2, wallInfo: dalle });
+    const next = applyValidationToWeeklyMissions(baseState(), { color: 'rouge', wall: 'Dalle', neverTriedBefore: true, success: true, attempts: 2, wallInfo: dalle });
     expect(next.done).not.toContain('M3');
   });
 
   it('M4 : réussi OU échoué sur un bloc exactement au niveau max+1', () => {
-    const echec = applyValidationToWeeklyMissions(baseState(), { color: 'noir', wall: 'Dalle', success: false, attempts: 5, wallInfo: dalle });
+    const echec = applyValidationToWeeklyMissions(baseState(), { color: 'noir', wall: 'Dalle', neverTriedBefore: true, success: false, attempts: 5, wallInfo: dalle });
     expect(echec.done).toContain('M4');
-    const reussi = applyValidationToWeeklyMissions(baseState(), { color: 'noir', wall: 'Dalle', success: true, attempts: 1, wallInfo: dalle });
+    const reussi = applyValidationToWeeklyMissions(baseState(), { color: 'noir', wall: 'Dalle', neverTriedBefore: true, success: true, attempts: 1, wallInfo: dalle });
     expect(reussi.done).toContain('M4');
   });
 
   it('⚠️ grimpeur au plafond (rose) : M4 est structurellement impossible, jamais validé', () => {
     expect(isAtLevelCeiling('rose')).toBe(true);
-    const next = applyValidationToWeeklyMissions(baseState({ level: 'rose' }), { color: 'rose', wall: 'Dalle', success: false, attempts: 1, wallInfo: dalle });
+    const next = applyValidationToWeeklyMissions(baseState({ level: 'rose' }), { color: 'rose', wall: 'Dalle', neverTriedBefore: true, success: false, attempts: 1, wallInfo: dalle });
     expect(next.done).not.toContain('M4');
   });
 
   it('M5/M6/M7 : catégorie du mur, sur une validation réussie', () => {
-    const m5 = applyValidationToWeeklyMissions(baseState(), { color: 'rouge', wall: 'Grotte Adultes', success: true, attempts: 1, wallInfo: devers });
+    const m5 = applyValidationToWeeklyMissions(baseState(), { color: 'rouge', wall: 'Grotte Adultes', neverTriedBefore: true, success: true, attempts: 1, wallInfo: devers });
     expect(m5.done).toContain('M5');
-    const m6 = applyValidationToWeeklyMissions(baseState(), { color: 'rouge', wall: 'Réta Adultes', success: true, attempts: 1, wallInfo: reta });
+    const m6 = applyValidationToWeeklyMissions(baseState(), { color: 'rouge', wall: 'Réta Adultes', neverTriedBefore: true, success: true, attempts: 1, wallInfo: reta });
     expect(m6.done).toContain('M6');
-    const m7 = applyValidationToWeeklyMissions(baseState(), { color: 'rouge', wall: 'Dalle', success: true, attempts: 1, wallInfo: dalle });
+    const m7 = applyValidationToWeeklyMissions(baseState(), { color: 'rouge', wall: 'Dalle', neverTriedBefore: true, success: true, attempts: 1, wallInfo: dalle });
     expect(m7.done).toContain('M7');
   });
 
   it('M5/M6/M7 : un échec ne valide rien de tout ça', () => {
-    const next = applyValidationToWeeklyMissions(baseState(), { color: 'rouge', wall: 'Grotte Adultes', success: false, attempts: 1, wallInfo: devers });
+    const next = applyValidationToWeeklyMissions(baseState(), { color: 'rouge', wall: 'Grotte Adultes', neverTriedBefore: true, success: false, attempts: 1, wallInfo: devers });
     expect(next.done).not.toContain('M5');
   });
 
   it('M2 : atteint 4 murs comptabilisables distincts cette semaine', () => {
     let state = baseState({ walls: ['Dalle', 'Güllich', 'Grotte Adultes'] });
-    state = applyValidationToWeeklyMissions(state, { color: 'jaune', wall: 'Grande Face', success: false, attempts: 1, wallInfo: { category: 'autre', kidsOnly: false } });
+    state = applyValidationToWeeklyMissions(state, { color: 'jaune', wall: 'Grande Face', neverTriedBefore: true, success: false, attempts: 1, wallInfo: { category: 'autre', kidsOnly: false } });
     expect(state.walls).toHaveLength(4);
     expect(state.done).toContain('M2');
   });
@@ -146,20 +146,20 @@ describe('applyValidationToWeeklyMissions', () => {
   it('M2 : un mur déjà compté ce mur ne fait pas doublon', () => {
     const state = applyValidationToWeeklyMissions(
       baseState({ walls: ['Dalle', 'Güllich', 'Grotte Adultes'] }),
-      { color: 'jaune', wall: 'Dalle', success: false, attempts: 1, wallInfo: dalle }
+      { color: 'jaune', wall: 'Dalle', neverTriedBefore: true, success: false, attempts: 1, wallInfo: dalle }
     );
     expect(state.walls).toHaveLength(3);
     expect(state.done).not.toContain('M2');
   });
 
   it('M2 : un résultat (succès OU échec) compte, pas seulement un succès', () => {
-    const state = applyValidationToWeeklyMissions(baseState(), { color: 'jaune', wall: 'Dalle', success: false, attempts: 4, wallInfo: dalle });
+    const state = applyValidationToWeeklyMissions(baseState(), { color: 'jaune', wall: 'Dalle', neverTriedBefore: true, success: false, attempts: 4, wallInfo: dalle });
     expect(state.walls).toContain('Dalle');
   });
 
   it('⚠️ grimpeur >= 10 ans : un mur kidsOnly ne compte NI pour M2 NI pour M6', () => {
     const adulte = baseState({ countsChildWalls: false, walls: ['Dalle', 'Güllich', 'Grotte Adultes'] });
-    const next = applyValidationToWeeklyMissions(adulte, { color: 'rouge', wall: "Réta d'initiation", success: true, attempts: 1, wallInfo: kidsReta });
+    const next = applyValidationToWeeklyMissions(adulte, { color: 'rouge', wall: "Réta d'initiation", neverTriedBefore: true, success: true, attempts: 1, wallInfo: kidsReta });
     expect(next.walls).toHaveLength(3); // pas ajouté
     expect(next.done).not.toContain('M2');
     expect(next.done).not.toContain('M6');
@@ -167,7 +167,7 @@ describe('applyValidationToWeeklyMissions', () => {
 
   it('⚠️ grimpeur < 10 ans : le même résultat sur ce mur compte pour M2 ET M6', () => {
     const enfant = baseState({ countsChildWalls: true, walls: ['Dalle', 'Güllich', 'Grotte Adultes'] });
-    const next = applyValidationToWeeklyMissions(enfant, { color: 'rouge', wall: "Réta d'initiation", success: true, attempts: 1, wallInfo: kidsReta });
+    const next = applyValidationToWeeklyMissions(enfant, { color: 'rouge', wall: "Réta d'initiation", neverTriedBefore: true, success: true, attempts: 1, wallInfo: kidsReta });
     expect(next.walls).toHaveLength(4);
     expect(next.done).toContain('M2');
     expect(next.done).toContain('M6');
@@ -176,15 +176,15 @@ describe('applyValidationToWeeklyMissions', () => {
   it('ne mute jamais l\'état reçu en entrée', () => {
     const state = baseState({ done: ['M8'] });
     const snapshot = JSON.stringify(state);
-    applyValidationToWeeklyMissions(state, { color: 'rouge', wall: 'Dalle', success: true, attempts: 1, wallInfo: dalle });
+    applyValidationToWeeklyMissions(state, { color: 'rouge', wall: 'Dalle', neverTriedBefore: true, success: true, attempts: 1, wallInfo: dalle });
     expect(JSON.stringify(state)).toBe(snapshot);
   });
 
   it('renvoie completedAt dès que les 8 missions sont réunies, jamais avant', () => {
     const almost = baseState({ done: ['M1', 'M2', 'M3', 'M5', 'M6', 'M7', 'M8'] });
-    const still = applyValidationToWeeklyMissions(almost, { color: 'jaune', wall: 'Grande Face', success: false, attempts: 1, wallInfo: { category: 'autre', kidsOnly: false } });
+    const still = applyValidationToWeeklyMissions(almost, { color: 'jaune', wall: 'Grande Face', neverTriedBefore: true, success: false, attempts: 1, wallInfo: { category: 'autre', kidsOnly: false } });
     expect(still.completedAt).toBeNull();
-    const complete = applyValidationToWeeklyMissions(almost, { color: 'noir', wall: 'Dalle', success: false, attempts: 1, wallInfo: dalle }); // M4
+    const complete = applyValidationToWeeklyMissions(almost, { color: 'noir', wall: 'Dalle', neverTriedBefore: true, success: false, attempts: 1, wallInfo: dalle }); // M4
     expect(complete.done.sort()).toEqual([...MISSION_KEYS].sort());
     expect(complete.completedAt).not.toBeNull();
   });
@@ -222,5 +222,20 @@ describe('describeMission', () => {
     expect(describeMission('M1', state)).toContain('rouge');
     expect(describeMission('M3', state)).toContain('violet'); // max-1 de rouge
     expect(describeMission('M4', state)).toContain('noir'); // max+1 de rouge
+  });
+});
+
+describe('V2.69 : M3 exige un bloc jamais tenté, gestes de mission', () => {
+  it('une répétition en un essai n\'est PAS un flash (M3 non cochée, M1 oui)', () => {
+    const next = applyValidationToWeeklyMissions(baseState(), { color: 'rouge', wall: 'Dalle', neverTriedBefore: false, success: true, attempts: 1, wallInfo: dalle });
+    expect(next.done).not.toContain('M3');
+    expect(next.done).toContain('M1');
+  });
+
+  it('missionGestureAdvances : vrai si une case ou un mur s\'ajoute, faux sinon', () => {
+    const event = { color: 'rouge', wall: 'Dalle', neverTriedBefore: false, success: true, attempts: 0, wallInfo: dalle };
+    expect(missionGestureAdvances(baseState(), event)).toBe(true);
+    const already = applyValidationToWeeklyMissions(baseState(), event);
+    expect(missionGestureAdvances(already, event)).toBe(false);
   });
 });

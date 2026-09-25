@@ -15,8 +15,8 @@
 // (compteur Roulette, liste des 10 derniers défis).
 import { addRouletteCompletion, type RouletteCompletion } from './roulette';
 import {
-  resolveWeeklyMissionsState, applyDeclarativeMission, isWeeklyMissionsGridComplete,
-  type WeeklyMissionsState, type MissionKey,
+  resolveWeeklyMissionsState, applyDeclarativeMission, applyValidationToWeeklyMissions, isWeeklyMissionsGridComplete,
+  type WeeklyMissionsState, type MissionKey, type BoulderValidationEvent,
 } from './weeklyMissions';
 
 export interface LudicMissionsSnapshot {
@@ -40,6 +40,23 @@ export const buildDeclarativeMissionPatch = (
   const base = resolveWeeklyMissionsState(stored.weeklyMissions, now, missionsFige.level, missionsFige.countsChildWalls);
   const wasComplete = isWeeklyMissionsGridComplete(base);
   const weeklyMissions = applyDeclarativeMission(base, missionKey);
+  const weeklyMissionsCompleted = (stored.weeklyMissionsCompleted || 0)
+    + (!wasComplete && isWeeklyMissionsGridComplete(weeklyMissions) ? 1 : 0);
+  return { weeklyMissions, weeklyMissionsCompleted };
+};
+
+// ✅ V2.69 (RETOUR-bug-missions-et-revalidation.md §2.8/§2.10) : gestes "J'ai testé ce bloc" /
+// "Je l'ai refait" — font avancer la grille, n'écrivent JAMAIS de résultat de bloc. Écrivain
+// dédié, hors de la transaction débouncée du classement (le couplage à l'origine du bug V2.68).
+export const buildMissionGesturePatch = (
+  stored: LudicMissionsSnapshot,
+  event: BoulderValidationEvent,
+  missionsFige: MissionsFige,
+  now: Date
+): { weeklyMissions: WeeklyMissionsState; weeklyMissionsCompleted: number } => {
+  const base = resolveWeeklyMissionsState(stored.weeklyMissions, now, missionsFige.level, missionsFige.countsChildWalls);
+  const wasComplete = isWeeklyMissionsGridComplete(base);
+  const weeklyMissions = applyValidationToWeeklyMissions(base, event);
   const weeklyMissionsCompleted = (stored.weeklyMissionsCompleted || 0)
     + (!wasComplete && isWeeklyMissionsGridComplete(weeklyMissions) ? 1 : 0);
   return { weeklyMissions, weeklyMissionsCompleted };

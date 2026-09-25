@@ -11,6 +11,17 @@ export interface ChangelogEntry {
 // tout l'historique ici, l'historique complet vit dans les commits git.
 export const changelog: ChangelogEntry[] = [
   {
+    version: '2.69',
+    date: '2026-09-25',
+    title: 'Votre première réussite fait foi',
+    items: [
+      'Un bloc déjà réussi affiche désormais « Déjà validé le … en N essais » : refaire un bloc ne modifie plus votre résultat ni le classement. C\'est votre première réussite qui mesure votre niveau.',
+      'Le nombre d\'essais se choisit avant de valider « Réussi » : plus de valeur par défaut à 1 essai.',
+      'Une erreur de saisie ? « Corriger ma saisie » sur la fiche du bloc, sans limite de temps.',
+      'Missions de la semaine : « J\'ai testé ce bloc » et « Je l\'ai refait » font avancer vos missions sans rien enregistrer. Les cases cochées ne disparaissent plus.',
+    ],
+  },
+  {
     version: '2.68',
     date: '2026-09-24',
     title: 'Missions hebdomadaires',

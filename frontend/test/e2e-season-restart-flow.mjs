@@ -184,6 +184,10 @@ async function main() {
     await clientBP.getByRole('button', { name: /^Dalle/ }).first().click();
     await clientBP.getByText('Bloc n°21', { exact: false }).click();
     await clientBP.getByText('Bloc n°21 - Dalle', { exact: false }).waitFor({ timeout: 10000 });
+    // V2.69 : nombre d'essais obligatoire avant « Réussi » (plus de défaut à 1).
+    await clientBP.locator('#nombre-d-essais-select').click();
+    await clientBP.getByRole('option', { name: '1 essai', exact: true }).click();
+    await clientBP.locator('[role="presentation"].MuiPopover-root').waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
     await clientBP.getByRole('button', { name: '✅ Réussi' }).click();
     await clientBP.getByText('Réussite enregistrée', { exact: false }).waitFor({ timeout: 10000 });
     await clientBP.getByRole('button', { name: 'Annuler' }).click(); // flushAll + ferme

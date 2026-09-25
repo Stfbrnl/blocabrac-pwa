@@ -66,6 +66,10 @@ async function openWallList(page) {
 async function validateBoulder(page, boulderNumber) {
   await page.getByText(`Bloc n°${boulderNumber}`, { exact: false }).click();
   await page.getByText(`Bloc n°${boulderNumber} - ${WALL}`, { exact: false }).waitFor({ timeout: 10000 });
+  // V2.69 : nombre d'essais obligatoire avant « Réussi » (plus de défaut à 1).
+  await page.locator('#nombre-d-essais-select').click();
+  await page.getByRole('option', { name: '1 essai', exact: true }).click();
+  await page.locator('[role="presentation"].MuiPopover-root').waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
   await page.getByRole('button', { name: '✅ Réussi' }).click();
   await page.getByText('Réussite enregistrée', { exact: false }).waitFor({ timeout: 10000 });
   await page.getByRole('button', { name: 'Annuler' }).click();

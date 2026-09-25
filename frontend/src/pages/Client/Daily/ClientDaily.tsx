@@ -27,19 +27,25 @@ import { useTheme } from '@mui/material/styles';
 import { walls as wallList, colorGrades, mysteryColorHexKey, mysteryColorHex, logoPath, storageKeyPrefix, firstAscentColors, climbingMethods, MAX_METHODS_PER_VOTE, wallCategories } from '../../../config/gymConfig';
 import { getBoulderImageUrl } from '../../../services/imageStorage';
 import CasinoIcon from '@mui/icons-material/Casino';
+import ExploreIcon from '@mui/icons-material/Explore';
+import ReplayIcon from '@mui/icons-material/Replay';
 import { levelOrder, type Level } from '../../../utils/competitionEligibility';
 import { resolveSeuilTargetColor } from '../../../utils/challenges';
 import {
-  drawProposal, drawDeathProposal, resolveDrawLabel,
+  drawProposal, drawDeathProposal, resolveDrawLabel, resolveTargetColor,
   type DrawResult, type WallCounts, type RouletteCompletion,
 } from '../../../utils/roulette';
 import RouletteDialog, { type RouletteChosenBoulder } from './RouletteDialog';
-import { getLudicState, incrementRouletteCompleted, recordDeclarativeMission } from '../../../services/ludicState';
+import { getLudicState, incrementRouletteCompleted, recordDeclarativeMission, recordMissionGesture } from '../../../services/ludicState';
+import {
+  planResultWrite, storedResultFromDoc, isAlreadySucceeded,
+  type StoredBoulderResult, type BoulderResultFields,
+} from '../../../utils/boulderResult';
 import {
   resolveWeeklyMissionsState, applyValidationToWeeklyMissions, mergeWeeklyMissionsForDisplay,
-  isAtLevelCeiling, isWeeklyMissionsGridComplete, describeMission,
+  isAtLevelCeiling, isWeeklyMissionsGridComplete, describeMission, missionGestureAdvances,
   MISSION_KEYS, MISSION_M4_BIS_LABEL, WEEKLY_MISSIONS_WALLS_TARGET,
-  type WeeklyMissionsState,
+  type WeeklyMissionsState, type BoulderValidationEvent,
 } from '../../../utils/weeklyMissions';
 import { getSeasonAge } from '../../../utils/ageCategory';
 
@@ -162,7 +168,7 @@ const ClientDaily: React.FC = () => {
     weeklyMissions?: WeeklyMissionsState;
     weeklyMissionsCompleted?: number;
   }>({});
-  // ✅ Ref-de-state (même discipline que `activeChallengesRef`/`lastPersistedResultRef`) :
+  // ✅ Ref-de-state (même discipline que `activeChallengesRef`) :
   // `handleValiderRoulette` doit repartir de l'état LE PLUS RÉCENT pour recomposer la liste
   // des 10 derniers défis (deux validations rapprochées sans remontage sinon → la 2e écrase
   // la 1re dans le tableau — retour ClaudeNav 06/09). La ref est mise à jour dans un effet,
@@ -203,7 +209,14 @@ const ClientDaily: React.FC = () => {
   // réécrit à chaque édition, cf. docs/handoffs/RELECTURE-classement-saisonnier.md §1).
   // ✅ §B.6 du plan : `methods` ajouté au même cache/à la même lecture — aucun coût
   // supplémentaire, c'est le même document déjà lu pour attempts/success/createdAt.
-  const previousStateCacheRef = useRef<Map<string, { attempts: number; success: boolean; createdAt: string; methods: string[] } | null>>(new Map());
+  // ✅ V2.69 : le cache porte désormais le résultat stocké COMPLET (note, commentaire, cotation
+  // proposée) — il alimente le pré-remplissage de la fiche et l'affichage en lecture seule d'un
+  // bloc déjà réussi (docs/handoffs/RETOUR-bug-missions-et-revalidation.md §2.3/§2.4).
+  // `storedResults` en est le miroir pour le rendu (clé absente = pas encore chargé).
+  const previousStateCacheRef = useRef<Map<string, StoredBoulderResult | null>>(new Map());
+  const [storedResults, setStoredResults] = useState<Record<string, StoredBoulderResult | null>>({});
+  const [correctionMode, setCorrectionMode] = useState(false);
+  const [missionGestureBusy, setMissionGestureBusy] = useState(false);
 
   // ✅ Chantier écritures point 5 : classement_profiles est un résumé dérivé, pas la
   // donnée source — pas besoin d'être exact à la seconde près. Les deltas sont accumulés
@@ -286,16 +299,6 @@ const ClientDaily: React.FC = () => {
   // justifie pas. `null` = pas encore configurée par l'admin (aucune validation ne compte
   // alors pour la saison, seulement pour la progression personnelle all-time).
   const seasonWindowRef = useRef<{ debut: string; fin: string } | null>(null);
-
-  // ✅ Chantier écritures point 3 : dernière valeur réellement PERSISTÉE (pas
-  // affichée) par bloc pour client_boulder_results — évite une écriture si un
-  // reclic sur "Réussi" déjà actif ou un "Enregistrer" sans changement
-  // reproduit exactement l'état déjà écrit. Ne couvre que la session en cours
-  // (pas de lecture au montage : en ajouter une reviendrait sur le correctif
-  // de lectures de ClientDaily fait plus tôt ce jour-là).
-  const lastPersistedResultRef = useRef<Record<string, {
-    success: boolean; rating: number; comment: string; attempts: number; proposedDifficulty: string | null;
-  }>>({});
 
   useEffect(() => {
     if (!user || loadingAuth) return;
@@ -463,9 +466,30 @@ const ClientDaily: React.FC = () => {
     setOpenWallDialog(true);
   };
 
+  // ✅ V2.69 (§2.3/§2.4) : à l'ouverture, charge le résultat déjà enregistré (une lecture, une
+  // fois par bloc et par session — la même que celle qu'un clic faisait déjà) et pré-remplit
+  // note/commentaire/cotation/méthodes. Un bloc déjà réussi s'affiche alors en lecture seule.
+  // Le nombre d'essais n'est PAS pré-rempli pour un bloc non réussi : choix explicite requis.
   const handleOpenBoulder = (boulder: Boulder) => {
     setSelectedBoulder(boulder);
+    setCorrectionMode(false);
     setOpenBoulderDialog(true);
+    if (!user || previousStateCacheRef.current.has(boulder.id)) return;
+    resolvePreviousResultState(user.uid, boulder.id)
+      .then((stored) => {
+        if (!stored) return;
+        const fillIfEmpty = <T,>(setter: React.Dispatch<React.SetStateAction<Record<string, T>>>, value: T) =>
+          setter((prev) => (prev[boulder.id] === undefined ? { ...prev, [boulder.id]: value } : prev));
+        if (stored.rating) fillIfEmpty(setRatings, stored.rating);
+        if (stored.comment) fillIfEmpty(setComments, stored.comment);
+        if (stored.proposedDifficulty) fillIfEmpty(setProposedDifficulties, stored.proposedDifficulty);
+        fillIfEmpty(setSelectedMethods, stored.methods);
+        fillIfEmpty(setSuccessResults, stored.success);
+      })
+      .catch((err) => {
+        console.error("Erreur lors de la lecture du résultat enregistré:", err);
+        setError("Impossible de charger ton résultat sur ce bloc — réessaie dans un instant.");
+      });
   };
 
   // ✅ Bloc Roulette : lecture/écriture localStorage isolées ici (pas dans utils/roulette.ts,
@@ -680,7 +704,7 @@ const ClientDaily: React.FC = () => {
   // donc de cette carte — comme avant ce chantier (l'ancien filtre `colorById.has(bId)`
   // avait le même effet) : sa contribution au classement reste celle du dernier calcul
   // avant désactivation, elle n'est plus mise à jour tant qu'il ne redevient pas actif.
-  // Cas marginal, inchangé par ce chantier — voir handleValidateSuccess/handleRate,
+  // Cas marginal, inchangé par ce chantier — voir writeBoulderResult,
   // qui n'appliquent un delta que si `colorById.get(boulderId)` résout une couleur.
   const colorById = useMemo(
     () => new Map(boulders.map((b) => [b.id, b.color || b.difficulty || 'Inconnu'])),
@@ -709,31 +733,50 @@ const ClientDaily: React.FC = () => {
   // §1 : avant ce correctif, `createdAt` était réécrit à "maintenant" à CHAQUE édition
   // (même setDoc que `updatedAt`), donc inutilisable pour savoir quand une validation a
   // réellement eu lieu — un prérequis du classement de saison.
-  const resolvePreviousResultState = async (uid: string, boulderId: string): Promise<{ attempts: number; success: boolean; createdAt: string; methods: string[] } | null> => {
+  const rememberStoredResult = (boulderId: string, stored: StoredBoulderResult | null) => {
+    previousStateCacheRef.current.set(boulderId, stored);
+    setStoredResults((prev) => ({ ...prev, [boulderId]: stored }));
+  };
+
+  const resolvePreviousResultState = async (uid: string, boulderId: string): Promise<StoredBoulderResult | null> => {
     const cached = previousStateCacheRef.current.get(boulderId);
     if (cached !== undefined) return cached;
-    try {
-      const snap = await getDoc(doc(db, 'client_boulder_results', `${uid}_${boulderId}`));
-      if (!snap.exists()) return null;
-      const data = snap.data();
-      return {
-        attempts: data.attempts || 1,
-        success: !!data.success,
-        createdAt: data.createdAt || new Date().toISOString(), // ✅ repli si un doc antérieur au correctif n'a jamais eu ce champ correctement peuplé
-        methods: data.methods || [] // ✅ §B.6 : carnet de méthodes, même lecture, zéro coût supplémentaire
-      };
-    } catch (err) {
-      console.error("Erreur lors de la lecture de l'ancien résultat:", err);
-      return null; // ✅ Traité comme "pas de résultat antérieur" — le script de réconciliation corrigera un éventuel écart de classement ; createdAt repartira de "maintenant" pour ce document.
+    // ✅ Un échec de lecture REMONTE (V2.69) : l'ancien repli "traité comme pas de résultat
+    // antérieur" aurait, sous la règle B, laissé réécrire un bloc déjà réussi comme une
+    // première saisie. Mieux vaut refuser le geste et afficher l'erreur.
+    const snap = await getDoc(doc(db, 'client_boulder_results', `${uid}_${boulderId}`));
+    const stored = snap.exists() ? storedResultFromDoc(snap.data(), new Date().toISOString()) : null;
+    rememberStoredResult(boulderId, stored);
+    return stored;
+  };
+
+  // ✅ V2.69 (§2.5) : UNIQUE chemin d'écriture de client_boulder_results depuis cet écran —
+  // `merge`, et seulement les champs que le geste pilote (planResultWrite, pur). Le delta de
+  // classement n'est appliqué qu'après le succès de l'écriture, et seulement si l'état
+  // "réussi / nombre d'essais" a réellement changé.
+  const writeBoulderResult = async (boulderId: string, fields: BoulderResultFields) => {
+    if (!user) return null;
+    const previous = await resolvePreviousResultState(user.uid, boulderId);
+    const plan = planResultWrite(previous, fields, new Date().toISOString());
+    if (!plan.changed) return { previous, plan, written: false };
+    await setDoc(
+      doc(db, 'client_boulder_results', `${user.uid}_${boulderId}`),
+      { userId: user.uid, boulderId, ...plan.patch },
+      { merge: true }
+    );
+    rememberStoredResult(boulderId, plan.next);
+    const classementColor = colorById.get(boulderId);
+    const classementMoved = JSON.stringify(plan.classementBefore) !== JSON.stringify(plan.classementAfter);
+    if (classementColor && classementMoved) {
+      applyClassementDelta(classementColor, plan.classementBefore, plan.next.success, plan.next.attempts ?? 1, plan.next.createdAt, wallById.get(boulderId), boulderId);
     }
+    return { previous, plan, written: true };
   };
 
   // ✅ Mutation : appelée seulement après le succès du setDoc de l'appelant. Construit le
   // delta de cette validation et le confie à la file débouncée (voir `classementQueue`
   // ci-dessus) — `enqueue` fusionne (additionne) avec un éventuel delta déjà en attente et
-  // (re)planifie le flush. Ne touche plus au cache de l'état précédent (voir
-  // `cachePreviousResultState` ci-dessous, appelé séparément par l'appelant pour couvrir
-  // aussi le cas sans couleur).
+  // (re)planifie le flush. Appelée uniquement par writeBoulderResult (V2.69), après l'écriture.
   const applyClassementDelta = (
     color: string,
     previous: { attempts: number } | null,
@@ -806,14 +849,6 @@ const ClientDaily: React.FC = () => {
     classementQueue.enqueue('classement', delta);
   };
 
-  // ✅ Met à jour le cache de session avec l'état réellement écrit — appelée
-  // inconditionnellement après chaque setDoc réussi (contrairement à
-  // `applyClassementDelta`, qui ne tourne que si le bloc a une couleur). Sans couleur,
-  // il n'y a pas de delta de classement à appliquer, mais `createdAt` doit quand même
-  // être mémorisé pour la prochaine édition de ce même bloc dans la session.
-  const cachePreviousResultState = (boulderId: string, success: boolean, resultAttempts: number, createdAt: string, methods: string[]) => {
-    previousStateCacheRef.current.set(boulderId, { attempts: resultAttempts, success, createdAt, methods });
-  };
 
 
   // ✅ docs/plans/PLAN-premiers-ascensionnistes.md §6 : écriture IMMÉDIATE (pas débouncée, contrairement
@@ -897,160 +932,172 @@ const ClientDaily: React.FC = () => {
     }
   };
 
+  // ✅ V2.69 — Règle "B sans fenêtre" (docs/handoffs/RETOUR-bug-missions-et-revalidation.md §2) :
+  // "Réussi"/"Échoué" ne s'appliquent qu'à un bloc PAS ENCORE réussi (jamais tenté, ou tenté et
+  // échoué — §2.7 : l'échec puis la réussite est bien une première réussite). Sur un bloc déjà
+  // réussi, la fiche est en lecture seule ; seules "Corriger ma saisie" (sans limite de temps)
+  // et le geste "Je l'ai refait" (mission seule) restent possibles. Le garde-fou est aussi ici,
+  // pas seulement dans l'interface.
+  //
+  // Missions : évaluées sur ce geste, AVANT l'écriture (un reclic "Échoué" identique ne réécrit
+  // rien mais reste un essai fait cette semaine). M3 (flash) exige qu'il n'existe AUCUN résultat
+  // antérieur pour ce bloc (§2.6) — une répétition en un essai n'est pas un flash.
   const handleValidateSuccess = async (boulderId: string, success: boolean) => {
     if (!user) return;
+    const chosenAttempts = attempts[boulderId];
+    // ✅ §2.4 : plus de valeur par défaut à 1 — un "Réussi" sans nombre d'essais choisi
+    // déclarerait un flash à l'insu du grimpeur.
+    if (success && !chosenAttempts) {
+      setError("Choisis d'abord ton nombre d'essais.");
+      return;
+    }
+    try {
+      const previous = await resolvePreviousResultState(user.uid, boulderId);
+      if (isAlreadySucceeded(previous)) return;
 
-    // ✅ docs/plans/PLAN-anecdote-methodes-missions.md §C.3.a — POINT DÉCISIF : M1 doit être
-    // évaluée sur le GESTE, pas sur une écriture. Depuis V2.28, reclique "Réussi" sur un bloc
-    // déjà validé à l'identique ne produit AUCUNE écriture (voir le contrôle de dédoublonnage
-    // juste en dessous) — donc cette évaluation tourne ICI, avant ce contrôle, inconditionnellement.
-    // Conséquence assumée (§C.3.a) : M1 est trivialement cochable en recliquant un bouton — même
-    // doctrine de confiance que le reste du projet (saison, Roulette). ⚠️ Si les missions
-    // rapportent un jour des points au classement, M1 devra être restreinte aux validations dont
-    // `createdAt` tombe dans la semaine — ne pas l'oublier, la note est aussi dans CLAUDE.md.
-    const currentMissions = selfProfile.weeklyMissions;
-    if (currentMissions) {
-      const boulderWallForMissions = wallById.get(boulderId);
-      const wallInfo = boulderWallForMissions ? wallCategories[boulderWallForMissions] : undefined;
-      const nextMissions = applyValidationToWeeklyMissions(currentMissions, {
-        color: colorById.get(boulderId),
-        wall: boulderWallForMissions,
+      const currentMissions = selfProfileRef.current.weeklyMissions;
+      if (currentMissions) {
+        const boulderWallForMissions = wallById.get(boulderId);
+        const nextMissions = applyValidationToWeeklyMissions(currentMissions, {
+          color: colorById.get(boulderId),
+          wall: boulderWallForMissions,
+          success,
+          attempts: chosenAttempts ?? 0,
+          neverTriedBefore: previous === null,
+          wallInfo: boulderWallForMissions ? wallCategories[boulderWallForMissions] : undefined,
+        });
+        const newlyDone = nextMissions.done.filter((m) => !currentMissions.done.includes(m));
+        const newlyVisited = nextMissions.walls.filter((w) => !currentMissions.walls.includes(w));
+        if (newlyDone.length > 0 || newlyVisited.length > 0) {
+          setSelfProfile((prev) => ({ ...prev, weeklyMissions: nextMissions }));
+          const missionDelta = emptyClassementFlushPending();
+          newlyDone.forEach((m) => missionDelta.missionsNewlyDone.add(m));
+          newlyVisited.forEach((w) => missionDelta.wallsNewlyVisited.add(w));
+          missionDelta.missionsFige = { level: currentMissions.level, countsChildWalls: currentMissions.countsChildWalls };
+          classementQueue.enqueue('classement', missionDelta);
+        }
+      }
+
+      const result = await writeBoulderResult(boulderId, {
         success,
-        attempts: attempts[boulderId] || 1,
-        wallInfo,
+        attempts: chosenAttempts,
+        proposedDifficulty: proposedDifficulties[boulderId] || undefined,
       });
-      const newlyDone = nextMissions.done.filter((m) => !currentMissions.done.includes(m));
-      const newlyVisited = nextMissions.walls.filter((w) => !currentMissions.walls.includes(w));
-      if (newlyDone.length > 0 || newlyVisited.length > 0) {
-        setSelfProfile((prev) => ({ ...prev, weeklyMissions: nextMissions }));
-        const missionDelta = emptyClassementFlushPending();
-        newlyDone.forEach((m) => missionDelta.missionsNewlyDone.add(m));
-        newlyVisited.forEach((w) => missionDelta.wallsNewlyVisited.add(w));
-        missionDelta.missionsFige = { level: currentMissions.level, countsChildWalls: currentMissions.countsChildWalls };
-        classementQueue.enqueue('classement', missionDelta);
-      }
-    }
-
-    const candidate = {
-      success,
-      rating: ratings[boulderId] || 0,
-      comment: comments[boulderId] || '',
-      attempts: attempts[boulderId] || 1,
-      proposedDifficulty: proposedDifficulties[boulderId] || null,
-    };
-    const last = lastPersistedResultRef.current[boulderId];
-    if (last &&
-        last.success === candidate.success &&
-        last.rating === candidate.rating &&
-        last.comment === candidate.comment &&
-        last.attempts === candidate.attempts &&
-        last.proposedDifficulty === candidate.proposedDifficulty) {
-      // ✅ Chantier écritures point 3 : état déjà persisté à l'identique
-      // (reclic sur "Réussi" déjà actif) — rien à écrire.
-      return;
-    }
-    // ✅ Lu AVANT l'écrasement du document (pure lecture, aucune mutation) : c'est le
-    // seul moment où l'ancien état de ce bloc est encore en base. Appelé sans condition
-    // de couleur — createdAt doit être préservé même sur un bloc sans couleur active.
-    const classementColor = colorById.get(boulderId);
-    const previousResultState = await resolvePreviousResultState(user.uid, boulderId);
-    try {
-      const resultId = `${user.uid}_${boulderId}`;
-      // ✅ createdAt préservé depuis la première écriture de ce document (jamais
-      // réécrit ensuite) — updatedAt continue de refléter chaque édition.
-      const createdAt = previousResultState?.createdAt ?? new Date().toISOString();
-      // ✅ §B.6 : `setDoc` sans merge REMPLACE tout le document — sans ce report explicite
-      // (même geste que `createdAt` juste au-dessus), un vote du carnet de méthodes déjà
-      // enregistré serait silencieusement effacé à la prochaine validation de ce bloc.
-      const methods = previousResultState?.methods ?? [];
-      await setDoc(doc(db, 'client_boulder_results', resultId), {
-        userId: user.uid,
-        boulderId,
-        ...candidate,
-        createdAt,
-        methods,
-        updatedAt: new Date().toISOString()
-      });
-      lastPersistedResultRef.current[boulderId] = candidate;
-      cachePreviousResultState(boulderId, candidate.success, candidate.attempts, createdAt, methods);
-      // ✅ §B.6 : le carnet de méthodes ne se propose qu'"après le clic Réussi" — la
-      // sélection affichée part de ce qui est déjà voté, jamais d'une case vide qui ferait
-      // perdre le fil d'un vote antérieur à une session précédente.
-      setSelectedMethods(prev => ({ ...prev, [boulderId]: methods }));
       setSuccessResults(prev => ({ ...prev, [boulderId]: success }));
-      setSuccess('Réussite enregistrée!');
-      setTimeout(() => setSuccess(null), 3000);
-      // ✅ Appliqué seulement maintenant que l'écriture a réussi : si le setDoc
-      // ci-dessus avait échoué, aucune mutation du classement n'aurait eu lieu.
-      if (classementColor) {
-        const previousClassementState = previousResultState?.success ? { attempts: previousResultState.attempts } : null;
-        applyClassementDelta(classementColor, previousClassementState, success, candidate.attempts, createdAt, wallById.get(boulderId), boulderId);
+      if (success) {
+        // ✅ §B.6 : le carnet de méthodes ne se propose qu'après une réussite — la sélection
+        // affichée part de ce qui est déjà voté.
+        setSelectedMethods(prev => ({ ...prev, [boulderId]: result?.plan.next.methods ?? [] }));
+        setSuccess('Réussite enregistrée!');
+        setTimeout(() => setSuccess(null), 3000);
+        if (result?.written) void maybeRecordFirstAscent(boulderId, true);
       }
-      // ✅ Après la classement — voir le commentaire de maybeRecordFirstAscent : ne doit
-      // jamais bloquer/retarder l'écriture principale ni son message de succès ci-dessus.
-      void maybeRecordFirstAscent(boulderId, success);
     } catch (err: unknown) {
       setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
-  const handleRate = async (boulderId: string, rating: number | null, comment: string) => {
-    if (!rating || !user) return;
-    const candidate = {
-      success: successResults[boulderId] || false,
-      rating,
-      comment,
-      attempts: attempts[boulderId] || 1,
-      proposedDifficulty: proposedDifficulties[boulderId] || null,
-    };
-    const last = lastPersistedResultRef.current[boulderId];
-    if (last &&
-        last.success === candidate.success &&
-        last.rating === candidate.rating &&
-        last.comment === candidate.comment &&
-        last.attempts === candidate.attempts &&
-        last.proposedDifficulty === candidate.proposedDifficulty) {
-      return;
-    }
-    // ✅ "Enregistrer" est le seul endroit où un changement du nombre d'essais fait
-    // après le clic Réussi/Échoué initial est réellement sauvegardé (même doc,
-    // ré-écrit ici) : il faut donc aussi rafraîchir le classement à ce moment, sinon
-    // le score reste basé sur la valeur d'essais du tout premier clic. Lu AVANT
-    // l'écrasement du document, même raison que dans handleValidateSuccess. Appelé sans
-    // condition de couleur — createdAt doit être préservé même sur un bloc sans couleur
-    // active.
-    const classementColor = colorById.get(boulderId);
-    const previousResultState = await resolvePreviousResultState(user.uid, boulderId);
+  // ✅ "Enregistrer" : note, commentaire, cotation proposée — jamais `success`/`attempts`
+  // (V2.69 : le nombre d'essais d'un bloc déjà réussi ne se change que par "Corriger ma saisie").
+  const handleSaveNotes = async (boulderId: string) => {
+    if (!user) return;
+    const rating = ratings[boulderId] || 0;
+    const comment = comments[boulderId];
+    const proposedDifficulty = proposedDifficulties[boulderId] || undefined;
     try {
-      const resultId = `${user.uid}_${boulderId}`;
-      // ✅ createdAt préservé depuis la première écriture de ce document (jamais
-      // réécrit ensuite) — updatedAt continue de refléter chaque édition.
-      const createdAt = previousResultState?.createdAt ?? new Date().toISOString();
-      // ✅ §B.6 : même report explicite qu'dans handleValidateSuccess — setDoc sans merge
-      // remplace tout le document, "Enregistrer" ne doit pas effacer un vote déjà en place.
-      const methods = previousResultState?.methods ?? [];
-      await setDoc(doc(db, 'client_boulder_results', resultId), {
-        userId: user.uid,
-        boulderId,
-        ...candidate,
-        createdAt,
-        methods,
-        updatedAt: new Date().toISOString()
+      const previous = await resolvePreviousResultState(user.uid, boulderId);
+      // Rien à enregistrer sur un bloc jamais saisi : ne pas créer de document vide.
+      if (!previous && !rating && !comment && !proposedDifficulty) return;
+      const result = await writeBoulderResult(boulderId, {
+        rating: rating || undefined,
+        comment,
+        proposedDifficulty,
       });
-      lastPersistedResultRef.current[boulderId] = candidate;
-      cachePreviousResultState(boulderId, candidate.success, candidate.attempts, createdAt, methods);
-      if (classementColor) {
-        const previousClassementState = previousResultState?.success ? { attempts: previousResultState.attempts } : null;
-        applyClassementDelta(classementColor, previousClassementState, candidate.success, candidate.attempts, createdAt, wallById.get(boulderId), boulderId);
+      if (result?.written) {
+        setSuccess('Note enregistrée!');
+        setTimeout(() => setSuccess(null), 3000);
       }
-      setRatings(prev => ({ ...prev, [boulderId]: rating }));
-      setComments(prev => ({ ...prev, [boulderId]: comment }));
-      setSuccess('Note enregistrée!');
+    } catch (err: unknown) {
+      setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  // ✅ "Corriger ma saisie" (§2.2) : seul chemin pour modifier le nombre d'essais d'une réussite
+  // enregistrée, ou l'annuler — sans limite de temps. Le classement suit (delta 8 -> 2, ou
+  // sortie). Aucune mission n'est touchée : corriger n'est pas grimper.
+  const handleCorrectAttempts = async (boulderId: string) => {
+    const chosen = attempts[boulderId];
+    if (!chosen) return;
+    try {
+      await writeBoulderResult(boulderId, { attempts: chosen });
+      setCorrectionMode(false);
+      setSuccess('Saisie corrigée.');
       setTimeout(() => setSuccess(null), 3000);
     } catch (err: unknown) {
       setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
+
+  const handleCancelSuccess = async (boulderId: string) => {
+    if (!window.confirm('Annuler ta réussite sur ce bloc ? Il sortira de ton classement. Tu pourras le valider à nouveau plus tard.')) return;
+    try {
+      await writeBoulderResult(boulderId, { success: false });
+      setSuccessResults(prev => ({ ...prev, [boulderId]: false }));
+      setAttempts(prev => {
+        const next = { ...prev };
+        delete next[boulderId];
+        return next;
+      });
+      setCorrectionMode(false);
+      setSuccess('Réussite annulée.');
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err: unknown) {
+      setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  // ✅ V2.69 (§2.8/§2.10) : gestes de mission — "J'ai testé ce bloc" (max+1 pas encore réussi,
+  // M4) et "Je l'ai refait" (bloc déjà réussi). N'écrivent JAMAIS client_boulder_results :
+  // écrivain dédié (recordMissionGesture, relu dans une transaction), hors de la transaction
+  // débouncée du classement. Leçons V2.55 : pas d'UI optimiste (la grille ne bouge qu'après
+  // confirmation), état lu par ref et non capturé dans la fermeture.
+  const missionGestureEvent = (boulderId: string, kind: 'tested' | 'redone'): BoulderValidationEvent => {
+    const wall = wallById.get(boulderId);
+    return {
+      color: colorById.get(boulderId),
+      wall,
+      success: kind === 'redone',
+      attempts: 0,
+      neverTriedBefore: false,
+      wallInfo: wall ? wallCategories[wall] : undefined,
+    };
+  };
+
+  const handleMissionGesture = async (boulderId: string, kind: 'tested' | 'redone') => {
+    const missions = selfProfileRef.current.weeklyMissions;
+    if (!user || !missions || missionGestureBusy) return;
+    setMissionGestureBusy(true);
+    try {
+      const { weeklyMissions, weeklyMissionsCompleted } = await recordMissionGesture(
+        user.uid,
+        missionGestureEvent(boulderId, kind),
+        { level: missions.level, countsChildWalls: missions.countsChildWalls }
+      );
+      setSelfProfile((prev) => ({
+        ...prev,
+        weeklyMissions: mergeWeeklyMissionsForDisplay(prev.weeklyMissions, weeklyMissions),
+        weeklyMissionsCompleted,
+      }));
+      setSuccess('Mission avancée — aucun résultat de bloc enregistré.');
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err) {
+      console.error('Erreur lors du geste de mission:', err);
+      setError("La mission n'a pas pu être enregistrée — réessaie dans un instant.");
+    } finally {
+      setMissionGestureBusy(false);
+    }
+  };
+
 
   const handleReportIssue = async (boulderId: string, boulderNumber: number | string, wall: string) => {
     if (!user || !comments[boulderId] || !reportTypesSelected[boulderId]) return;
@@ -1135,7 +1182,7 @@ const ClientDaily: React.FC = () => {
                   const done = missions.done.includes(key);
                   const label = isM4Bis ? MISSION_M4_BIS_LABEL : describeMission(key, missions);
                   return (
-                    <Box key={key} sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5 }}>
+                    <Box key={key} data-mission-done={done ? 'true' : 'false'} sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5 }}>
                       <Typography component="span">{done ? '✅' : '⬜'}</Typography>
                       <Box>
                         <Typography variant="body2">
@@ -1144,7 +1191,7 @@ const ClientDaily: React.FC = () => {
                         </Typography>
                         {isM4Bis && !done && (
                           <Button size="small" variant="outlined" sx={{ mt: 0.5 }} onClick={handleMissionM4Bis}>
-                            C'est fait
+                            Je l'ai fait
                           </Button>
                         )}
                       </Box>
@@ -1382,28 +1429,136 @@ const ClientDaily: React.FC = () => {
                 </Box>
               )}
 
-              <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
-                <Button
-                  variant={successResults[selectedBoulder.id] === true ? "contained" : "outlined"}
-                  color="success"
-                  onClick={() => handleValidateSuccess(selectedBoulder.id, true)}
-                >
-                  ✅ Réussi
-                </Button>
-                <Button
-                  variant={successResults[selectedBoulder.id] === false ? "contained" : "outlined"}
-                  color="error"
-                  onClick={() => handleValidateSuccess(selectedBoulder.id, false)}
-                >
-                  ❌ Échoué
-                </Button>
-              </Box>
+              {/* ✅ V2.69 (docs/handoffs/RETOUR-bug-missions-et-revalidation.md §2) : trois états.
+                  1. bloc déjà réussi -> lecture seule ("Déjà validé le … en N essais") + gestes ;
+                  2. "Corriger ma saisie" -> seul chemin pour changer les essais ou annuler ;
+                  3. sinon -> choix EXPLICITE du nombre d'essais, puis Réussi / Échoué.
+                  Grammaire des boutons (§2.9) : un adjectif d'état écrit un résultat ("Réussi",
+                  "Échoué") ; la première personne au passé n'en écrit jamais ("J'ai testé ce
+                  bloc", "Je l'ai refait", "J'ai relevé le défi"). */}
+              {(() => {
+                const boulderId = selectedBoulder.id;
+                if (!(boulderId in storedResults)) {
+                  return <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}><CircularProgress size={24} /></Box>;
+                }
+                const stored = storedResults[boulderId];
+                const missions = selfProfile.weeklyMissions;
+                const boulderColor = colorById.get(boulderId);
+                const canRedone = !!missions && isAlreadySucceeded(stored) && missionGestureAdvances(missions, missionGestureEvent(boulderId, 'redone'));
+                const canTested = !!missions && !isAlreadySucceeded(stored) && !isAtLevelCeiling(missions.level)
+                  && boulderColor === resolveTargetColor(missions.level as Level, 'max+1').color
+                  && missionGestureAdvances(missions, missionGestureEvent(boulderId, 'tested'));
+                const gestureButton = (kind: 'tested' | 'redone') => (
+                  <Box sx={{ mb: 2 }}>
+                    <Button
+                      variant="outlined"
+                      startIcon={kind === 'tested' ? <ExploreIcon /> : <ReplayIcon />}
+                      disabled={missionGestureBusy}
+                      onClick={() => handleMissionGesture(boulderId, kind)}
+                    >
+                      {kind === 'tested' ? "J'ai testé ce bloc" : "Je l'ai refait"}
+                    </Button>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                      Fait avancer tes missions — n'enregistre pas de résultat
+                    </Typography>
+                  </Box>
+                );
+                const attemptsSelect = (
+                  <FormControl fullWidth sx={{ mb: 2 }}>
+                    <InputLabel id="nombre-d-essais-select-label">Nombre d'essais</InputLabel>
+                    <Select
+                      labelId="nombre-d-essais-select-label"
+                      id="nombre-d-essais-select"
+                      value={attempts[boulderId] ?? ''}
+                      onChange={(e) => setAttempts(prev => ({ ...prev, [boulderId]: e.target.value as number }))}
+                      label="Nombre d'essais"
+                    >
+                      {attemptOptions.map((option) => (
+                        <MenuItem key={option.value} value={option.value}>
+                          {option.label}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                );
+
+                if (stored && stored.success && !correctionMode) {
+                  const n = stored.attempts ?? 1;
+                  return (
+                    <Box sx={{ mb: 2 }}>
+                      <Alert severity="success" icon={false} sx={{ mb: 1.5 }}>
+                        ✅ Déjà validé le {new Date(stored.createdAt).toLocaleDateString()} en {n} essai{n > 1 ? 's' : ''}
+                        <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
+                          Refaire ce bloc ne le recompte pas : c'est ta première réussite qui mesure ton niveau.
+                        </Typography>
+                      </Alert>
+                      {canRedone && gestureButton('redone')}
+                      <Button
+                        size="small"
+                        onClick={() => {
+                          setAttempts(prev => ({ ...prev, [boulderId]: n }));
+                          setCorrectionMode(true);
+                        }}
+                      >
+                        Corriger ma saisie
+                      </Button>
+                    </Box>
+                  );
+                }
+
+                if (stored && stored.success && correctionMode) {
+                  return (
+                    <Box sx={{ mb: 2, p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                      <Typography variant="subtitle2" sx={{ mb: 1 }}>Corriger ma saisie</Typography>
+                      {attemptsSelect}
+                      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                        <Button variant="contained" onClick={() => handleCorrectAttempts(boulderId)}>
+                          Enregistrer la correction
+                        </Button>
+                        <Button variant="outlined" color="error" onClick={() => handleCancelSuccess(boulderId)}>
+                          Annuler ma réussite
+                        </Button>
+                        <Button onClick={() => setCorrectionMode(false)}>Retour</Button>
+                      </Box>
+                    </Box>
+                  );
+                }
+
+                return (
+                  <Box sx={{ mb: 1 }}>
+                    {attemptsSelect}
+                    <Box sx={{ display: 'flex', gap: 1, mb: 0.5 }}>
+                      <Button
+                        variant={successResults[boulderId] === true ? "contained" : "outlined"}
+                        color="success"
+                        disabled={!attempts[boulderId]}
+                        onClick={() => handleValidateSuccess(boulderId, true)}
+                      >
+                        ✅ Réussi
+                      </Button>
+                      <Button
+                        variant={successResults[boulderId] === false ? "contained" : "outlined"}
+                        color="error"
+                        onClick={() => handleValidateSuccess(boulderId, false)}
+                      >
+                        ❌ Échoué
+                      </Button>
+                    </Box>
+                    {!attempts[boulderId] && (
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+                        Choisis ton nombre d'essais pour pouvoir valider « Réussi ».
+                      </Typography>
+                    )}
+                    {canTested && gestureButton('tested')}
+                  </Box>
+                );
+              })()}
 
               {/* ✅ docs/plans/PLAN-anecdote-methodes-missions.md §B.6 : le choix des méthodes
-                  ne se propose qu'après le clic "Réussi", jamais avant, jamais obligatoire —
+                  ne se propose qu'après une réussite, jamais avant, jamais obligatoire —
                   jamais pour un bloc de compétition non plus (cette page ne charge que
                   type=='daily', voir la requête plus haut). */}
-              {successResults[selectedBoulder.id] === true && (
+              {isAlreadySucceeded(storedResults[selectedBoulder.id]) && (
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="body2" sx={{ mb: 1 }}>
                     Méthode(s) utilisée(s) (3 maximum) :
@@ -1426,26 +1581,6 @@ const ClientDaily: React.FC = () => {
                   </Box>
                 </Box>
               )}
-
-              <FormControl fullWidth sx={{ mb: 2 }}>
-                <InputLabel id="nombre-d-essais-select-label">Nombre d'essais</InputLabel>
-                <Select
-                  labelId="nombre-d-essais-select-label"
-                  id="nombre-d-essais-select"
-                  value={attempts[selectedBoulder.id] || 1}
-                  onChange={(e) => setAttempts(prev => ({
-                    ...prev,
-                    [selectedBoulder.id]: e.target.value as number
-                  }))}
-                  label="Nombre d'essais"
-                >
-                  {attemptOptions.map((option) => (
-                    <MenuItem key={option.value} value={option.value}>
-                      {option.label}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
 
               {isMysteryBoulder(selectedBoulder) && (
                 <FormControl fullWidth sx={{ mb: 2 }}>
@@ -1537,7 +1672,7 @@ const ClientDaily: React.FC = () => {
               <Button
                 variant="contained"
                 onClick={async () => {
-                  await handleRate(selectedBoulder.id, ratings[selectedBoulder.id] || 0, comments[selectedBoulder.id] || '');
+                  await handleSaveNotes(selectedBoulder.id);
                   classementQueue.flushAll();
                   setOpenBoulderDialog(false);
                 }}

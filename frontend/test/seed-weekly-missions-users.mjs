@@ -15,10 +15,11 @@ const PASSWORD = 'TestPassword123!';
 
 // Numéros hauts et fixes : le script e2e les retrouve par texte ("Bloc n°…").
 export const MISSION_BOULDERS = [
-  { id: 'missions-b1', number: 9101, color: 'violet', wall: 'Réta Adultes' }, // 1re réussite -> M6 (+M3, flash max-1)
-  { id: 'missions-b2', number: 9102, color: 'noir', wall: 'Dévers 30°' },     // échec -> M4
-  { id: 'missions-b3', number: 9103, color: 'rouge', wall: 'Grande Face' },   // déjà réussi -> revalidation -> M1
-  { id: 'missions-b4', number: 9104, color: 'vert', wall: 'Dalle' },          // 1re réussite -> M7 (+ 4e mur -> M2)
+  { id: 'missions-b1', number: 9101, color: 'violet', wall: 'Réta Adultes' }, // 1re réussite en 1 essai -> M6 + M3 (flash max-1)
+  { id: 'missions-b2', number: 9102, color: 'noir', wall: 'Dévers 30°' },     // "J'ai testé ce bloc" -> M4, aucun résultat écrit
+  { id: 'missions-b5', number: 9105, color: 'bleu', wall: 'Güllich' },        // échec -> flush "missions seules" (régression V2.68)
+  { id: 'missions-b3', number: 9103, color: 'rouge', wall: 'Grande Face' },   // déjà réussi -> lecture seule + "Je l'ai refait" -> M1
+  { id: 'missions-b4', number: 9104, color: 'vert', wall: 'Dalle' },          // 1re réussite -> M7, puis "Corriger ma saisie"
 ];
 
 async function main() {

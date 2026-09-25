@@ -156,6 +156,10 @@ async function main() {
     await clientP.getByRole('button', { name: new RegExp(`^${WALL}`) }).click();
     await clientP.getByText(`Bloc n°${BOULDER_NUMBER}`, { exact: false }).click();
     await clientP.getByText(`Bloc n°${BOULDER_NUMBER} - ${WALL}`, { exact: false }).waitFor({ timeout: 10000 });
+    // V2.69 : nombre d'essais obligatoire avant « Réussi » (plus de défaut à 1).
+    await clientP.locator('#nombre-d-essais-select').click();
+    await clientP.getByRole('option', { name: '1 essai', exact: true }).click();
+    await clientP.locator('[role="presentation"].MuiPopover-root').waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
     await clientP.getByRole('button', { name: '✅ Réussi' }).click();
     await clientP.getByText('Réussite enregistrée', { exact: false }).waitFor({ timeout: 10000 });
     await clientP.waitForTimeout(3500); // laisse le flush débounced (3s) écrire classement_profiles

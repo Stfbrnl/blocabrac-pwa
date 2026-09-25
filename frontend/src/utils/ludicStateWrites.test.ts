@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildDeclarativeMissionPatch, buildRouletteCompletionPatch } from './ludicStateWrites';
+import { buildDeclarativeMissionPatch, buildRouletteCompletionPatch, buildMissionGesturePatch } from './ludicStateWrites';
 import { isoWeekKey, mergeWeeklyMissionsForDisplay, type WeeklyMissionsState } from './weeklyMissions';
 import type { RouletteCompletion } from './roulette';
 
@@ -71,5 +71,28 @@ describe('mergeWeeklyMissionsForDisplay', () => {
   it('rien en mémoire : la grille fraîche', () => {
     const fresh = grid(['M8']);
     expect(mergeWeeklyMissionsForDisplay(undefined, fresh)).toBe(fresh);
+  });
+});
+
+describe('buildMissionGesturePatch ("J\'ai testé ce bloc" / "Je l\'ai refait")', () => {
+  const dalle = { category: 'dalle' as const, kidsOnly: false };
+  it('"J\'ai testé ce bloc" sur un max+1 coche M4 et ajoute le mur, sur la grille STOCKÉE', () => {
+    const { weeklyMissions } = buildMissionGesturePatch(
+      { weeklyMissions: grid(['M6'], ['Réta Adultes']) },
+      { color: 'noir', wall: 'Dalle', success: false, attempts: 0, neverTriedBefore: false, wallInfo: dalle },
+      fige, NOW
+    );
+    expect(weeklyMissions.done).toEqual(['M6', 'M4']);
+    expect(weeklyMissions.walls).toEqual(['Réta Adultes', 'Dalle']);
+  });
+
+  it('"Je l\'ai refait" sur un bloc du niveau max coche M1, jamais M3', () => {
+    const { weeklyMissions } = buildMissionGesturePatch(
+      {},
+      { color: 'rouge', wall: 'Dalle', success: true, attempts: 0, neverTriedBefore: false, wallInfo: dalle },
+      fige, NOW
+    );
+    expect(weeklyMissions.done).toContain('M1');
+    expect(weeklyMissions.done).not.toContain('M3');
   });
 });

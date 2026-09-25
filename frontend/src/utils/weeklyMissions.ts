@@ -78,6 +78,11 @@ export interface BoulderValidationEvent {
   wall: string | null | undefined;
   success: boolean;
   attempts: number;
+  // ✅ V2.69 (docs/handoffs/RETOUR-bug-missions-et-revalidation.md §2.6) : un flash est une
+  // réussite au premier essai sur un bloc JAMAIS tenté — aucun résultat antérieur, ni réussite
+  // ni échec. Une répétition en un essai n'en est pas un (mémoire motrice). Seul l'appelant sait
+  // s'il existait un résultat stocké : il le dit ici, M3 ne se coche que si c'est vrai.
+  neverTriedBefore: boolean;
   wallInfo: WallCategoryInfo | undefined;
 }
 
@@ -107,7 +112,7 @@ export const applyValidationToWeeklyMissions = (
 
     // M3 : flash (1 essai) sur une couleur >= max-1 (clamp plancher via resolveTargetColor,
     // même logique que la Roulette — §C.3.b).
-    if (event.attempts === 1 && event.color) {
+    if (event.neverTriedBefore && event.attempts === 1 && event.color) {
       const colorIdx = levelOrder.indexOf(event.color as Level);
       const thresholdColor = resolveTargetColor(state.level as Level, 'max-1').color;
       const thresholdIdx = levelOrder.indexOf(thresholdColor);
@@ -156,6 +161,13 @@ export const mergeWeeklyMissionsForDisplay = (
   const done = Array.from(new Set<MissionKey>([...fresh.done, ...memory.done]));
   const walls = Array.from(new Set<string>([...fresh.walls, ...memory.walls]));
   return { ...fresh, done, walls, completedAt: fresh.completedAt ?? memory.completedAt };
+};
+
+// ✅ V2.69 (§2.8 du même retour) : un geste de mission ("J'ai testé ce bloc", "Je l'ai refait")
+// n'est proposé que s'il ferait réellement avancer la grille — jamais un bouton qui ne fait rien.
+export const missionGestureAdvances = (state: WeeklyMissionsState, event: BoulderValidationEvent): boolean => {
+  const next = applyValidationToWeeklyMissions(state, event);
+  return next.done.length > state.done.length || next.walls.length > state.walls.length;
 };
 
 export const isWeeklyMissionsGridComplete = (state: WeeklyMissionsState): boolean =>

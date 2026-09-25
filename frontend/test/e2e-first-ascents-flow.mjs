@@ -87,6 +87,10 @@ async function validateBoulder(page, wall, number) {
   await page.getByRole('button', { name: new RegExp(`^${wall}`) }).click();
   await page.getByText(`Bloc n°${number}`, { exact: false }).click();
   await page.getByText(`Bloc n°${number} - ${wall}`, { exact: false }).waitFor({ timeout: 10000 });
+  // V2.69 : nombre d'essais obligatoire avant « Réussi » (plus de défaut à 1).
+  await page.locator('#nombre-d-essais-select').click();
+  await page.getByRole('option', { name: '1 essai', exact: true }).click();
+  await page.locator('[role="presentation"].MuiPopover-root').waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
   await page.getByRole('button', { name: '✅ Réussi' }).click();
   await page.getByText('Réussite enregistrée', { exact: false }).waitFor({ timeout: 10000 });
 }
@@ -148,7 +152,7 @@ async function main() {
     await gotoAndWait(client1P, '/client/daily', 'Mon Blocabrac quotidien');
     await client1P.getByRole('button', { name: new RegExp(`^${wall}`) }).click();
     await client1P.getByText(`Bloc n°${number}`, { exact: false }).click();
-    await client1P.getByText('Premiers ascensionnistes', { exact: false }).waitFor({ timeout: 10000 });
+    await client1P.getByRole('heading', { name: '🏆 Premiers ascensionnistes' }).waitFor({ timeout: 10000 });
     // 4e position = client1 (voir l'étape "Client1 valide le bloc" ci-dessus).
     await client1P.getByText(/4\. Client1 FirstAscents/, { exact: false }).waitFor({ timeout: 5000 });
     // Liste pleine : aucun texte "place(s) restante(s)" ne doit apparaître.

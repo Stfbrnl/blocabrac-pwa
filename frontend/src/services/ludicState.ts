@@ -12,10 +12,10 @@ import { doc, getDoc, setDoc, type PartialWithFieldValue } from 'firebase/firest
 import { db } from './firebaseConfig';
 import type { WallCounts, RouletteCompletion } from '../utils/roulette';
 import type { WeeklyGoalItem } from '../utils/weeklyGoal';
-import type { WeeklyMissionsState, MissionKey } from '../utils/weeklyMissions';
+import type { WeeklyMissionsState, MissionKey, BoulderValidationEvent } from '../utils/weeklyMissions';
 import { runReadThenWriteTransaction } from '../utils/firestoreTransaction';
 import {
-  buildRouletteCompletionPatch, buildDeclarativeMissionPatch,
+  buildRouletteCompletionPatch, buildDeclarativeMissionPatch, buildMissionGesturePatch,
   type LudicMissionsSnapshot, type MissionsFige,
 } from '../utils/ludicStateWrites';
 
@@ -78,6 +78,21 @@ export const recordDeclarativeMission = async (
   let written: { weeklyMissions: WeeklyMissionsState; weeklyMissionsCompleted: number } | undefined;
   await runReadThenWriteTransaction(db, { ludic: ludicRef(uid) }, (readData) => {
     written = buildDeclarativeMissionPatch((readData.ludic || {}) as LudicState, missionKey, missionsFige, new Date());
+    return [{ ref: ludicRef(uid), data: { ...written, updated_at: new Date().toISOString() } }];
+  });
+  return written!;
+};
+
+// ✅ V2.69 : gestes de mission ("J'ai testé ce bloc", "Je l'ai refait") — même discipline que
+// ci-dessus (relu dans la transaction), et JAMAIS d'écriture dans client_boulder_results.
+export const recordMissionGesture = async (
+  uid: string,
+  event: BoulderValidationEvent,
+  missionsFige: MissionsFige
+): Promise<{ weeklyMissions: WeeklyMissionsState; weeklyMissionsCompleted: number }> => {
+  let written: { weeklyMissions: WeeklyMissionsState; weeklyMissionsCompleted: number } | undefined;
+  await runReadThenWriteTransaction(db, { ludic: ludicRef(uid) }, (readData) => {
+    written = buildMissionGesturePatch((readData.ludic || {}) as LudicState, event, missionsFige, new Date());
     return [{ ref: ludicRef(uid), data: { ...written, updated_at: new Date().toISOString() } }];
   });
   return written!;
