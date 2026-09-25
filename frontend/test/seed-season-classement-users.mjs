@@ -41,6 +41,12 @@ async function main() {
     classementOptIn: false,
   });
 
+  // ✅ V2.71.2 (RETOUR-v271.md §2) : deux profils préexistants pour vérifier « Enregistrer » :
+  // l'admin SANS base de saison (doit recevoir baseScore = 0), l'ouvreur AVEC un crédit de
+  // « Redémarrer » (baseScore = 300, ne doit JAMAIS être écrasé).
+  await db.collection('classement_profiles').doc(adminUser.uid).set({ first_name: 'Ada', last_name: 'Min', score: 0, season: { score: 0, colorCounts: {} } });
+  await db.collection('classement_profiles').doc(ouvreur.uid).set({ first_name: 'Ova', last_name: 'Reur', score: 300, season: { score: 300, colorCounts: {}, baseScore: 300, baseColorCounts: {} } });
+
   // ✅ Compétition officielle préexistante (créée directement, pas via l'UI — le
   // formulaire de création est déjà couvert par d'autres e2e), pour tester le bouton
   // "Générer le roster" sans repasser par tout le flux de création.

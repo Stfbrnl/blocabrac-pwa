@@ -1,4 +1,4 @@
-# Handoff ClaudeNav — V2.68.1 → V2.71.1 : grille de missions, règle de revalidation, grille « bingo », saison à venir
+# Handoff ClaudeNav — V2.68.1 → V2.71.2 : grille de missions, règle de revalidation, grille « bingo », saison à venir
 
 > Session Claude Code (PC Windows de l'utilisateur, pas le Codespace), 25/09/2026.
 > Implémente `docs/handoffs/RETOUR-bug-missions-et-revalidation.md` (ta réponse du 25/09 au
@@ -15,7 +15,8 @@
 > **V2.70.2 (§9)** : suite donnée à ton `RETOUR-v2681-v269-v270.md`, point par point, déployé.
 > **V2.71 (§10)** : suite donnée à ton `RETOUR-v2701-v2702.md` — ⚠️ ton §4.2.1 reposait sur une hypothèse fausse, voir §10.
 > **V2.71.1 (fin du §10)** : textes client sur la Finale retirés jusqu'à sa confirmation, décision de l'utilisateur.
-> **État final de la prod le 25/09 au soir : V2.71.1**, commit `905e275`, hosting seul, aucune règle modifiée de toute la session.
+> **V2.71.2 (§11)** : suite donnée à ton `RETOUR-v271.md` : base de saison à zéro, changelog empilé, alarme d'intersaison décalée à fin octobre.
+> **État final de la prod le 25/09 au soir : V2.71.2**, hosting seul, aucune règle modifiée de toute la session.
 
 ---
 
@@ -477,6 +478,49 @@ maintenant que tout le monde repart de zéro.
 
 ---
 
+## 11. Suite donnée à ton `RETOUR-v271.md` : V2.71.2, déployée
+
+Déployée le 25/09 au soir (`--only hosting`, pas de changement de règles).
+
+| Ton point | Suite |
+|---|---|
+| §1, la règle « une hypothèse non vérifiée ne réapparaît pas dans une liste d'actions » | Notée. |
+| §2, base de saison à zéro | **Fait, et vérifié de bout en bout.** Ta vérification §2.3 d'abord : la réconciliation teste `baseScore !== undefined`, donc **0 est une base valide** et le correctif fonctionne. Les deux chemins passent par `seasonZeroBasePatch` (pur, testé) : **« Enregistrer »** pose `season.baseScore = 0` / `baseColorCounts = {}` sur tout profil qui n'en a pas, **avant** la fenêtre ; **le flush partagé** pose la même base sur le **premier delta de saison** d'un profil sans base, ce qui couvre les comptes créés après le 1er novembre. Une base existante (crédit d'un « Redémarrer » ou zéro déjà posé) n'est **jamais** touchée : c'est idempotent, et un changement de date en cours de saison reste sans effet. |
+| §3, changelog | **Correctif de fond plutôt que la rustine** (détail ci-dessous). |
+| §4, le piège de juin | **Ni supprimé, ni l'enchaînement automatique : décalé** (détail ci-dessous). |
+| §5.1, commentaire dans le test | Fait : l'étape 5 porte « ⚠️ VOLONTAIRE, NE PAS "CORRIGER" LE CODE… » et renvoie à la puce de `CLAUDE.md` qui contient les textes d'origine. |
+| §5.2 et §5.3, 0 vote de méthodes, visite sur téléphone | Ajoutés à la liste de vérification sur téléphone (points ouverts). |
+
+### §2 : e2e du classement de saison, 17/17
+
+Deux étapes ajoutées :
+- après « Enregistrer », le profil sans base reçoit `baseScore = 0`, et un profil portant un crédit de 300 le **conserve** ;
+- le profil du client, créé par sa première validation, a reçu sa base à zéro dans le même flush. Une dérive fabriquée (`season.score` à 999) est alors **ramenée à 50** par `reconcile --fix --uid`.
+
+Le filet existe donc vraiment ; il n'est pas seulement supposé.
+
+### §3 : le changelog
+
+Le panneau affiche maintenant **toutes les entrées plus récentes que la dernière version validée sur l'appareil**, la plus récente en tête, **trois au plus** (`utils/changelogDisplay.ts`, pur, testé : comparaison numérique des versions, un bump sans annonce ne réaffiche pas une entrée déjà vue). Un appareil qui n'a jamais rien validé ne voit que la dernière entrée.
+
+Un grimpeur resté sur 2.68 voit donc 2.71, puis « Et aussi » 2.70 et 2.69, vérifié en capture. L'entrée 2.70 a été **allégée** de la recopie des points de 2.69, qui aurait fait doublon. Règle consignée dans `CLAUDE.md` : une entrée ne décrit que sa propre version.
+
+**Limite connue** : les grimpeurs qui ont déjà validé l'annonce 2.71 dans l'heure qui a suivi son déploiement ne reverront pas 2.69/2.70.
+
+### §4 : le piège de juin
+
+Supprimer l'alarme reviendrait sur ta propre demande du 17/08 : un oubli de reconfiguration fait perdre des validations qu'on ne peut pas rattraper. Avec le calendrier retenu, **rien n'est perdu l'été**, puisqu'aucune saison ne tourne ; le risque n'existe qu'à l'approche du 1er novembre.
+
+`RECONFIGURATION_GRACE_DAYS` passe donc de 7 à **150** : aucun rouge de juin à octobre, mais une alerte vers le **29 octobre** si la fenêtre suivante n'est toujours pas enregistrée. C'est à ce moment-là que le rouge signale un vrai problème. Le délai est lié au démarrage du 1er novembre, ce qui est commenté dans le script et dans `CLAUDE.md`.
+
+L'enchaînement automatique (ton §4.2) est **reporté** : il graverait le calendrier dans un script alors que l'utilisateur a dit « sans doute » pour ces dates. Topo mis à jour : le point de vigilance devient « Enregistrer la saison suivante avant fin octobre ».
+
+### Chiffres
+
+`npm test` 311/311, lint propre, build après le passage en 2.71.2. e2e saison 17/17 et 10/10.
+
+---
+
 ## Points ouverts par ailleurs (reportés, inchangés sauf mention contraire)
 
 - ~~Attribution du « Badge du grimpeur régulier »~~ : confirmée en prod (§9).
@@ -485,16 +529,19 @@ maintenant que tout le monde repart de zéro.
 - ~~Le `client_badges` à l'ancien format~~ : conservé, c'est un compte de test (§9).
 - **Fenêtre de saison 2026-11-01 → 2027-05-31 à enregistrer par l'utilisateur, avec « Enregistrer »** et non
   « Redémarrer » (§10). Tant qu'elle ne l'est pas, l'audit du catalogue garde un avertissement, **nouveau**.
-- **Chaque juin, dès la clôture du 1er juin** : enregistrer tout de suite la saison suivante (1er novembre
-  → 31 mai). Sinon `compute-classement-saison.js` met le workflow en échec chaque jour après 7 jours,
-  pendant tout l'été, **nouveau**.
+- **Après la clôture du 1er juin** : enregistrer la saison suivante (1er novembre → 31 mai) avant fin octobre.
+  Sinon le workflow de clôture passe au rouge vers le 29 octobre (délai porté à 150 jours, §11).
 - **Finale non annoncée** : trois textes client retirés en V2.71.1, à remettre mot pour mot (liste dans
   `CLAUDE.md`) le jour où l'utilisateur confirme sa faisabilité. Il faudra aussi inverser l'étape 5 de
   `e2e-season-classement-flow.mjs` et annoncer la Finale dans le changelog, **nouveau**.
 - **Premier passage du workflow `reconcile-method-counts.yml`** le 1er octobre, 03h45 UTC : à regarder
   (simulation prod du 25/09 : 0 vote, 0 écart), **nouveau**.
-- **V2.70.1 → V2.71.1 non vues sur un vrai téléphone** : tampon du badge, silhouette « non obtenu »,
-  « Effacer cet échec », panneau « Quoi de neuf » redevenu lisible, onglet « saison à venir », **nouveau**.
+- **V2.70.1 → V2.71.2 non vues sur un vrai téléphone** (une session de 20 minutes) :
+  - tampon du badge et silhouette « non obtenu » ;
+  - « Effacer cet échec » ;
+  - panneau « Quoi de neuf » redevenu lisible et empilé ;
+  - onglet « saison à venir » ;
+  - **découvrabilité du carnet de méthodes** : 0 vote en prod au 25/09, à revérifier vers le 02/10.
 - Vérification visuelle de l'anecdote d'ouvreur et du carnet de méthodes (V2.66/V2.67) :
   toujours sans retour de l'utilisateur.
 - Migration de l'état ludique : Passe C déployée en V2.61, la purge

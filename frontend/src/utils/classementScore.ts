@@ -134,3 +134,15 @@ export const seasonPhase = (config: SeasonWindowConfig | null | undefined, today
   if (day > config.fin) return 'terminee';
   return 'en_cours';
 };
+
+// ✅ V2.71.2 (docs/handoffs/RETOUR-v271.md §2) : une saison ouverte avec « Enregistrer » part de
+// zéro — mais la réconciliation ignore `season.*` tant que `season.baseScore` est ABSENT
+// (reconcile-classement-profiles.js : `hasBase = baseScore !== undefined`, donc 0 est une base
+// valide). Sans base, le classement de saison tournerait sept mois sans filet. On pose donc une
+// base À ZÉRO sur tout profil qui n'en a pas — jamais sur un profil qui en a une (crédit d'un
+// « Redémarrer », ou zéro déjà posé) : idempotent, et sans effet sur un redémarrage.
+// Renvoie les chemins pointés à écrire, ou null s'il n'y a rien à faire.
+export const seasonZeroBasePatch = (
+  season: { baseScore?: number } | null | undefined
+): { 'season.baseScore': 0; 'season.baseColorCounts': Record<string, never> } | null =>
+  season && season.baseScore !== undefined ? null : { 'season.baseScore': 0, 'season.baseColorCounts': {} };

@@ -6,6 +6,7 @@ import {
   isWithinSeasonWindow,
   recomputeSeasonBaseline,
   seasonPhase,
+  seasonZeroBasePatch,
   type ColorCounts,
   type ValidatedBoulderResult,
 } from './classementScore';
@@ -263,5 +264,16 @@ describe("saison configurée à l'avance (V2.71, calendrier 1er novembre → 31 
     const colorById = new Map([['b1', 'rouge'], ['b2', 'bleu']]);
     const { score } = recomputeSeasonBaseline([{ boulderId: 'b1', attempts: 1 }, { boulderId: 'b2', attempts: 1 }], colorById);
     expect(score).toBeGreaterThan(0);
+  });
+});
+
+describe('seasonZeroBasePatch (V2.71.2)', () => {
+  it('pose une base à zéro quand elle est absente', () => {
+    expect(seasonZeroBasePatch(undefined)).toEqual({ 'season.baseScore': 0, 'season.baseColorCounts': {} });
+    expect(seasonZeroBasePatch({})).toEqual({ 'season.baseScore': 0, 'season.baseColorCounts': {} });
+  });
+  it('ne touche jamais une base présente, zéro compris', () => {
+    expect(seasonZeroBasePatch({ baseScore: 0 })).toBeNull();
+    expect(seasonZeroBasePatch({ baseScore: 800 })).toBeNull();
   });
 });

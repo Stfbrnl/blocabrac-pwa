@@ -108,6 +108,17 @@ async function main() {
     await adminP.screenshot({ path: '/tmp/season-01-admin-config.png', fullPage: true });
   });
 
+  // V2.71.2 (RETOUR-v271.md §2) : « Enregistrer » pose une base de saison à zéro là où elle
+  // manque (sinon la réconciliation ignorerait season.* toute la saison), sans jamais écraser
+  // une base existante.
+  await step('Backend : « Enregistrer » pose baseScore = 0 là où il manque, sans écraser un crédit existant', async () => {
+    const byEmail = async (email) => (await db.collection('users').where('email', '==', email).get()).docs[0].id;
+    const adminProfile = (await db.collection('classement_profiles').doc(await byEmail(ADMIN_EMAIL)).get()).data();
+    const ouvreurProfile = (await db.collection('classement_profiles').doc(await byEmail(OUVREUR_EMAIL)).get()).data();
+    assert(adminProfile.season?.baseScore === 0, `admin : baseScore 0 attendu, obtenu ${adminProfile.season?.baseScore}`);
+    assert(ouvreurProfile.season?.baseScore === 300, `ouvreur : crédit 300 conservé attendu, obtenu ${ouvreurProfile.season?.baseScore}`);
+  });
+
   await step('Admin : "Générer le roster" sans archive → message explicite, rien créé', async () => {
     await gotoAndWait(adminP, '/admin/competitions/create', 'Gestion des Compétitions');
     const row = adminP.locator('tr', { hasText: 'Finale de test' });
@@ -141,9 +152,12 @@ async function main() {
     await ouvreurP.getByText(`Bloc n°${BOULDER_NUMBER}`, { exact: false }).waitFor({ timeout: 10000 });
   });
 
+  // ⚠️ VOLONTAIRE, NE PAS « CORRIGER » LE CODE SI CETTE ÉTAPE ROUGIT LE JOUR DE LA FINALE.
   // 25/09/2026 : la légende « Désactiver ce réglage vous retire aussi de la qualification pour
-  // la Finale… » est retirée tant que la Finale n'est pas confirmée — l'étape vérifie désormais
-  // qu'elle N'EST PAS affichée. À inverser le jour où la légende est remise.
+  // la Finale… » est retirée tant que la Finale n'est pas confirmée — l'étape vérifie donc
+  // qu'elle N'EST PAS affichée. Le jour où la Finale est confirmée et la légende remise, c'est
+  // CE TEST qu'il faut inverser. Textes d'origine et marche à suivre : CLAUDE.md, section
+  // « Seasonal classement », puce « Client-facing Finale texts are withdrawn… ».
   await step('Client : aucune promesse de Finale sous l\'opt-in classement, l\'active', async () => {
     await gotoAndWait(clientP, '/client/profile', 'Modifier mes informations');
     await clientP.getByLabel('Apparaître dans le classement des grimpeurs').waitFor({ timeout: 10000 });
@@ -180,6 +194,19 @@ async function main() {
     assert(data.season?.colorCounts?.vert === 1, `season.colorCounts.vert attendu 1, obtenu ${data.season?.colorCounts?.vert}`);
   });
 
+  // V2.71.2 (RETOUR-v271.md §2) : le filet existe vraiment. Le profil du client, créé par sa
+  // première validation, a reçu sa base à zéro dans le même flush ; une dérive fabriquée de
+  // season.score est alors détectée ET corrigée par la réconciliation.
+  await step('Réconciliation : couvre season.* (base à zéro posée par le flush), corrige une dérive fabriquée', async () => {
+    const clientUid = (await db.collection('users').where('email', '==', CLIENT_EMAIL).get()).docs[0].id;
+    const ref = db.collection('classement_profiles').doc(clientUid);
+    assert((await ref.get()).data().season?.baseScore === 0, 'le flush doit avoir posé season.baseScore = 0 sur le profil neuf');
+    await ref.update({ 'season.score': 999 });
+    runScript(join(REPO_ROOT, 'scripts/reconcile-classement-profiles.js'), ['--fix', '--uid', clientUid]);
+    const after = (await ref.get()).data();
+    assert(after.season?.score === 50, `season.score doit être ramené à 50 par la réconciliation, obtenu ${after.season?.score}`);
+  });
+
   await step('Client : le classement de saison affiche le score (bascule sans nouvel appel réseau)', async () => {
     await gotoAndWait(clientP, '/client/classement', 'Classement des grimpeurs');
     await clientP.getByRole('button', { name: 'Classement de saison' }).click();
@@ -200,7 +227,8 @@ async function main() {
     // vérifié explicitement ici, pas seulement supposé.
     const output = runScript(join(REPO_ROOT, 'scripts/compute-classement-saison.js'));
     assert(output.includes('[simulation]'), 'sans --fix, le script doit annoncer un mode simulation');
-    assert(output.includes('Remettrait 1 profil'), 'la simulation doit annoncer le nombre de profils qui seraient réinitialisés');
+    assert(output.includes('Remettrait 3 profil'), // client + 2 profils préexistants (V2.71.2)
+      'la simulation doit annoncer le nombre de profils qui seraient réinitialisés');
 
     const seasonsSnapBefore = await db.collection('classement_saisons').get();
     assert(seasonsSnapBefore.empty, 'la simulation ne doit rien écrire dans classement_saisons');

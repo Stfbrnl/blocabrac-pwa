@@ -8,7 +8,7 @@
 // user_ludic_state désormais (plus de double écriture/repli sur "users" — retiré après
 // vérification en production de la passe A/B, voir git blame pour la version transitoire).
 import type { DocumentReference, DocumentData } from 'firebase/firestore';
-import { summaryFromColorCounts, type ColorCounts } from './classementScore';
+import { summaryFromColorCounts, seasonZeroBasePatch, type ColorCounts } from './classementScore';
 import type { TransactionWrite } from './firestoreTransaction';
 import {
   resolveWeeklyMissionsState, isWeeklyMissionsGridComplete,
@@ -75,7 +75,7 @@ export interface ClassementFlushReadData {
   // écriture vers un document non lu fait LEVER buildClassementFlushWrites : on préfère une
   // écriture perdue bruyamment (la file la retente puis alerte) à une corruption silencieuse.
   readKeys: ReadonlySet<string>;
-  classementProfile?:{ score?: number; colorCounts?: ColorCounts; season?: { score?: number; colorCounts?: ColorCounts } };
+  classementProfile?:{ score?: number; colorCounts?: ColorCounts; season?: { score?: number; colorCounts?: ColorCounts; baseScore?: number } };
   userLudic?: { wallCounts?: WallCounts; weeklyMissions?: WeeklyMissionsState; weeklyMissionsCompleted?: number };
   challenges: Map<string, { progress?: Record<string, { value?: number }> } | undefined>;
 }
@@ -96,6 +96,7 @@ export const buildClassementFlushWrites = (
   const { bouldersValidated, bestColorRank } = summaryFromColorCounts(colorCounts);
 
   const seasonData = profileData.season || {};
+  const touchesSeason = pending.seasonScoreDelta !== 0 || pending.seasonColorDeltas.size > 0;
   const seasonColorCounts: ColorCounts = { ...seasonData.colorCounts };
   pending.seasonColorDeltas.forEach((delta, color) => {
     seasonColorCounts[color as keyof ColorCounts] = ((seasonColorCounts[color as keyof ColorCounts] as number) || 0) + delta;
@@ -111,6 +112,9 @@ export const buildClassementFlushWrites = (
       season: {
         score: (seasonData.score || 0) + pending.seasonScoreDelta,
         colorCounts: seasonColorCounts,
+        // V2.71.2 (RETOUR-v271.md §2.2) : un profil créé après l'ouverture de la saison reçoit sa
+        // base à zéro avec son premier delta de saison, sinon la réconciliation l'ignorerait.
+        ...(touchesSeason && seasonZeroBasePatch(seasonData) ? { baseScore: 0, baseColorCounts: {} } : {}),
       },
     },
   });

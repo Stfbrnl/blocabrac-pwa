@@ -6,9 +6,11 @@ export interface ChangelogEntry {
 }
 
 // Dernières nouveautés à afficher aux clients ("Quoi de neuf ?" sur Mon espace
-// personnel). Seule la plus récente (changelog[0]) est montrée. Mettre à jour
-// à chaque nouvelle fonctionnalité visible côté client — pas besoin de garder
-// tout l'historique ici, l'historique complet vit dans les commits git.
+// personnel). Depuis V2.71.2, le panneau montre TOUTES les entrées plus récentes que
+// la dernière version vue par ce client (3 au plus, voir utils/changelogDisplay.ts) :
+// une entrée ne décrit donc que SA version, sans recopier la précédente. Mettre à jour
+// à chaque nouvelle fonctionnalité visible côté client — l'historique complet vit dans
+// les commits git.
 export const changelog: ChangelogEntry[] = [
   {
     version: '2.71',
@@ -27,8 +29,6 @@ export const changelog: ChangelogEntry[] = [
     items: [
       'La grille des missions de la semaine devient une carte à 8 cases : chaque mission réussie est tamponnée à la marque de la salle.',
       'Les missions liées à votre niveau affichent la couleur concernée, les murs ont leur pictogramme (dévers, rétablissement, dalle) et la mission « 4 murs » se remplit segment par segment.',
-      'Votre première réussite fait toujours foi : un bloc déjà réussi s\'affiche « Déjà validé », et « Corriger ma saisie » permet de rectifier une erreur à tout moment.',
-      'Le nombre d\'essais se choisit avant « Réussi », et « J\'ai testé ce bloc » / « Je l\'ai refait » font avancer vos missions sans rien enregistrer.',
     ],
   },
   {

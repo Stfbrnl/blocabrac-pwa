@@ -254,3 +254,23 @@ describe('invariant lectures/écritures du flush', () => {
     }, refs)).toThrow(/sans lecture préalable/);
   });
 });
+
+describe('base de saison à zéro (V2.71.2, RETOUR-v271.md §2)', () => {
+  const seasonPending = { ...emptyClassementFlushPending(), scoreDelta: 400, colorDeltas: new Map([['rouge', 1]]), seasonScoreDelta: 400, seasonColorDeltas: new Map([['rouge', 1]]) };
+
+  it('pose baseScore = 0 sur un profil neuf qui reçoit son premier delta de saison', () => {
+    const season = build(seasonPending, { challenges: new Map() })[0].data.season;
+    expect(season).toMatchObject({ score: 400, baseScore: 0, baseColorCounts: {} });
+  });
+
+  it("ne touche JAMAIS une base existante (crédit d'un « Redémarrer » ou zéro déjà posé)", () => {
+    const season = build(seasonPending, { challenges: new Map(), classementProfile: { season: { score: 1200, baseScore: 800 } } })[0].data.season;
+    expect(season.score).toBe(1600);
+    expect('baseScore' in season).toBe(false);
+  });
+
+  it('ne pose pas de base sans delta de saison (validation hors fenêtre)', () => {
+    const outOfWindow = { ...emptyClassementFlushPending(), scoreDelta: 400, colorDeltas: new Map([['rouge', 1]]) };
+    expect('baseScore' in build(outOfWindow, { challenges: new Map() })[0].data.season).toBe(false);
+  });
+});

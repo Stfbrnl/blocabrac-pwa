@@ -6,7 +6,7 @@ import {
 import { EmojiEvents as EmojiEventsIcon } from '@mui/icons-material';
 import { db } from '../services/firebaseConfig';
 import { doc, getDoc, setDoc, deleteField, collection, getDocs, query, where, updateDoc } from 'firebase/firestore';
-import { recomputeSeasonBaseline, seasonPhase, type SeasonBaselineResult } from '../utils/classementScore';
+import { recomputeSeasonBaseline, seasonPhase, seasonZeroBasePatch, type SeasonBaselineResult } from '../utils/classementScore';
 
 const todayLocalISO = (): string => {
   const d = new Date();
@@ -74,6 +74,17 @@ const AdminSeasonConfig: React.FC = () => {
     }
     setSaving(true);
     try {
+      // ✅ V2.71.2 (docs/handoffs/RETOUR-v271.md §2) : base de saison À ZÉRO sur tout profil qui
+      // n'en a pas encore, AVANT d'écrire la fenêtre — sans `season.baseScore`, la réconciliation
+      // mensuelle ignorerait `season.*` pendant toute la saison. Ne touche jamais une base
+      // présente (crédit d'un « Redémarrer », ou zéro déjà posé) : idempotent, et sans effet sur
+      // un simple changement de date en cours de saison.
+      const profilesSnap = await getDocs(collection(db, 'classement_profiles'));
+      for (const profileDoc of profilesSnap.docs) {
+        const patch = seasonZeroBasePatch(profileDoc.data().season);
+        if (patch) await updateDoc(profileDoc.ref, patch);
+      }
+
       // ✅ Reconfigurer la fenêtre est le geste qui lève `cloturee` (décision §2 de la
       // relecture) — un seul geste admin, pas une étape à part. Si l'admin modifie la
       // fenêtre alors qu'aucune saison n'a jamais été clôturée, cloturee passe de false

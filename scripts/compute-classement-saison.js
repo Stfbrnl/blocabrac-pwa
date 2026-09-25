@@ -44,7 +44,15 @@ const db = getFirestore(app);
 const FIX = process.argv.includes('--fix');
 const BATCH_SIZE = 400; // marge sous la limite de 500 écritures par batch Firestore
 const TOP_N = 10;
-const RECONFIGURATION_GRACE_DAYS = 7; // ✅ voir le commentaire au point d'usage ci-dessous
+// ✅ voir le commentaire au point d'usage ci-dessous. 7 → 150 jours en V2.71.2
+// (docs/handoffs/RETOUR-v271.md §4) : avec le calendrier retenu (saison du 1er novembre au
+// 31 mai, clôture le 1er juin), l'été sans saison configurée est un état LÉGITIME — aucune
+// validation n'y est perdue, puisqu'aucune saison ne tourne. À 7 jours, le workflow passait au
+// rouge chaque jour de début juin à novembre, le meilleur moyen d'apprendre à ignorer les rouges.
+// 150 jours après le 1er juin ≈ 29 octobre : l'alerte ne sonne que si, à l'approche de la saison
+// suivante, personne ne l'a enregistrée — là, un oubli coûterait vraiment des validations.
+// ⚠️ Lié au calendrier : si la saison démarre un jour plus tôt dans l'année, raccourcir ce délai.
+const RECONFIGURATION_GRACE_DAYS = 150;
 
 // ✅ Genre normalisé le temps du tri seulement (même logique que
 // ClientClassement.tsx#normalizeGender) — les comptes sans genre renseigné, ou avec une
@@ -129,8 +137,8 @@ async function main() {
     if (daysSinceClosure !== null && daysSinceClosure > RECONFIGURATION_GRACE_DAYS) {
       console.error(
         `🛑 Saison clôturée depuis ${daysSinceClosure} jours (le ${config.cloturee_at}) sans reconfiguration ` +
-        `de la fenêtre suivante par l'admin (seuil : ${RECONFIGURATION_GRACE_DAYS} jours). Le classement de ` +
-        `saison est bloqué à zéro pour tout le monde pendant ce temps. Reconfigurer via /admin/season-config.`
+        `de la fenêtre suivante par l'admin (seuil : ${RECONFIGURATION_GRACE_DAYS} jours). La saison suivante ` +
+        `approche : l'enregistrer via /admin/season-config (1er novembre → 31 mai), sinon ses validations ne compteront pas.`
       );
       process.exitCode = 1; // ✅ Échec visible du workflow, pas un run vert qui masquerait l'oubli.
       return;
