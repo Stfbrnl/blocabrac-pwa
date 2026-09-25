@@ -266,6 +266,19 @@ vérifié page par page) :
 
 ---
 
+**Mise à jour du 25/09 au soir, pour V2.71.1**, régénéré, toujours 10 pages sans débordement :
+- « Effacer cet échec » ;
+- « Badge du grimpeur régulier » au tampon, avec le compteur de semaines ;
+- onglet saison daté avant l'ouverture ;
+- écran admin : calendrier du 1er novembre au 31 mai, et « Enregistrer » pour une saison à zéro ;
+- encadré « Redémarrage & compteur monotone » remplacé par « Ouvrir une saison : Enregistrer, pas Redémarrer » ;
+- mention « la Finale n'est pas encore annoncée aux grimpeurs » ;
+- deux nouveaux points de vigilance : ne jamais « Redémarrer » pour une nouvelle saison, et enregistrer la saison suivante dès juin.
+
+Les autres mentions de la Finale restent dans le topo, puisqu'il ne s'adresse qu'à l'équipe.
+
+---
+
 ## 7. Écarts par rapport à ton retour
 
 1. **Transaction plutôt qu'`arrayUnion`** (§1.4). La remise à zéro hebdomadaire impose de
