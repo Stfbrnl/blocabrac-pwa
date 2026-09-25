@@ -10,9 +10,14 @@
 // production, jamais avant).
 import { doc, getDoc, setDoc, type PartialWithFieldValue } from 'firebase/firestore';
 import { db } from './firebaseConfig';
-import { addRouletteCompletion, type WallCounts, type RouletteCompletion } from '../utils/roulette';
+import type { WallCounts, RouletteCompletion } from '../utils/roulette';
 import type { WeeklyGoalItem } from '../utils/weeklyGoal';
-import { resolveWeeklyMissionsState, applyDeclarativeMission, isWeeklyMissionsGridComplete, type WeeklyMissionsState } from '../utils/weeklyMissions';
+import type { WeeklyMissionsState, MissionKey } from '../utils/weeklyMissions';
+import { runReadThenWriteTransaction } from '../utils/firestoreTransaction';
+import {
+  buildRouletteCompletionPatch, buildDeclarativeMissionPatch,
+  type LudicMissionsSnapshot, type MissionsFige,
+} from '../utils/ludicStateWrites';
 
 export interface LudicState {
   weeklyGoalItems?: WeeklyGoalItem[] | null;
@@ -45,34 +50,35 @@ export const updateLudicState = async (
   await setDoc(ludicRef(uid), { ...partial, updated_at: new Date().toISOString() }, { merge: true });
 };
 
-// ✅ Cas particulier "J'ai relevé le défi" (V2.55) : valeur explicite calculée depuis l'état
-// déjà en mémoire de l'appelant plutôt qu'un `increment()` Firestore — cohérent avec le
-// reste du module (aucune lecture ici), `current` doit être l'état déjà résolu par
-// `getLudicState`.
-//
-// ✅ PLAN-anecdote-methodes-missions.md §C.2/§C.5 : M8 ("activer et réussir une roulette")
-// est évaluée ICI et fondue dans cette MÊME écriture — "M8 est évaluée dans le gestionnaire
-// de la roulette, qui écrit déjà user_ludic_state", jamais une écriture séparée.
-// `missionsFige` (niveau/âge figés à l'ouverture de la semaine, résolus par l'appelant à
-// partir de son propre état — voir ClientDaily.tsx) sert de repli si la grille stockée
-// appartient à une semaine ISO déjà passée (resolveWeeklyMissionsState s'en charge).
+// ✅ "J'ai relevé le défi" (V2.55) + M8 (PLAN-anecdote-methodes-missions.md §C.2/§C.5, fondue
+// dans cette même écriture). V2.68.1 (docs/handoffs/RETOUR-bug-missions-et-revalidation.md
+// §1.4) : calculé depuis le document RELU dans une transaction, plus depuis l'état chargé au
+// montage — voir utils/ludicStateWrites.ts. Renvoie les valeurs réellement écrites (l'appelant
+// met son affichage à jour APRÈS la confirmation, pas d'UI optimiste — retour ClaudeNav 06/09).
+// `missionsFige` sert de repli si la grille stockée appartient à une semaine ISO passée.
 export const incrementRouletteCompleted = async (
   uid: string,
-  current: LudicState,
   entry: RouletteCompletion,
-  missionsFige: { level: string; countsChildWalls: boolean }
-): Promise<{
-  rouletteChallengesCompleted: number;
-  rouletteRecentChallenges: RouletteCompletion[];
-  weeklyMissions: WeeklyMissionsState;
-  weeklyMissionsCompleted: number;
-}> => {
-  const rouletteChallengesCompleted = (current.rouletteChallengesCompleted || 0) + 1;
-  const rouletteRecentChallenges = addRouletteCompletion(current.rouletteRecentChallenges, entry);
-  const baseMissions = resolveWeeklyMissionsState(current.weeklyMissions, new Date(), missionsFige.level, missionsFige.countsChildWalls);
-  const wasComplete = isWeeklyMissionsGridComplete(baseMissions);
-  const weeklyMissions = applyDeclarativeMission(baseMissions, 'M8');
-  const weeklyMissionsCompleted = (current.weeklyMissionsCompleted || 0) + (!wasComplete && isWeeklyMissionsGridComplete(weeklyMissions) ? 1 : 0);
-  await updateLudicState(uid, { rouletteChallengesCompleted, rouletteRecentChallenges, weeklyMissions, weeklyMissionsCompleted });
-  return { rouletteChallengesCompleted, rouletteRecentChallenges, weeklyMissions, weeklyMissionsCompleted };
+  missionsFige: MissionsFige
+): Promise<Required<LudicMissionsSnapshot>> => {
+  let written: Required<LudicMissionsSnapshot> | undefined;
+  await runReadThenWriteTransaction(db, { ludic: ludicRef(uid) }, (readData) => {
+    written = buildRouletteCompletionPatch((readData.ludic || {}) as LudicState, entry, missionsFige, new Date());
+    return [{ ref: ludicRef(uid), data: { ...written, updated_at: new Date().toISOString() } }];
+  });
+  return written!;
+};
+
+// ✅ M4 bis (§C.3.b) : même discipline que ci-dessus — relue dans la transaction.
+export const recordDeclarativeMission = async (
+  uid: string,
+  missionKey: MissionKey,
+  missionsFige: MissionsFige
+): Promise<{ weeklyMissions: WeeklyMissionsState; weeklyMissionsCompleted: number }> => {
+  let written: { weeklyMissions: WeeklyMissionsState; weeklyMissionsCompleted: number } | undefined;
+  await runReadThenWriteTransaction(db, { ludic: ludicRef(uid) }, (readData) => {
+    written = buildDeclarativeMissionPatch((readData.ludic || {}) as LudicState, missionKey, missionsFige, new Date());
+    return [{ ref: ludicRef(uid), data: { ...written, updated_at: new Date().toISOString() } }];
+  });
+  return written!;
 };

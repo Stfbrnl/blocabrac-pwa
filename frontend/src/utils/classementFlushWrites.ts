@@ -51,8 +51,31 @@ export interface ClassementFlushRefs {
   challengeRefs: Map<string, DocumentReference<DocumentData>>;
 }
 
+// ✅ docs/handoffs/RETOUR-bug-missions-et-revalidation.md §1.5 (V2.68.1) : la liste des
+// documents à LIRE dans la transaction est dérivée ici, du même `pending` que celui qui
+// décide des écritures — plus jamais une condition écrite à la main dans le composant. C'est
+// précisément une telle condition (`if (pending.wallDeltas.size > 0) reads.userLudic = …`,
+// héritée d'avant les missions) qui a laissé V2.68 réécrire `weeklyMissions` depuis une
+// grille vide dès qu'un flush ne portait QUE des missions (un échec pour M4, une revalidation
+// pour M1). Clés : 'classementProfile', 'userLudic', `challenge:${id}` (challengeReadKey).
+export const challengeReadKey = (challengeId: string): string => `challenge:${challengeId}`;
+
+export const classementFlushReadKeys = (pending: ClassementFlushPending): Set<string> => {
+  const keys = new Set<string>(['classementProfile']);
+  if (pending.wallDeltas.size > 0 || pending.missionsNewlyDone.size > 0 || pending.wallsNewlyVisited.size > 0) {
+    keys.add('userLudic');
+  }
+  [...pending.challengeDeltas.keys(), ...pending.blocDesigneScores.keys()].forEach((id) => keys.add(challengeReadKey(id)));
+  return keys;
+};
+
 export interface ClassementFlushReadData {
-  classementProfile?: { score?: number; colorCounts?: ColorCounts; season?: { score?: number; colorCounts?: ColorCounts } };
+  // ✅ §1.6 du même retour : distingue "non lu" (clé absente de `readKeys`) de "document
+  // absent" (clé présente, donnée `undefined`) — `undefined` seul ne le permettait pas. Toute
+  // écriture vers un document non lu fait LEVER buildClassementFlushWrites : on préfère une
+  // écriture perdue bruyamment (la file la retente puis alerte) à une corruption silencieuse.
+  readKeys: ReadonlySet<string>;
+  classementProfile?:{ score?: number; colorCounts?: ColorCounts; season?: { score?: number; colorCounts?: ColorCounts } };
   userLudic?: { wallCounts?: WallCounts; weeklyMissions?: WeeklyMissionsState; weeklyMissionsCompleted?: number };
   challenges: Map<string, { progress?: Record<string, { value?: number }> } | undefined>;
 }
@@ -150,6 +173,20 @@ export const buildClassementFlushWrites = (
       ref: challengeRef,
       data: { progress: { [uid]: { value: newValue, updated_at: new Date().toISOString() } } },
     });
+  });
+
+  // ✅ Garde §1.6 : chaque document écrit doit avoir été lu dans CETTE transaction.
+  const readKeyOf = (ref: DocumentReference<DocumentData>): string | undefined => {
+    if (ref === refs.classementProfileRef) return 'classementProfile';
+    if (ref === refs.userLudicRef) return 'userLudic';
+    for (const [id, challengeRef] of refs.challengeRefs) if (challengeRef === ref) return challengeReadKey(id);
+    return undefined;
+  };
+  writes.forEach(({ ref }) => {
+    const key = readKeyOf(ref);
+    if (!key || !readData.readKeys.has(key)) {
+      throw new Error(`buildClassementFlushWrites : écriture vers "${key ?? 'référence inconnue'}" sans lecture préalable dans la transaction (voir classementFlushReadKeys)`);
+    }
   });
 
   return writes;

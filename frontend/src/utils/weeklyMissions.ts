@@ -142,6 +142,22 @@ export const applyDeclarativeMission = (state: WeeklyMissionsState, missionKey: 
   return withCompletion(state, [...state.done, missionKey]);
 };
 
+// ✅ V2.68.1 : réconcilie la grille AFFICHÉE (mémoire, qui peut porter des missions cochées
+// dont le flush débouncé n'est pas encore parti) avec une grille fraîchement relue/écrite
+// (retour d'une écriture transactionnelle M8/M4 bis). Même semaine : union — l'une et l'autre
+// ne font que gagner des cases, jamais en perdre. Semaines différentes : la plus récente gagne
+// (clé "YYYY-Www" comparable lexicographiquement).
+export const mergeWeeklyMissionsForDisplay = (
+  memory: WeeklyMissionsState | undefined,
+  fresh: WeeklyMissionsState
+): WeeklyMissionsState => {
+  if (!memory || memory.isoWeek < fresh.isoWeek) return fresh;
+  if (memory.isoWeek > fresh.isoWeek) return memory;
+  const done = Array.from(new Set<MissionKey>([...fresh.done, ...memory.done]));
+  const walls = Array.from(new Set<string>([...fresh.walls, ...memory.walls]));
+  return { ...fresh, done, walls, completedAt: fresh.completedAt ?? memory.completedAt };
+};
+
 export const isWeeklyMissionsGridComplete = (state: WeeklyMissionsState): boolean =>
   state.done.length >= MISSION_KEYS.length;
 

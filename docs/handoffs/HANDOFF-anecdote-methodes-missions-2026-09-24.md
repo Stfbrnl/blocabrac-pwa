@@ -7,6 +7,12 @@
 > (`--only hosting,firestore:rules`).
 > `topo-blocabrac.pdf` mis à jour et régénéré (voir §6). Aucune vérification visuelle en
 > prod faite par l'agent ni par l'utilisateur — voir §5, c'est le principal point ouvert.
+>
+> **🔴 Mise à jour du 25/09/2026** : l'utilisateur a testé en salle le soir du 24/09. Un
+> **bug de perte de données** sur la grille de missions et une **question de fond sur la
+> revalidation d'un bloc déjà réussi** en sont sortis — voir **§8**, ajoutée à la fin.
+> **Aucun correctif n'est écrit ni déployé** : l'utilisateur demande un second avis de
+> ClaudeNav avant toute modification. Les questions à trancher sont en §8.4.
 
 ---
 
@@ -163,9 +169,157 @@ points, seuil d'affichage à 3 votes) — toutes appliquées telles que tranché
 
 ---
 
+## 8. 🔴 Retour terrain du 24/09 au soir (ajouté le 25/09) — diagnostic, AUCUN correctif appliqué
+
+### 8.1 Ce que l'utilisateur a observé
+
+1. **Bug** : plusieurs cases de la grille de missions s'étaient bien cochées au fil de la
+   séance. Écran du smartphone mis en veille sur l'appli ; au réveil, en validant la mission
+   suivante, **toutes les cases précédemment cochées avaient disparu**. Relancer l'appli n'y
+   change rien : la grille est **toujours vide** depuis.
+2. **Question** : pour faire M1 (« un bloc de ton niveau max »), il a **refait en un essai
+   un bloc rouge qu'il avait déjà validé** auparavant. Est-ce que ça écrase la validation
+   d'origine et modifie le classement annuel/saisonnier ?
+
+### 8.2 Diagnostic du bug (lu dans le code, pas encore reproduit sur l'émulateur)
+
+**Cause racine — `ClientDaily.tsx:255`**, dans le `persist` de `classementQueue` :
+
+```ts
+if (pending.wallDeltas.size > 0) reads.userLudic = userLudicRef;
+```
+
+`user_ludic_state` n'est ajouté aux **lectures** de la transaction que si le flush contient
+un delta `wallCounts`. Ce test date d'avant le chantier C, quand `wallCounts` était la seule
+chose écrite sur ce document. Le chantier C a fait écrire `weeklyMissions` sur ce même
+document (`classementFlushWrites.ts:108-127`), **sans étendre la condition de lecture**.
+
+Or `wallDeltas` n'est non vide que si `colorCountDelta !== 0` (`applyClassementDelta`,
+`ClientDaily.tsx:737-745`), c'est-à-dire **uniquement lors d'une première réussite** sur un
+bloc (ou une dé-validation). Pour tout flush qui ne contient QUE des deltas de missions, on
+a `readData.userLudic === undefined`. `buildClassementFlushWrites` appelle alors
+`resolveWeeklyMissionsState(undefined, …)` : ça renvoie une **grille vide** de la semaine
+courante, à laquelle il ajoute seulement les missions/murs du flush. Le résultat est écrit
+en `merge:true`, mais `done`/`walls` sont des **tableaux**, donc remplacés en entier et non
+fusionnés. Les cas qui déclenchent ce chemin :
+
+- un **échec** (compte pour M2 « murs visités » et M4 « tester un max+1 »), puisqu'un échec
+  sur un bloc jamais réussi ne produit pas de `colorCountDelta` ;
+- une **revalidation** d'un bloc déjà réussi : cas exact de l'utilisateur pour M1.
+
+Si le flush fautif ne portait qu'un nouveau mur visité (typiquement un **échec sur un mur
+pas encore visité**), `done` est écrit **vide**. Ça colle avec la grille entièrement vide
+observée. `weeklyMissionsCompleted` est calculé sur la même base fausse : il peut aussi
+repartir de 0.
+
+**Pourquoi la veille semblait liée** : pendant la séance, l'état React en mémoire restait
+juste alors que Firestore était déjà corrompu. Au réveil, Android a très probablement
+rechargé l'onglet ; le remontage relit `user_ludic_state` et fait apparaître la perte. La
+veille *révèle* le bug, elle ne le cause pas. Relancer l'appli relit la même donnée fausse.
+
+**Pourquoi rien ne l'a attrapé** : les tests unitaires de `buildClassementFlushWrites`
+reçoivent `readData` déjà fourni ; le **choix de ce qu'on lit** vit dans le composant, que
+seul un e2e exerce. Pas d'e2e missions (écart assumé en §7.1). C'est la même famille que le
+bug V2.46 : un chemin d'écriture partagé, élargi sans revoir ses lectures.
+
+**Portée** : touche potentiellement **tout compte** ayant fait un échec ou une revalidation
+depuis le déploiement V2.68 (24/09). Données de prod non consultées pour le chiffrer.
+
+### 8.3 Réponse à la question de revalidation — oui, la validation d'origine est écrasée
+
+Comportement **antérieur aux missions** (le problème existe depuis longtemps), mais les
+missions M1 et M3 poussent désormais les grimpeurs à retourner sur des blocs déjà faits :
+l'exposition a fortement augmenté.
+
+- La fiche d'un bloc **ne se pré-remplit jamais** avec le résultat déjà enregistré :
+  `handleOpenBoulder` (`ClientDaily.tsx:459`) ne fait qu'ouvrir la modale. Les états
+  `attempts`/`ratings`/`comments`/`proposedDifficulties` ne sont alimentés que par la saisie
+  de la session, et le `Select` « Nombre d'essais » affiche `attempts[id] || 1` (~l.1419).
+- `handleValidateSuccess` (`ClientDaily.tsx:885+`) écrit `client_boulder_results` par un
+  `setDoc` **sans merge** : il **remplace** tout le document. Seuls `createdAt` et `methods`
+  sont reportés explicitement.
+- Conséquences pour le cas de l'utilisateur (rouge revalidé en 1 essai) :
+  - **pas de double comptage** : `colorCountDelta = 0`, le bloc compte toujours une fois ;
+  - **`attempts` passe de N à 1**, donc `scoreDelta = points(1) − points(N) > 0` et le
+    **score annuel monte**. Le **score saisonnier** monte aussi, mais seulement si le
+    `createdAt` d'origine (bien préservé) tombe dans la fenêtre de saison ; sinon il ne
+    bouge pas (garde V2.56) ;
+  - **note, commentaire et cotation proposée remis à 0/vide/null** (le bloc perd la note
+    de ce grimpeur dans ses stats).
+- **Cas plus grave, non vécu mais atteignable** : cliquer **« Échoué »** sur un bloc réussi
+  il y a des mois **dé-valide** la réussite (`success:false`). Le grimpeur perd les points,
+  `colorCounts` et `wallCounts` baissent, un badge peut s'éteindre et, en cascade, `level`
+  peut descendre (§V2.54 de `CLAUDE.md`). Une revalidation en **plus** d'essais que
+  l'original fait aussi **baisser** le score.
+- `reconcile-classement-profiles.js` **ne rattrape rien** : il recalcule depuis
+  `client_boulder_results`, qui est précisément la donnée écrasée.
+- **Effet de bord sur M3 (flash)**, pas signalé par l'utilisateur mais lié : comme le
+  `Select` vaut 1 par défaut, un « Réussi » cliqué sans toucher au nombre d'essais compte
+  comme un flash. M3 est donc aussi auto-déclarative de fait, au-delà de ce que §C.3.a
+  avait assumé pour M1 seule.
+
+### 8.4 Pistes proposées à l'utilisateur — à trancher, rien n'est codé
+
+**Bug missions (proposé en V2.68.1, correctif isolé)** :
+- Toujours lire `user_ludic_state` dès qu'un delta `wallDeltas` **ou**
+  `missionsNewlyDone`/`wallsNewlyVisited` est en attente (coût : +1 lecture par flush
+  débouncé ≈ négligeable). Sortir ce choix de lectures dans une fonction pure
+  (`classementFlushReadKeys(pending)` ou équivalent) testée unitairement, pour que la
+  condition ne puisse plus diverger silencieusement de ce que `buildClassementFlushWrites`
+  écrit.
+- Variante défensive à considérer : que `buildClassementFlushWrites` **refuse** (throw)
+  d'écrire `weeklyMissions` si la lecture n'a pas été faite. Il faudrait alors distinguer
+  « non lu » de « document absent », ce que `undefined` ne permet pas aujourd'hui.
+- Ajouter un e2e missions avec au moins **un échec puis une revalidation seule** et une
+  assertion `firebase-admin` sur `weeklyMissions.done` (conforme à
+  `PROCESSUS-erreurs-avalees.md` §4).
+- **Réparation des grilles abîmées** : soit un script qui recalcule la grille de la semaine
+  depuis les `client_boulder_results` dont `updatedAt` ≥ lundi (approximatif : un reclic
+  identique ne laisse aucune trace, donc M1 par reclic est irrécupérable ; M8 est
+  reconstructible via `rouletteRecentChallenges`), soit **ne rien faire** puisque la grille
+  repart à zéro lundi 28/09. Choix non fait.
+
+**Revalidation (version séparée, décision produit requise)** :
+- **Option A, « une réussite ne se dégrade jamais »** : après un succès, « Échoué » ne
+  dé-valide plus rien et `attempts` = min(ancien, nouveau). Note, commentaire et cotation
+  sont préservés, et la modale est pré-remplie depuis le résultat stocké. Le cas de
+  l'utilisateur ferait encore monter le score (3 essais devenus 1).
+- **Option B, « la validation d'origine est figée »** (recommandée par Claude Code) :
+  au-delà d'un court délai de correction (le jour de `createdAt`, par exemple), un reclic
+  sur un bloc déjà réussi est une **répétition**. Elle fait avancer les missions (déjà
+  évaluées sur le geste, avant l'écriture), mais **n'écrit pas** `client_boulder_results`
+  et ne touche pas au classement. On garde le pré-remplissage et la préservation de la note
+  de A. Argument : une meilleure ascension des mois plus tard n'a pas de raison de changer
+  le classement, et on supprime tout moyen de perdre une validation par erreur.
+- Points de vigilance pour l'une ou l'autre option :
+  - le pré-remplissage exige une lecture à l'ouverture de la fiche. Elle existe déjà sous
+    forme de `resolvePreviousResultState` (appelée au clic) : on peut l'avancer à
+    l'ouverture et la mettre en cache ;
+  - la **dé-validation volontaire** (erreur de saisie réelle) doit rester possible d'une
+    manière ou d'une autre, sinon une fausse réussite serait définitive ;
+  - avec B, il faut préciser si M3 (flash) doit exiger une **première** réussite dans la
+    semaine plutôt qu'un clic (cf. l'effet de bord de §8.3) ;
+  - `handleRate` (« Enregistrer ») partage le même `setDoc` sans merge et doit suivre la
+    même règle.
+
+**Questions pour ClaudeNav** :
+1. Le diagnostic §8.2 est-il complet, ou d'autres chemins écrivent-ils `weeklyMissions` à
+   partir d'un état non relu ? Candidats à vérifier : `handleMissionM4Bis` et
+   `incrementRouletteCompleted`, qui écrivent depuis l'**état en mémoire** (juste tant que
+   la page n'a pas été rechargée, mais sans relecture Firestore).
+2. A ou B pour la revalidation, et quel délai de correction si B ?
+3. Faut-il réparer les grilles de la semaine en cours, ou laisser la réinitialisation de
+   lundi s'en charger ?
+
+---
+
 ## Points ouverts par ailleurs (reportés, inchangés sauf mention contraire)
 
-- **Vérification visuelle des 3 nouvelles fonctionnalités — voir §5, nouveau, prioritaire.**
+- **🔴 Bug grille de missions + règle de revalidation — voir §8, nouveau, prioritaire,
+  second avis ClaudeNav attendu avant tout correctif.**
+- Vérification visuelle des 3 nouvelles fonctionnalités (§5) : **partiellement faite** par
+  l'utilisateur le 24/09 au soir, et c'est ce qui a révélé §8. Anecdote d'ouvreur et carnet
+  de méthodes : pas de retour de l'utilisateur à ce stade.
 - Migration état ludique : Passe C déployée en V2.61, purge
   (`purge-legacy-ludic-fields.js --fix`) toujours en attente.
 - Clic « Redémarrer la saison » — à vérifier si déjà fait par l'utilisateur.

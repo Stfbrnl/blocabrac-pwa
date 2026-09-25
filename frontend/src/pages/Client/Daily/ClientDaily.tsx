@@ -9,6 +9,7 @@ import { useDebouncedFlushQueue } from '../../../utils/useDebouncedFlushQueue';
 import { runReadThenWriteTransaction } from '../../../utils/firestoreTransaction';
 import {
   buildClassementFlushWrites, mergeClassementFlushPending, emptyClassementFlushPending,
+  classementFlushReadKeys, challengeReadKey,
   type ClassementFlushPending,
 } from '../../../utils/classementFlushWrites';
 import { buildFirstAscentWrite } from '../../../utils/firstAscentWrites';
@@ -33,9 +34,9 @@ import {
   type DrawResult, type WallCounts, type RouletteCompletion,
 } from '../../../utils/roulette';
 import RouletteDialog, { type RouletteChosenBoulder } from './RouletteDialog';
-import { getLudicState, incrementRouletteCompleted, updateLudicState } from '../../../services/ludicState';
+import { getLudicState, incrementRouletteCompleted, recordDeclarativeMission } from '../../../services/ludicState';
 import {
-  resolveWeeklyMissionsState, applyValidationToWeeklyMissions, applyDeclarativeMission,
+  resolveWeeklyMissionsState, applyValidationToWeeklyMissions, mergeWeeklyMissionsForDisplay,
   isAtLevelCeiling, isWeeklyMissionsGridComplete, describeMission,
   MISSION_KEYS, MISSION_M4_BIS_LABEL, WEEKLY_MISSIONS_WALLS_TARGET,
   type WeeklyMissionsState,
@@ -251,17 +252,23 @@ const ClientDaily: React.FC = () => {
       const challengeIds = new Set<string>([...pending.challengeDeltas.keys(), ...pending.blocDesigneScores.keys()]);
       const challengeRefs = new Map(Array.from(challengeIds, (id) => [id, doc(db, 'challenges', id)]));
 
+      // ✅ V2.68.1 (docs/handoffs/RETOUR-bug-missions-et-revalidation.md §1.5) : les lectures sont
+      // dérivées du `pending` par la fonction pure `classementFlushReadKeys` — plus aucune
+      // condition écrite ici à la main (celle de V2.68 oubliait les missions, et un flush ne
+      // portant que des missions réécrivait la grille depuis un état vide).
+      const readKeys = classementFlushReadKeys(pending);
       const reads: Record<string, ReturnType<typeof doc>> = { classementProfile: classementProfileRef };
-      if (pending.wallDeltas.size > 0) reads.userLudic = userLudicRef;
-      challengeRefs.forEach((ref, id) => { reads[`challenge:${id}`] = ref; });
+      if (readKeys.has('userLudic')) reads.userLudic = userLudicRef;
+      challengeRefs.forEach((ref, id) => { if (readKeys.has(challengeReadKey(id))) reads[challengeReadKey(id)] = ref; });
 
       await runReadThenWriteTransaction(db, reads, (readData) => buildClassementFlushWrites(
         user.uid,
         pending,
         {
+          readKeys,
           classementProfile: readData.classementProfile,
           userLudic: readData.userLudic,
-          challenges: new Map(Array.from(challengeIds, (id) => [id, readData[`challenge:${id}`]])),
+          challenges: new Map(Array.from(challengeIds, (id) => [id, readData[challengeReadKey(id)]])),
         },
         { classementProfileRef, userLudicRef, challengeRefs }
       ));
@@ -562,13 +569,21 @@ const ClientDaily: React.FC = () => {
       countsChildWalls: selfProfileRef.current.weeklyMissions?.countsChildWalls ?? false,
     };
     try {
+      // ✅ V2.68.1 : relu dans une transaction (services/ludicState.ts), plus recomposé depuis
+      // la mémoire. L'affichage fusionne la grille écrite avec la grille en mémoire, qui peut
+      // porter des cases dont le flush débouncé n'est pas encore parti.
       const { rouletteChallengesCompleted, rouletteRecentChallenges, weeklyMissions, weeklyMissionsCompleted } = await incrementRouletteCompleted(
         user.uid,
-        selfProfileRef.current,
         entry,
         missionsFige
       );
-      setSelfProfile((prev) => ({ ...prev, rouletteChallengesCompleted, rouletteRecentChallenges, weeklyMissions, weeklyMissionsCompleted }));
+      setSelfProfile((prev) => ({
+        ...prev,
+        rouletteChallengesCompleted,
+        rouletteRecentChallenges,
+        weeklyMissions: mergeWeeklyMissionsForDisplay(prev.weeklyMissions, weeklyMissions),
+        weeklyMissionsCompleted,
+      }));
       setSuccess(`Bravo, ${rouletteChallengesCompleted}ᵉ défi Roulette relevé !`);
     } catch (err) {
       console.error('Erreur lors de l\'enregistrement du défi Roulette relevé:', err);
@@ -582,20 +597,20 @@ const ClientDaily: React.FC = () => {
   // construction (un seul grimpeur de la salle au rose permanent au moment du plan).
   const handleMissionM4Bis = async () => {
     if (!user) return;
-    const base = selfProfile.weeklyMissions;
+    const base = selfProfileRef.current.weeklyMissions;
     if (!base || base.done.includes('M4')) return;
-    const wasComplete = isWeeklyMissionsGridComplete(base);
-    const next = applyDeclarativeMission(base, 'M4');
-    const justCompleted = !wasComplete && isWeeklyMissionsGridComplete(next);
     try {
-      await updateLudicState(user.uid, {
-        weeklyMissions: next,
-        ...(justCompleted ? { weeklyMissionsCompleted: (selfProfile.weeklyMissionsCompleted || 0) + 1 } : {}),
-      });
+      // ✅ V2.68.1 : relu dans une transaction (services/ludicState.ts), plus recomposé depuis
+      // la mémoire — même correctif que "J'ai relevé le défi" ci-dessus.
+      const { weeklyMissions, weeklyMissionsCompleted } = await recordDeclarativeMission(
+        user.uid,
+        'M4',
+        { level: base.level, countsChildWalls: base.countsChildWalls }
+      );
       setSelfProfile((prev) => ({
         ...prev,
-        weeklyMissions: next,
-        weeklyMissionsCompleted: justCompleted ? (prev.weeklyMissionsCompleted || 0) + 1 : prev.weeklyMissionsCompleted,
+        weeklyMissions: mergeWeeklyMissionsForDisplay(prev.weeklyMissions, weeklyMissions),
+        weeklyMissionsCompleted,
       }));
       setSuccess('Mission "M4 bis" validée !');
     } catch (err) {
