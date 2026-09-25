@@ -11,6 +11,7 @@
 > **Ajout du soir (§4 bis)** : l'audit §3.2 a été lancé en prod. Il a révélé que le badge de
 > mission **n'avait jamais été créé au catalogue**, et il est maintenant créé. Les e2e
 > saison passent (15/15 et 10/10).
+> **V2.70.1 (§4 ter)** : badge au tampon, texte de « Quoi de neuf » coupé sur mobile, déployé.
 
 ---
 
@@ -194,6 +195,38 @@ qui vérifie sa présence.
   émulateur redémarré à vide, il passe 10/10.
 - Les scripts appelés par ces tests forcent `FIRESTORE_EMULATOR_HOST`. Seul le journal
   `.emulator.json` (exclu de git) a été écrit, et `git status` est resté propre.
+
+---
+
+## 4 ter. V2.70.1 : le badge au tampon (25/09, fin de soirée, déployé)
+
+L'utilisateur a vu son badge dans « Mes stats » et l'a trouvé « tristounet » : il était en
+gris par défaut, car il n'a aucune couleur de niveau. Deux options lui ont été proposées
+(vert de la salle seul, ou vert plus tampon). Il a **choisi le tampon à la place de la
+médaille**. Ta condition du §2.11 (voir le tampon en vrai sur la grille avant de le
+réutiliser) était remplie, puisqu'il venait de le voir.
+
+- **En-tête de la carte** dans « Mes stats » : fond `brandGreen`, tampon blanc à −13°, via
+  le nouveau `components/GymStampMark.tsx` (version statique de celui de la grille, même
+  masque).
+- **Accueil** : la puce « Dernier badge obtenu » passe au vert de la salle.
+- **La couleur est décidée par le type**, avec `isMissionBadge`/`badgeDisplayColor` (purs,
+  testés, dans `badgeActivation.ts`). Il ne faut **jamais** poser de `color` sur le
+  document : `computeBadgeActive` chercherait des blocs de cette « couleur » et mettrait le
+  badge en veille.
+- **Deux défauts antérieurs**, trouvés sur les captures de contrôle et corrigés dans le même
+  lot :
+  - la puce de l'accueil ignorait `feminineName` ;
+  - **le texte du panneau « Quoi de neuf » était coupé à droite sur mobile depuis V2.13** :
+    chaque `ListItem` faisait 100 % de large avec une marge à gauche, donc débordait, et
+    l'`Alert` coupait ce qui dépassait. Corrigé par `width: 'auto'`. Chaque annonce de
+    version était donc partiellement illisible sur téléphone.
+- **Vérifié sur émulateur** : attribution automatique réelle du badge à l'ouverture de
+  « Mes stats », captures en 400 px, clair et sombre, sans erreur console. `npm test`
+  293/293.
+- **Pas d'entrée de changelog**, pour que l'annonce 2.70 (qui reprend la 2.69) reste
+  affichée.
+- **Le tampon n'est pas réutilisé pour la roulette** : ce n'était pas demandé.
 
 ---
 
