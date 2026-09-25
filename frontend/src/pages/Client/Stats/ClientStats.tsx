@@ -49,7 +49,8 @@ import MilitaryTechIcon from '@mui/icons-material/MilitaryTech';
 import { jsPDF } from 'jspdf';
 import * as html2canvas from 'html2canvas';
 import { logoAssetUrl as logo } from '../../../config/gymConfig';
-import { computeBadgeActive } from '../../../utils/badgeActivation';
+import { badgeDisplayColor, computeBadgeActive, isMissionBadge } from '../../../utils/badgeActivation';
+import GymStampMark from '../../../components/GymStampMark';
 import type { RouletteCompletion } from '../../../utils/roulette';
 import { getLudicState } from '../../../services/ludicState';
 
@@ -87,6 +88,7 @@ interface Badge {
   name: string;
   feminineName?: string;
   description: string;
+  type?: string;
   color?: string;
   criteria?: {
     color?: string;
@@ -188,12 +190,7 @@ const ClientStats: React.FC = () => {
   };
 
   // Couleur d'affichage du badge
-  const getBadgeColor = (badge: Badge): string => {
-    if (badge.color && levelColors[badge.color]) {
-      return levelColors[badge.color];
-    }
-    return badge.color || '#9E9E9E';
-  };
+  const getBadgeColor = (badge: Badge): string => badgeDisplayColor(badge, levelColors);
 
   // Un badge reste actif tant que le client a encore, dans ses stats, au moins
   // "count" bloc(s) validé(s) de la couleur du badge qui existent toujours en salle.
@@ -422,6 +419,7 @@ const ClientStats: React.FC = () => {
                 name: badgeData.name || 'Badge inconnu',
                 feminineName: badgeData.feminineName,
                 description: badgeData.description || '',
+                type: badgeData.type,
                 color: badgeData.color,
                 criteria: badgeData.criteria,
               };
@@ -469,6 +467,7 @@ const ClientStats: React.FC = () => {
             name: data.name || 'Badge',
             feminineName: data.feminineName,
             description: data.description || '',
+            type: data.type,
             color: data.color,
             criteria: data.criteria,
           };
@@ -1014,16 +1013,21 @@ const ClientStats: React.FC = () => {
                         filter: active ? 'none' : 'grayscale(1)',
                       }}
                     >
-                      <MilitaryTechIcon
-                        sx={{
-                          fontSize: 56,
-                          color: !active
-                            ? '#757575'
-                            : ['#000000', '#800080', '#0000FF', '#FF0000'].includes(badgeColor)
-                              ? '#FFFFFF'
-                              : '#000000',
-                        }}
-                      />
+                      {isMissionBadge(cb.badge) ? (
+                        // Badge de mission : le tampon de la grille à la place de la médaille.
+                        <GymStampMark height={56} color="#FFFFFF" />
+                      ) : (
+                        <MilitaryTechIcon
+                          sx={{
+                            fontSize: 56,
+                            color: !active
+                              ? '#757575'
+                              : ['#000000', '#800080', '#0000FF', '#FF0000'].includes(badgeColor)
+                                ? '#FFFFFF'
+                                : '#000000',
+                          }}
+                        />
+                      )}
                     </Box>
                     <CardContent>
                       <Typography variant="h6" sx={{ color: active ? badgeColor : 'text.disabled' }}>

@@ -50,6 +50,7 @@ import {
   type WeeklyValidation,
 } from '../../utils/weeklyGoal';
 import { colorGrades, logoPath, gymName, brandGreen, brandGreenDark } from '../../config/gymConfig';
+import { isMissionBadge } from '../../utils/badgeActivation';
 
 // Tableau de correspondance code-couleur/cotations (cohérent avec ClientProfile.tsx, AdminUsers.tsx...)
 const levelOptions: Record<string, string> = Object.fromEntries(
@@ -67,6 +68,8 @@ interface NextCompetition {
 
 interface LastBadge {
   name: string;
+  feminineName?: string;
+  type?: string;
   color?: string;
   awardedAt: Date;
 }
@@ -79,6 +82,7 @@ interface ActiveBoulderOption {
 
 interface ClientUserData {
   level?: string;
+  gender?: string;
   inscritAuxCours?: boolean;
   first_name?: string;
   // weeklyGoalTarget : ancien champ (un simple nombre, "tous niveaux confondus"),
@@ -94,6 +98,10 @@ const ClientScreen: React.FC = () => {
   const [loadingData, setLoadingData] = React.useState(true);
   const [nextCompetition, setNextCompetition] = React.useState<NextCompetition | null>(null);
   const [lastBadge, setLastBadge] = React.useState<LastBadge | null>(null);
+  // Même règle que getBadgeDisplayName dans ClientStats.tsx : libellé féminin s'il existe.
+  const lastBadgeName = lastBadge
+    ? (userData?.gender === 'Femme' && lastBadge.feminineName) || lastBadge.name
+    : '';
   const [streak, setStreak] = React.useState(0);
   const [weekValidations, setWeekValidations] = React.useState<WeeklyValidation[]>([]);
   const [goalDialogOpen, setGoalDialogOpen] = React.useState(false);
@@ -183,6 +191,8 @@ const ClientScreen: React.FC = () => {
             const badgeData = badgeDoc.data();
             setLastBadge({
               name: badgeData.name || 'Badge',
+              feminineName: badgeData.feminineName,
+              type: badgeData.type,
               color: badgeData.color,
               awardedAt: mostRecent.awardedAt,
             });
@@ -481,8 +491,12 @@ const ClientScreen: React.FC = () => {
                     Dernier badge obtenu
                   </Typography>
                   <Chip
-                    label={`${lastBadge.name} (${lastBadge.awardedAt.toLocaleDateString('fr-FR')})`}
-                    sx={lastBadge.color ? {
+                    label={`${lastBadgeName} (${lastBadge.awardedAt.toLocaleDateString('fr-FR')})`}
+                    sx={isMissionBadge(lastBadge) ? {
+                      // Badge de mission : vert de la salle (sans couleur de niveau, voir badgeActivation.ts).
+                      backgroundColor: brandGreen,
+                      color: 'white'
+                    } : lastBadge.color ? {
                       backgroundColor: levelColors[lastBadge.color] || lastBadge.color,
                       color: lastBadge.color === 'blanc' ? 'black' : 'white'
                     } : undefined}
@@ -716,7 +730,7 @@ const ClientScreen: React.FC = () => {
               )}
               {lastBadge && (
                 <Typography variant="body2" sx={{ mt: 1.5 }}>
-                  Dernier badge : {lastBadge.name}
+                  Dernier badge : {lastBadgeName}
                 </Typography>
               )}
               {streak > 0 && (

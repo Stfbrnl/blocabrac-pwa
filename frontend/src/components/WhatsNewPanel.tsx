@@ -26,7 +26,7 @@ const WhatsNewPanel: React.FC = () => {
         <AlertTitle>Quoi de neuf : {latest.title}</AlertTitle>
         <List dense disablePadding sx={{ mb: 1 }}>
           {latest.items.map((item, i) => (
-            <ListItem key={i} disablePadding sx={{ display: 'list-item', listStyleType: 'disc', ml: 3 }}>
+            <ListItem key={i} disablePadding sx={{ display: 'list-item', listStyleType: 'disc', ml: 3, width: 'auto' }}>
               {item}
             </ListItem>
           ))}

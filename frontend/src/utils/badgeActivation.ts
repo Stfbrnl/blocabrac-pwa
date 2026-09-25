@@ -1,4 +1,7 @@
+import { brandGreen } from '../config/gymConfig';
+
 export interface BadgeActivationCriteria {
+  type?: string;
   color?: string;
   criteria?: {
     color?: string;
@@ -32,4 +35,20 @@ export const computeBadgeActive = (
 
   const required = parseInt(String(rawCount ?? '1'), 10) || 1;
   return validated >= required;
+};
+
+// ✅ V2.70.1 : le badge de mission (`type: 'mission'`, « Badge du grimpeur régulier ») n'a
+// volontairement AUCUNE couleur de niveau — en poser une (même un hex) le ferait passer en
+// veille via computeBadgeActive ci-dessus, qui chercherait des blocs de cette "couleur".
+// Son identité visuelle (vert de la salle + tampon à la place de la médaille, comme sur la
+// grille de missions) est donc décidée ici, d'après son type, jamais d'après `color`.
+export const isMissionBadge = (badge: { type?: string }): boolean => badge.type === 'mission';
+
+export const badgeDisplayColor = (
+  badge: { type?: string; color?: string },
+  levelColors: Record<string, string>
+): string => {
+  if (isMissionBadge(badge)) return brandGreen;
+  if (badge.color && levelColors[badge.color]) return levelColors[badge.color];
+  return badge.color || '#9E9E9E';
 };
