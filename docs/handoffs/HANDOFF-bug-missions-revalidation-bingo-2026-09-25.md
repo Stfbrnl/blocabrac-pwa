@@ -13,6 +13,7 @@
 > saison passent (15/15 et 10/10).
 > **V2.70.1 (§4 ter)** : badge au tampon, texte de « Quoi de neuf » coupé sur mobile, déployé.
 > **V2.70.2 (§9)** : suite donnée à ton `RETOUR-v2681-v269-v270.md`, point par point, déployé.
+> **V2.71 (§10)** : suite donnée à ton `RETOUR-v2701-v2702.md` — ⚠️ ton §4.2.1 reposait sur une hypothèse fausse, voir §10.
 
 ---
 
@@ -416,6 +417,39 @@ quotidien 10/10, saison ×2 (voir ci-dessus).
 - **Pas d'entrée de changelog** pour 2.70.1/2.70.2 : l'annonce 2.70 reste affichée dans
   « Quoi de neuf ». Ce panneau est d'ailleurs **enfin lisible sur mobile** depuis la V2.70.1
   (§4 ter).
+
+---
+
+## 10. Suite donnée à ton `RETOUR-v2701-v2702.md` : V2.71, déployée
+
+Commits `8765550` et `e680f5d`, poussés, déployés le 25/09 au soir (`--only hosting`).
+
+| Ton point | Suite |
+|---|---|
+| §2.1, règle de `delete` | **Ouverte au propriétaire**, lue dans `firestore.rules` (`allow delete: if resource.data.userId == request.auth.uid…`). Elle était déjà exercée par l'étape 10 de l'e2e missions, à travers les vraies règles. La garde « pas de vote de méthodes » est donc **côté client seulement**. Elle est gardée, comme tu le recommandes. |
+| §2.2, filet `methodCounts` | `scripts/reconcile-method-counts.js` : simulation / `--fix` / garde-fou 30 % **et** ≥ 3 / `--force`. Workflow mensuel `reconcile-method-counts.yml` (1er du mois, 03h45 UTC). Test émulateur `reconcile-method-counts-emulator.mjs` : écart détecté, simulation sans écriture, correction, idempotence, garde-fou puis `--force`. **Prod : 141 blocs, 0 vote, 0 écart.** |
+| §3, annonce | Entrée de changelog 2.71 : saison du 1er novembre au 31 mai, départ à zéro, **le classement général compte dès maintenant**. **Aucune mention de la Finale, sur décision de l'utilisateur** : sa faisabilité réelle reste à confirmer, elle sera annoncée plus tard. |
+| §4.2.1, baseline à zéro | ⚠️ **Hypothèse fausse, vérifiée dans le code et fixée par un test** : `recomputeSeasonBaseline` ne reçoit **aucune date**. « Redémarrer » crédite donc tout l'historique de chaque grimpeur, jamais zéro, quel que soit `debut`. Ton §4.3.5 (« régler puis cliquer ») aurait donné aux anciens tout leur historique en crédit. **Une saison à zéro s'ouvre avec « Enregistrer »**, ce que l'utilisateur avait déjà prévu. L'écran admin porte maintenant un avertissement à côté du bouton, et son texte, inexact depuis V2.56 (« blocs encore posés »), est corrigé. Conséquence assumée : sans `season.baseScore`, la réconciliation ignore `season.*`, et seul le compteur incrémental fait foi. |
+| §4.2.2, « saison à venir » | `seasonPhase(config, today)` (pur, testé) → `aucune / a_venir / en_cours / terminee`. Dans l'onglet saison, hors `en_cours`, un **message daté** remplace le tableau de zéros (« La saison commence le 1er novembre 2026… le classement général, lui, compte dès maintenant »). Puce admin « Saison à venir ». Une seule lecture de `app_config` au montage, et une lecture ratée ne masque pas le classement général. |
+| §4.2.3, `isWithinSeasonWindow` avec un début futur | Test explicite ajouté (validation d'octobre, saison au 1er novembre). |
+| §4.3.3, profils manquants | **Aucun** : 59 `users`, 59 `classement_profiles`. Tes 28/30 comparaient les profils porteurs d'un champ `season` et les `user_ludic_state`. Sans objet de toute façon avec « Enregistrer ». |
+| §5, garde de `resetEmulators()` | Lève une exception si l'un des deux `*_EMULATOR_HOST` ne pointe pas vers localhost. Vérifié en le lançant sans variables : refusé. |
+| §5, exceptions connues | `KNOWN_EXCEPTIONS` dans `audit-prod-catalog.js`, affichées sur une ligne ℹ️ à part. Prod : 0 erreur, 1 avertissement (fenêtre de saison non réglée, qui disparaîtra à l'enregistrement). |
+
+**Vérifié** : 300 tests unitaires, lint propre, build après le passage en 2.71. e2e saison 15/15 et 10/10. Captures sur émulateur (onglet saison à venir, écran admin, annonce), où j'ai trouvé et corrigé « le 1 novembre » en « le 1er novembre ».
+
+**Pas vérifié** : le rendu sur un vrai téléphone.
+
+**Ce qui reste côté utilisateur** :
+- enregistrer la fenêtre 2026-11-01 → 2027-05-31 avec « Enregistrer » ;
+- en juin 2027, enregistrer tout de suite la saison suivante, sinon le cron de clôture passe au rouge après 7 jours.
+
+**Question ouverte pour l'utilisateur** : trois textes déjà en prod depuis août parlent encore de la Finale :
+- la légende de l'onglet saison (visible à partir du 1er novembre) ;
+- l'aide ;
+- l'aide de la case « apparaître au classement » dans le profil.
+
+À aligner ou non avec sa décision de ne pas annoncer la Finale pour l'instant.
 
 ---
 
