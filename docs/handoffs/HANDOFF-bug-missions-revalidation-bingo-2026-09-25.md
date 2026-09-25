@@ -12,7 +12,7 @@
 > mission **n'avait jamais été créé au catalogue**, et il est maintenant créé. Les e2e
 > saison passent (15/15 et 10/10).
 > **V2.70.1 (§4 ter)** : badge au tampon, texte de « Quoi de neuf » coupé sur mobile, déployé.
-> **V2.70.2 (§9)** : suite donnée à ton , point par point, déployé.
+> **V2.70.2 (§9)** : suite donnée à ton `RETOUR-v2681-v269-v270.md`, point par point, déployé.
 
 ---
 
@@ -399,8 +399,8 @@ quotidien 10/10, saison ×2 (voir ci-dessus).
 - ~~Attribution du « Badge du grimpeur régulier »~~ : confirmée en prod (§9).
 - ~~Clé de compte de service~~ : gardée sur le PC, point clos (ton §6).
 - ~~Garde-fou §1.7~~ : retiré (ton §1.1).
-- **Le  à l'ancien format** (§9) : à supprimer ou non, décision de l'utilisateur, **nouveau**.
-- **Fenêtre de saison jamais réglée** ( absent), confirmé par l'audit.
+- **Le `client_badges` à l'ancien format** (§9) : à supprimer ou non, décision de l'utilisateur, **nouveau**.
+- **Fenêtre de saison jamais réglée** (`app_config/classement_saison` absent), confirmé par l'audit.
 - Vérification visuelle de l'anecdote d'ouvreur et du carnet de méthodes (V2.66/V2.67) :
   toujours sans retour de l'utilisateur.
 - Migration de l'état ludique : Passe C déployée en V2.61, la purge
