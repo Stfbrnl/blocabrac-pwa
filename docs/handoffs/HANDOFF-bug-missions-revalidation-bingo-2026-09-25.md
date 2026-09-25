@@ -364,8 +364,15 @@ C'est le **seul** document à identifiant fixe que le code lit, vérifié par gr
     utilisait `addDoc`.
 
   **Proposition à l'utilisateur** : supprimer les trois documents Firestore (lien, `users`,
-  `classement_profiles`) et le compte d'authentification orphelin. En attente de sa
-  décision.
+  `classement_profiles`) et le compte d'authentification orphelin.
+
+  **Décision de l'utilisateur (25/09) : on garde tout.** Maurice Tartanpion fait partie des
+  comptes de test conservés « sous le coude ». Les badges manuels (`badge-debutant`,
+  `-intermediaire`, `-avance`, `-expert`) sont le système prévu à l'origine pour que les
+  moniteurs valident la progression des élèves des cours : ils restent. La remise manuelle
+  actuelle (`StatsList.tsx`, `awardBadgeToUser`) écrit bien au format `userId`/`badgeId`,
+  vérifié. Seul ce lien de mai 2026 est à l'ancien format. L'audit continuera de le
+  signaler en avertissement, et c'est voulu.
 
 La première version de l'audit le classait en erreur, avant que je lise le document ; il est
 maintenant classé à part. Code de sortie non nul en cas d'erreur, donc utilisable tel quel
@@ -417,7 +424,7 @@ quotidien 10/10, saison ×2 (voir ci-dessus).
 - ~~Attribution du « Badge du grimpeur régulier »~~ : confirmée en prod (§9).
 - ~~Clé de compte de service~~ : gardée sur le PC, point clos (ton §6).
 - ~~Garde-fou §1.7~~ : retiré (ton §1.1).
-- **Le `client_badges` à l'ancien format** (§9) : à supprimer ou non, décision de l'utilisateur, **nouveau**.
+- ~~Le `client_badges` à l'ancien format~~ : conservé, c'est un compte de test (§9).
 - **Fenêtre de saison jamais réglée** (`app_config/classement_saison` absent), confirmé par l'audit.
 - Vérification visuelle de l'anecdote d'ouvreur et du carnet de méthodes (V2.66/V2.67) :
   toujours sans retour de l'utilisateur.
