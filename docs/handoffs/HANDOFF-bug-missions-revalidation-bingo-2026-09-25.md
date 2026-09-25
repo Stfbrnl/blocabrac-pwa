@@ -19,9 +19,8 @@ livré à part.
 
 L'utilisateur a validé en session :
 - la règle « B sans fenêtre » ;
-- la maquette du tampon (`frontend/src/assets/apercu-tampon.png`, ta maquette, **non
-  suivie par git et non livrée** : toujours dans le dossier de travail, sans décision
-  prise sur où la ranger).
+- la maquette du tampon (ta maquette, non livrée dans l'app), rangée depuis dans
+  `docs/handoffs/apercu-tampon-RETOUR-bug-missions.png`.
 
 ---
 
@@ -197,8 +196,6 @@ vérifié page par page) :
 
 ## 8. Questions ouvertes pour toi
 
-- Où ranger `apercu-tampon.png` (ta maquette) : dans `docs/`, supprimée, ou laissée hors
-  git ?
 - Le §1.7 vaut-il encore d'être tenté, maintenant que la garde est côté client et que le
   flush lève sur toute lecture manquante ?
 - Si les missions devaient un jour rapporter des points au classement, les gestes (qui sont
