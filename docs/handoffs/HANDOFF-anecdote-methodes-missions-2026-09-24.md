@@ -13,6 +13,9 @@
 > revalidation d'un bloc déjà réussi** en sont sortis — voir **§8**, ajoutée à la fin.
 > **Aucun correctif n'est écrit ni déployé** : l'utilisateur demande un second avis de
 > ClaudeNav avant toute modification. Les questions à trancher sont en §8.4.
+>
+> **✅ Suite (25/09 au soir)** : traité en V2.68.1/V2.69/V2.70, déployé. Voir
+> `docs/handoffs/HANDOFF-bug-missions-revalidation-bingo-2026-09-25.md`.
 
 ---
 

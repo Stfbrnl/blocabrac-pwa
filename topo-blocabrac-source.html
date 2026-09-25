@@ -165,11 +165,11 @@
     À distribuer ou consulter pendant la présentation. Le contenu reflète le
     fonctionnement réel de l'application au moment de l'impression — en cas de
     doute sur un réglage, vérifier directement dans l'application avant
-    d'agir. Version de l'application au moment de la génération : V2.68.
+    d'agir. Version de l'application au moment de la génération : V2.70.
   </div>
   <footer class="pagefoot">
     <span>Topo Blocabrac — édition papier</span>
-    <span>Généré le 24 septembre 2026</span>
+    <span>Généré le 25 septembre 2026</span>
   </footer>
 </section>
 
@@ -217,10 +217,10 @@
   </div>
   <div class="callout" style="margin-top:0;">Rôle toujours présent, sur tout compte</div>
   <table class="feature-table">
-    <tr><td class="label">Blocabrac quotidien</td><td>Blocs du jour par mur (chaque bloc identifié par numéro + couleur), ou filtre par niveau sur tous les murs. Fiche bloc (photo, niveau, conseils, ouvreur si renseigné, anecdote de l'ouvreur si renseignée). Validation réussi/échoué + essais. Un bloc « Mystère » demande de proposer sa propre cotation.</td></tr>
+    <tr><td class="label">Blocabrac quotidien</td><td>Blocs du jour par mur (chaque bloc identifié par numéro + couleur), ou filtre par niveau sur tous les murs. Fiche bloc (photo, niveau, conseils, ouvreur si renseigné, anecdote de l'ouvreur si renseignée). Validation réussi/échoué avec un nombre d'essais obligatoire (aucune valeur par défaut). La première réussite fait foi : un bloc déjà réussi s'affiche en lecture seule (« Déjà validé le … en N essais ») ; seul « Corriger ma saisie » permet de rectifier une erreur (essais ou annulation). Note, commentaire et cotation proposée restent modifiables. Un bloc « Mystère » demande de proposer sa propre cotation.</td></tr>
     <tr><td class="label">Premiers ascensionnistes</td><td>Sur un bloc noir, blanc ou rose, les cinq premiers grimpeurs à l'avoir validé s'affichent sur sa fiche, dans l'ordre et avec la date. Optionnel (bascule dans « Mes informations », non rétroactive) ; jamais affiché sur un bloc de compétition à cotation cachée. Un bloc retiré à une rotation conserve sa liste.</td></tr>
     <tr><td class="label">Carnet de méthodes</td><td>Sur la fiche d'un bloc, vote facultatif de la ou des méthodes utilisées pour le réussir (crochet de talon, réglette, dynamique, opposition…), 3 maximum, modifiable tant qu'on revient sur sa validation. Les méthodes les plus utilisées s'affichent dès que 3 grimpeurs ont voté ; jamais sur un bloc de compétition à cotation cachée.</td></tr>
-    <tr><td class="label">Missions de la semaine</td><td>Grille de 8 missions calée sur le niveau (et l'âge pour les murs enfants) figés au lundi : un bloc au niveau max, 4 murs différents, un flash, un bloc au niveau juste au-dessus (ou, au niveau rose, une mission de substitution déclarative), un bloc en dévers, en rétablissement, en dalle, un défi Roulette relevé. Réinitialisée chaque lundi ; une grille complétée offre un badge (pas de points au classement).</td></tr>
+    <tr><td class="label">Missions de la semaine</td><td>Grille « bingo » de 8 cases, tamponnée au logo de la salle à chaque mission réussie, calée sur le niveau (et l'âge pour les murs enfants) figés au lundi : un bloc au niveau max, 4 murs différents, un flash, un bloc au niveau juste au-dessus (ou, au niveau rose, une mission de substitution déclarative), un bloc en dévers, en rétablissement, en dalle, un défi Roulette relevé. Deux gestes font avancer la grille sans enregistrer de résultat : « J'ai testé ce bloc » (bloc au-dessus pas encore réussi) et « Je l'ai refait » (bloc déjà réussi). Un flash ne compte que sur un bloc jamais essayé. Réinitialisée chaque lundi ; une grille complétée offre un badge (pas de points au classement).</td></tr>
     <tr><td class="label">Bloc Roulette</td><td>Tirage d'un défi ludique parmi 46 propositions (styles, chronométrage, exploration des murs délaissés, techniques imposées — cancan, lolotte, crochet de talon, drapeau… —, grimpe à une main, « pieds libres », progression sur un niveau au-dessus…), calibré sur le niveau du grimpeur. Les traversées de murs s'adaptent au niveau (1 mur au niveau bleu jusqu'à 4 murs consécutifs sans prises jaunes/vertes au niveau rose). Une « réussite partielle » (niveau au-dessus) ne compte jamais comme une validation. Bouton séparé « roulette de la mort » : un bloc un cran au-dessus, en s'autorisant une ou deux prises supplémentaires. Bouton « J'ai relevé le défi » sur chaque tirage : incrémente un compteur personnel (affiché sous les boutons et dans « Mes stats », avec les 10 derniers défis) — purement ludique, sans effet sur le classement, les badges ou le niveau.</td></tr>
     <tr><td class="label">Série, objectifs &amp; partage</td><td>Série de jours consécutifs (perdue après 9 jours sans validation). Objectifs hebdomadaires cumulables : un nombre de blocs d'une couleur donnée (ex. 2 rouges + 3 noirs), un bloc précis (ex. bloc n°6 de la Dalle), un nombre de blocs tous niveaux confondus — combinables librement, chacun avec sa propre barre de progression. Carte de progression à télécharger/partager.</td></tr>
   </table>
@@ -453,6 +453,7 @@
   <div class="warn-group-title" style="margin-top:0;">Classement &amp; clôture (suite)</div>
   <div class="warn"><b>Après une clôture, reconfigurer la saison suivante n'est pas automatique</b><p>Tant que l'admin n'a pas réglé la nouvelle fenêtre (« Classement de saison »), le classement de saison reste bloqué à zéro pour tout le monde — sans conséquence sur le classement général.</p></div>
   <div class="warn"><b>Désactiver l'apparition au classement retire aussi de la Finale</b><p>La case à cocher du profil client ne masque pas seulement le nom du classement public : un score qualifiant ne compte plus pour le top 10/10 de fin de saison.</p></div>
+  <div class="warn"><b>Une réussite ne se réécrit pas en revenant sur le bloc</b><p>Refaire un bloc déjà réussi ne change ni ses essais ni ses points : c'est la première réussite qui compte. Un grimpeur qui s'est trompé passe par « Corriger ma saisie » sur la fiche du bloc.</p></div>
   <div class="warn"><b>« Terminer la compétition » est définitif</b><p>La cotation cachée devient la couleur publique du bloc — à n'utiliser qu'une fois l'épreuve réellement terminée.</p></div>
 
   <div class="warn-group-title">Technique &amp; mises à jour</div>
