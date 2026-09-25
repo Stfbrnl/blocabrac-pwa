@@ -12,6 +12,7 @@
 > mission **n'avait jamais été créé au catalogue**, et il est maintenant créé. Les e2e
 > saison passent (15/15 et 10/10).
 > **V2.70.1 (§4 ter)** : badge au tampon, texte de « Quoi de neuf » coupé sur mobile, déployé.
+> **V2.70.2 (§9)** : suite donnée à ton , point par point, déployé.
 
 ---
 
@@ -293,11 +294,113 @@ vérifié page par page) :
 
 ---
 
+## 9. Suite donnée à ton `RETOUR-v2681-v269-v270.md` : V2.70.2, déployée
+
+Commit `63d9c04`, poussé, déployé le 25/09 au soir (`--only hosting`, pas de changement de
+règles).
+
+| Ton point | Suite |
+|---|---|
+| §1.1, garde-fou §1.7 | **Retiré** des points ouverts, pas reporté. |
+| §1.2, provenance des gestes | Rien fait, comme tu le recommandes. |
+| §2.2, aide « Je l'ai refait » | `ClientHelp` dit maintenant ce qu'il coche : niveau max **ou niveau au-dessus (M4)** selon la couleur, le mur pour M2, dévers/réta/dalle. Ta liste comptait bien M4 ; je l'avais oublié dans un premier jet, et je l'ai vérifié dans `applyValidationToWeeklyMissions`. |
+| §3, « Échoué » sans essais | **Délibéré, confirmé** : `if (success && !chosenAttempts)`, et `attempts: null` est un état stocké prévu pour un échec. |
+| §3, effacer un échec | **Ce n'était pas possible**, et tu avais raison de poser la question. « Corriger ma saisie » n'existait que pour une réussite, et **annuler une réussite laissait aussi un document `success: false`** : même effet, flash fermé à vie. Ajout de **« Effacer cet échec »** (voir ci-dessous). |
+| §4, ligne `CLAUDE.md` | Ajoutée mot pour mot à côté de ta règle « aucune écriture ne reconstruit un document ». J'y ai mis le tableau des trois occurrences. |
+| §4.1, audit générique | `scripts/audit-prod-catalog.js` (voir ci-dessous). |
+| §4.2, étape vérifiée par une lecture | Écrit dans `CLAUDE.md` : l'étape « créer en prod » se vérifie **en lançant l'audit**, pas en cochant une case. |
+| §5, isolation des e2e | `test/emulator-reset.mjs` (voir ci-dessous). |
+| §6, la clé | Clos. L'utilisateur la garde et la traite comme un mot de passe admin. |
+| §7, compteur et silhouette | Faits tous les deux, plus un troisième changement qui en découle (voir ci-dessous). |
+| Attribution du badge au grimpeur à 8/8 | **Confirmée en prod** : `audit-weekly-missions.js` affiche `badge=true`. |
+
+### Effacer un échec
+
+- `canEraseFailure` (pur, 4 tests) : un résultat stocké, qui n'est pas une réussite, et qui
+  ne porte **aucun vote de méthodes**. Un vote resté sur une réussite annulée est compté dans
+  `boulders.methodCounts` ; supprimer le document ferait dériver l'agrégat, donc c'est refusé.
+- `handleEraseFailure` **supprime** le document, avec une confirmation qui prévient que la
+  note et le commentaire partent avec. Le bloc redevient « jamais tenté ».
+- Ni classement ni missions ne sont touchés.
+- **Aucun pouvoir de triche nouveau** : un grimpeur pouvait déjà ne pas saisir son échec.
+- **Nouvelle étape 10 de `e2e-weekly-missions-flow.mjs`, 11/11** : échec en base → bouton →
+  document supprimé → fiche de nouveau saisissable → grille strictement inchangée.
+
+### Audit générique du catalogue
+
+**Aucun identifiant de badge n'est écrit en dur dans l'application** : `ClientStats.tsx`
+parcourt le catalogue et attribue **par type**. « Tout identifiant référencé dans le code »
+aurait donc vérifié un ensemble vide. L'audit vérifie à la place les **contrats** que le code
+suppose :
+- au moins un badge `mission`, sans couleur ;
+- un badge `automatic` « réussir un bloc X » pour chaque couleur de violet à rose (la
+  synchro du niveau ne peut pas atteindre une couleur qui n'a pas de badge), plus le Master ;
+- toute couleur de badge automatique présente dans `levelOrder` ;
+- aucun lien `client_badges` vers un badge absent ;
+- l'état de `app_config/classement_saison`.
+
+C'est le **seul** document à identifiant fixe que le code lit, vérifié par grep.
+
+**Résultat en prod : 0 erreur, 2 avertissements, tous deux déjà connus ou sans effet.**
+- `app_config/classement_saison` **absent** : la fenêtre de saison n'a jamais été réglée,
+  c'est le point que tu connaissais.
+- **Un `client_badges` à l'ancien format** (`client_id`/`badge_id` en snake_case, mai 2026,
+  `badge-expert`, pour un `client_id` qui ne correspond à aucun compte). Aucun écran ne le
+  lit, puisque tous interrogent `userId`. C'est très probablement une donnée de test des
+  débuts. **Non supprimé** : c'est à l'utilisateur de décider.
+
+La première version de l'audit le classait en erreur, avant que je lise le document ; il est
+maintenant classé à part. Code de sortie non nul en cas d'erreur, donc utilisable tel quel
+comme étape de vérification d'un déploiement.
+
+### Isolation des e2e
+
+`resetEmulators()` vide Firestore et Auth des émulateurs par leur API REST
+`/emulator/v1/...`. Les URL sont en dur sur `localhost`, et cette API n'existe pas en prod.
+Les deux seeds saison l'appellent en premier.
+
+**Vérifié sur le scénario exact qui échouait** : classement → redémarrage → classement →
+redémarrage, sur le même émulateur, sans le redémarrer. Résultat : 15/15, 10/10, 15/15,
+10/10.
+
+Effet de bord utile : le seed du classement, qui plantait à la relance (« email déjà
+utilisé »), est maintenant rejouable. **Tu proposais d'isoler le test lui-même ; j'ai isolé
+les seeds**, car le test présuppose l'état que son seed vient de poser. Un reset dans le test
+effacerait ce seed.
+
+### Badge : §7 et ce qui en découle
+
+1. **Compteur** : « N semaines complètes » en vert sur la carte du badge obtenu, lu dans
+   `weeklyMissionsCompleted` (déjà chargé, aucune lecture de plus).
+2. **Silhouette « non obtenu »** : tant que le badge n'est pas obtenu, « Mes stats » l'affiche
+   en tampon grisé avec « Pas encore obtenu : complétez une grille… ».
+3. **En-tête de la grille** : sa petite icône de badge était encore une *médaille*. C'est
+   maintenant le même tampon (`GymStampMark`), gris puis encré à la complétion. Sans ce
+   changement, les deux écrans ne racontaient toujours pas la même chose.
+
+Vérifiés en captures sur émulateur (400 px, clair et sombre).
+
+### Chiffres
+
+`npm test` 297/297, lint propre, build après le passage en 2.70.2. e2e : missions 11/11,
+quotidien 10/10, saison ×2 (voir ci-dessus).
+
+### Ce qui n'est pas vérifié
+
+- Aucune de ces nouveautés n'a été vue sur un vrai téléphone.
+- **Pas d'entrée de changelog** pour 2.70.1/2.70.2 : l'annonce 2.70 reste affichée dans
+  « Quoi de neuf ». Ce panneau est d'ailleurs **enfin lisible sur mobile** depuis la V2.70.1
+  (§4 ter).
+
+---
+
 ## Points ouverts par ailleurs (reportés, inchangés sauf mention contraire)
 
-- **Vérifier l'attribution du « Badge du grimpeur régulier »** (relancer l'audit), **nouveau**.
-- La clé de compte de service est maintenant sur le PC : à révoquer quand elle ne servira
-  plus, ou à garder en connaissance de cause, **nouveau**.
+- ~~Attribution du « Badge du grimpeur régulier »~~ : confirmée en prod (§9).
+- ~~Clé de compte de service~~ : gardée sur le PC, point clos (ton §6).
+- ~~Garde-fou §1.7~~ : retiré (ton §1.1).
+- **Le  à l'ancien format** (§9) : à supprimer ou non, décision de l'utilisateur, **nouveau**.
+- **Fenêtre de saison jamais réglée** ( absent), confirmé par l'audit.
 - Vérification visuelle de l'anecdote d'ouvreur et du carnet de méthodes (V2.66/V2.67) :
   toujours sans retour de l'utilisateur.
 - Migration de l'état ludique : Passe C déployée en V2.61, la purge
