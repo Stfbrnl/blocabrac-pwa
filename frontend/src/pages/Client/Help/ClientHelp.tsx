@@ -33,7 +33,7 @@ const sections: HelpSection[] = [
       'Pour un bloc marqué « Mystère », proposez votre propre cotation avant de valider.',
       'Chaque validation alimente automatiquement vos statistiques, votre série et le classement des grimpeurs.',
       'Un bloc déjà réussi affiche « Déjà validé le … en N essais » : c\'est votre première réussite qui compte, une fois pour toutes. Refaire un bloc trois jours plus tard demande souvent moins d\'essais parce que le corps a mémorisé les mouvements — ce n\'est plus une mesure de votre niveau.',
-      'Une erreur de saisie ? « Corriger ma saisie », sur la fiche du bloc, permet de modifier le nombre d\'essais ou d\'annuler une réussite, sans limite de temps.',
+      'Une erreur de saisie ? « Corriger ma saisie », sur la fiche du bloc, permet de modifier le nombre d\'essais ou d\'annuler une réussite, sans limite de temps. Un « Échoué » cliqué par erreur s\'efface avec « Effacer cet échec » : le bloc redevient jamais tenté, et peut encore compter comme flash.',
     ],
   },
   {
@@ -46,7 +46,8 @@ const sections: HelpSection[] = [
       'Trois gestes différents sur la fiche d\'un bloc :',
       '1. Enregistrer un résultat — « Réussi » / « Échoué ». Compte pour le classement, une seule fois par bloc : la première réussite fait foi.',
       '2. Faire avancer une mission — « J\'ai testé ce bloc » (un bloc un cran au-dessus de votre niveau), « Je l\'ai refait » (un bloc déjà réussi), « J\'ai relevé le défi » (Roulette). Ne touche ni au classement, ni aux essais enregistrés.',
-      '3. Corriger une saisie — « Corriger ma saisie ». Le seul moyen de modifier un résultat déjà enregistré.',
+      '« Je l\'ai refait » coche toutes les cases que ce bloc remplit : niveau max ou niveau au-dessus selon sa couleur, son mur pour les 4 murs, et dévers, rétablissement ou dalle selon le mur. Refaire un dévers, c\'est bien grimper un dévers cette semaine. Seul le flash ne peut jamais venir d\'un bloc refait.',
+      '3. Corriger une saisie — « Corriger ma saisie », ou « Effacer cet échec ». Le seul moyen de modifier un résultat déjà enregistré.',
       'Compléter la grille vous vaut un badge — jamais de points au classement.',
     ],
   },

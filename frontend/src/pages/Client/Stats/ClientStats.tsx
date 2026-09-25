@@ -147,6 +147,10 @@ const ClientStats: React.FC = () => {
   const [openResetDialog, setOpenResetDialog] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'stats' | 'badges' | 'diplomas'>('stats');
   const [clientBadges, setClientBadges] = useState<ClientBadge[]>([]);
+  // Badge de mission : compteur de grilles complétées (affiché sur le badge obtenu) et, tant
+  // qu'il n'est pas obtenu, sa fiche catalogue pour la silhouette grisée.
+  const [missionsCompleted, setMissionsCompleted] = useState(0);
+  const [missionBadgeTeaser, setMissionBadgeTeaser] = useState<Badge | null>(null);
   const [diplomas, setDiplomas] = useState<Diploma[]>([]);
   // Genre du client connecté, récupéré depuis Firestore "users"
   const [userGender, setUserGender] = useState<string>('Homme');
@@ -214,6 +218,7 @@ const ClientStats: React.FC = () => {
         // `user_ludic_state` via ludicState.ts (plus de repli sur "users").
         const ludicState = await getLudicState(user.uid);
         setRouletteCount(ludicState.rouletteChallengesCompleted || 0);
+        setMissionsCompleted(ludicState.weeklyMissionsCompleted || 0);
         setRouletteRecent(Array.isArray(ludicState.rouletteRecentChallenges) ? ludicState.rouletteRecentChallenges : []);
 
         // Récupérer les exercices
@@ -450,6 +455,7 @@ const ClientStats: React.FC = () => {
         );
         const catalogSnapshot = await getDocs(collection(db, 'badges'));
         const awardedNow: ClientBadge[] = [];
+        let missionTeaser: Badge | null = null;
         // ✅ PLAN-anecdote-methodes-missions.md §C.6 : `type: 'mission'` ajouté à côté de
         // `type: 'automatic'` — EXCLU de `computeBadgeActive` (un badge sans `criteria.color`
         // y est "toujours actif", ce qui aurait auto-attribué le badge de mission à tout le
@@ -474,7 +480,12 @@ const ClientStats: React.FC = () => {
           const active = isAutomatic
             ? computeBadgeActive(criteria, validatedExistingByColorLocal, inventoryByColor)
             : (ludicState.weeklyMissionsCompleted || 0) >= 1;
-          if (!active) continue;
+          if (!active) {
+            // RETOUR-v2681-v269-v270.md §7 : le badge de mission pas encore obtenu s'affiche en
+            // silhouette grisée, comme l'icône de l'en-tête de la grille — un objectif visible.
+            if (isMission && !missionTeaser) missionTeaser = criteria;
+            continue;
+          }
           try {
             await setDoc(doc(db, 'client_badges', `${user.uid}_${catalogDoc.id}`), {
               userId: user.uid,
@@ -491,6 +502,7 @@ const ClientStats: React.FC = () => {
 
         const allClientBadges = [...clientBadgesList, ...awardedNow];
         setClientBadges(allClientBadges);
+        setMissionBadgeTeaser(missionTeaser);
 
         // ✅ Synchronisation automatique du niveau du client d'après ses badges actifs :
         // le niveau devient la couleur du badge le plus élevé qui n'est pas grisé.
@@ -990,9 +1002,10 @@ const ClientStats: React.FC = () => {
       {activeTab === 'badges' && (
         <Paper sx={{ p: 2 }}>
           <Typography variant="h6">Mes badges</Typography>
-          {clientBadges.length === 0 ? (
-            <Typography>Vous n'avez pas encore reçu de badges.</Typography>
-          ) : (
+          {clientBadges.length === 0 && (
+            <Typography sx={{ mb: missionBadgeTeaser ? 2 : 0 }}>Vous n'avez pas encore reçu de badges.</Typography>
+          )}
+          {(clientBadges.length > 0 || missionBadgeTeaser) && (
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
               {clientBadges.map((cb, index) => {
                 const badgeColor = getBadgeColor(cb.badge);
@@ -1036,6 +1049,12 @@ const ClientStats: React.FC = () => {
                       <Typography variant="body2" sx={{ mb: 1 }}>
                         {cb.badge.description}
                       </Typography>
+                      {isMissionBadge(cb.badge) && missionsCompleted > 0 && (
+                        // RETOUR-v2681-v269-v270.md §7 : un seul badge, la répétition portée par le compteur.
+                        <Typography variant="subtitle2" sx={{ color: badgeColor, fontWeight: 700 }}>
+                          {missionsCompleted} semaine{missionsCompleted > 1 ? 's' : ''} complète{missionsCompleted > 1 ? 's' : ''}
+                        </Typography>
+                      )}
                       <Typography variant="caption" sx={{ display: 'block', mt: 1 }}>
                         Décerné par {cb.awardedByName} le {formatDate(cb.awardedAt)}
                       </Typography>
@@ -1050,6 +1069,28 @@ const ClientStats: React.FC = () => {
                   </Card>
                 );
               })}
+              {missionBadgeTeaser && (
+                // Badge de mission pas encore obtenu : silhouette grisée (même langage que l'icône
+                // de l'en-tête de la grille, WeeklyMissionsGrid.tsx), présentée comme un objectif.
+                <Card sx={{ width: 250, mb: 2, overflow: 'hidden', opacity: 0.65 }}>
+                  <Box sx={{ backgroundColor: '#BDBDBD', display: 'flex', justifyContent: 'center', alignItems: 'center', py: 2 }}>
+                    <GymStampMark height={56} color="#757575" />
+                  </Box>
+                  <CardContent>
+                    <Typography variant="h6" sx={{ color: 'text.disabled' }}>
+                      {getBadgeDisplayName(missionBadgeTeaser)}
+                    </Typography>
+                    <Typography variant="body2" sx={{ mb: 1 }}>
+                      {missionBadgeTeaser.description}
+                    </Typography>
+                    <Chip
+                      label="Pas encore obtenu : complétez une grille de missions de la semaine (Mon Blocabrac quotidien)."
+                      size="small"
+                      sx={{ mt: 1, backgroundColor: '#E0E0E0', color: '#616161', height: 'auto', '& .MuiChip-label': { whiteSpace: 'normal', py: 0.5 } }}
+                    />
+                  </CardContent>
+                </Card>
+              )}
             </Box>
           )}
         </Paper>

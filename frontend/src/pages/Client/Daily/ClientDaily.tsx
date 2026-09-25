@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '../../../services/firebaseConfig';
-import { collection, query, where, getDocs, addDoc, setDoc, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, setDoc, doc, getDoc, deleteDoc } from 'firebase/firestore';
 import { scoreDeltaForValidation, isWithinSeasonWindow } from '../../../utils/classementScore';
 import { calculatePoints } from '../../../utils/climbingPoints';
 import { getDocsCacheFirst } from '../../../utils/firestoreCacheFirst';
@@ -39,7 +39,7 @@ import RouletteDialog, { type RouletteChosenBoulder } from './RouletteDialog';
 import WeeklyMissionsGrid from './WeeklyMissionsGrid';
 import { getLudicState, incrementRouletteCompleted, recordDeclarativeMission, recordMissionGesture } from '../../../services/ludicState';
 import {
-  planResultWrite, storedResultFromDoc, isAlreadySucceeded,
+  planResultWrite, storedResultFromDoc, isAlreadySucceeded, canEraseFailure,
   type StoredBoulderResult, type BoulderResultFields,
 } from '../../../utils/boulderResult';
 import {
@@ -1056,6 +1056,33 @@ const ClientDaily: React.FC = () => {
     }
   };
 
+  // ✅ V2.70.2 : effacer un échec (clic « Échoué » par erreur, ou réussite annulée) — le bloc
+  // redevient « jamais tenté », ce qui rouvre le flash (M3). Aucun effet sur le classement (un
+  // échec n'y compte pas) ni sur les missions (corriger n'est pas grimper). Voir canEraseFailure.
+  const handleEraseFailure = async (boulderId: string) => {
+    if (!user) return;
+    if (!window.confirm('Effacer cet échec ? Ce bloc redeviendra « jamais tenté » (ta note et ton commentaire sur ce bloc seront effacés aussi).')) return;
+    try {
+      const previous = await resolvePreviousResultState(user.uid, boulderId);
+      if (!canEraseFailure(previous)) return;
+      await deleteDoc(doc(db, 'client_boulder_results', `${user.uid}_${boulderId}`));
+      rememberStoredResult(boulderId, null);
+      const without = <T,>(prev: Record<string, T>) => {
+        const next = { ...prev };
+        delete next[boulderId];
+        return next;
+      };
+      setSuccessResults(without);
+      setAttempts(without);
+      setRatings(without);
+      setComments(without);
+      setSuccess('Échec effacé.');
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err: unknown) {
+      setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
   // ✅ V2.69 (§2.8/§2.10) : gestes de mission — "J'ai testé ce bloc" (max+1 pas encore réussi,
   // M4) et "Je l'ai refait" (bloc déjà réussi). N'écrivent JAMAIS client_boulder_results :
   // écrivain dédié (recordMissionGesture, relu dans une transaction), hors de la transaction
@@ -1514,6 +1541,11 @@ const ClientDaily: React.FC = () => {
                       </Typography>
                     )}
                     {canTested && gestureButton('tested')}
+                    {canEraseFailure(stored) && (
+                      <Button size="small" onClick={() => handleEraseFailure(boulderId)}>
+                        Effacer cet échec
+                      </Button>
+                    )}
                   </Box>
                 );
               })()}

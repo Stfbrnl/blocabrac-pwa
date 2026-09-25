@@ -29,6 +29,7 @@ const GymStampMark: React.FC<GymStampMarkProps> = ({ height, color, angle = -13 
       maskRepeat: 'no-repeat',
       WebkitMaskPosition: 'center',
       maskPosition: 'center',
+      transition: 'background-color 400ms',
     }}
   />
 );

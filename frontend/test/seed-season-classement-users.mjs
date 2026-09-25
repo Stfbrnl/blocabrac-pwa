@@ -4,6 +4,7 @@ process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8080';
 process.env.FIREBASE_AUTH_EMULATOR_HOST = 'localhost:9099';
 
 import admin from 'firebase-admin';
+import { resetEmulators } from './emulator-reset.mjs';
 
 admin.initializeApp({ projectId: 'blocabrac' });
 const auth = admin.auth();
@@ -15,6 +16,8 @@ const CLIENT_EMAIL = 'client.season.test@blocabrac.test';
 const PASSWORD = 'TestPassword123!';
 
 async function main() {
+  // RETOUR-v2681-v269-v270.md §5 : toujours repartir d'émulateurs vides (voir emulator-reset.mjs).
+  await resetEmulators();
   const adminUser = await auth.createUser({ email: ADMIN_EMAIL, password: PASSWORD });
   const ouvreur = await auth.createUser({ email: OUVREUR_EMAIL, password: PASSWORD });
   const client = await auth.createUser({ email: CLIENT_EMAIL, password: PASSWORD });

@@ -9,6 +9,7 @@ process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8080';
 process.env.FIREBASE_AUTH_EMULATOR_HOST = 'localhost:9099';
 
 import admin from 'firebase-admin';
+import { resetEmulators } from './emulator-reset.mjs';
 
 admin.initializeApp({ projectId: 'blocabrac' });
 const auth = admin.auth();
@@ -74,6 +75,8 @@ const VALIDATIONS = [
 const isoDaysAgo = (n) => new Date(Date.now() - n * 86400000).toISOString();
 
 async function main() {
+  // RETOUR-v2681-v269-v270.md §5 : toujours repartir d'émulateurs vides (voir emulator-reset.mjs).
+  await resetEmulators();
   const adminUser = await auth.createUser({ email: ADMIN_EMAIL, password: PASSWORD });
   await db.collection('users').doc(adminUser.uid).set({
     email: ADMIN_EMAIL, first_name: 'Ada', last_name: 'Min', roles: ['admin', 'client'],

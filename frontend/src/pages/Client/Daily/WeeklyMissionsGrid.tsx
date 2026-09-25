@@ -13,10 +13,10 @@
 //   sous `prefers-reduced-motion`.
 import React, { useEffect, useRef, useState } from 'react';
 import { Box, Button, Card, CardContent, Chip, Typography } from '@mui/material';
-import { alpha, keyframes } from '@mui/material/styles';
+import { alpha, keyframes, useTheme } from '@mui/material/styles';
 import CasinoIcon from '@mui/icons-material/Casino';
-import MilitaryTechIcon from '@mui/icons-material/MilitaryTech';
 import { brandGreen, brandGreenDark, colorGrades, missionStampMarkUrl } from '../../../config/gymConfig';
+import GymStampMark from '../../../components/GymStampMark';
 import {
   MISSION_KEYS, MISSION_M4_BIS_LABEL, WEEKLY_MISSIONS_WALLS_TARGET,
   describeMission, isAtLevelCeiling, isWeeklyMissionsGridComplete,
@@ -105,6 +105,7 @@ const WeeklyMissionsGrid: React.FC<Props> = ({ missions, weeklyMissionsCompleted
   const atCeiling = isAtLevelCeiling(missions.level);
   const doneCount = missions.done.length;
   const complete = isWeeklyMissionsGridComplete(missions);
+  const theme = useTheme();
 
   // ✅ Le grand tampon ne s'affiche que pour une mission validée PENDANT que l'écran est
   // ouvert — jamais au premier rendu (sinon chaque visite rejouerait huit arrivées).
@@ -132,11 +133,9 @@ const WeeklyMissionsGrid: React.FC<Props> = ({ missions, weeklyMissionsCompleted
             <Typography variant="subtitle1" sx={{ fontWeight: 700 }} aria-label={`${doneCount} missions validées sur 8`}>
               {doneCount} / 8
             </Typography>
-            {/* Badge en silhouette grisée qui se colore à la complétion (langage des badges). */}
-            <MilitaryTechIcon
-              aria-hidden="true"
-              sx={(theme) => ({ fontSize: 30, color: complete ? inkFor(theme.palette.mode) : theme.palette.action.disabled, transition: 'color 400ms' })}
-            />
+            {/* Badge en silhouette grisée qui se colore à la complétion : le tampon, comme le
+                badge lui-même dans « Mes stats » (V2.70.2, RETOUR-v2681-v269-v270.md §7). */}
+            <GymStampMark height={30} color={complete ? inkFor(theme.palette.mode) : theme.palette.action.disabled} />
           </Box>
         </Box>
         <Chip

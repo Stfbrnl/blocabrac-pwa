@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { planResultWrite, isAlreadySucceeded, storedResultFromDoc, type StoredBoulderResult } from './boulderResult';
+import { planResultWrite, isAlreadySucceeded, storedResultFromDoc, canEraseFailure, type StoredBoulderResult } from './boulderResult';
 
 const NOW = '2026-09-25T10:00:00.000Z';
 const stored = (over: Partial<StoredBoulderResult> = {}): StoredBoulderResult => ({
@@ -62,5 +62,20 @@ describe('storedResultFromDoc / isAlreadySucceeded', () => {
     expect(r).toEqual({ success: true, attempts: null, createdAt: NOW, rating: 0, comment: '', proposedDifficulty: null, methods: [] });
     expect(isAlreadySucceeded(r)).toBe(true);
     expect(isAlreadySucceeded(null)).toBe(false);
+  });
+});
+
+describe('canEraseFailure (V2.70.2)', () => {
+  it('un échec sans vote de méthode peut être effacé', () => {
+    expect(canEraseFailure(stored({ success: false, attempts: null, methods: [] }))).toBe(true);
+  });
+  it('une réussite ne s\'efface jamais par ce chemin', () => {
+    expect(canEraseFailure(stored({ success: true, methods: [] }))).toBe(false);
+  });
+  it('rien à effacer sans résultat', () => {
+    expect(canEraseFailure(null)).toBe(false);
+  });
+  it('refusé tant qu\'un vote de méthodes reste compté dans boulders.methodCounts', () => {
+    expect(canEraseFailure(stored({ success: false, methods: ['heel_hook'] }))).toBe(false);
   });
 });

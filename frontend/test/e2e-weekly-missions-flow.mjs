@@ -211,6 +211,26 @@ async function main() {
     assert(hasAll(m.done, ['M1', 'M2', 'M3', 'M4', 'M6', 'M7', 'M8']), `done attendu ⊇ 7 missions, obtenu ${JSON.stringify(m.done)}`);
   });
 
+  // RETOUR-v2681-v269-v270.md §3 : un « Échoué » cliqué par erreur fermait définitivement le
+  // flash (M3 exige qu'il n'existe AUCUN résultat). « Effacer cet échec » supprime le document :
+  // le bloc redevient « jamais tenté ». Les missions n'en sont pas touchées (corriger n'est pas grimper).
+  await step('« Effacer cet échec » (bleu, Güllich) : document supprimé, bloc « jamais tenté », grille intacte', async () => {
+    const before = await readMissions();
+    assert((await readResult('missions-b5'))?.success === false, 'échec de l\'étape 4 attendu en base');
+    await openBoulder(page, 'Güllich', 9105);
+    page.once('dialog', (d) => d.accept());
+    await page.getByRole('button', { name: 'Effacer cet échec' }).click();
+    await page.getByText('Échec effacé.', { exact: false }).waitFor({ timeout: 10000 });
+    assert((await readResult('missions-b5')) === null, 'le document client_boulder_results doit être supprimé');
+    await closeDialogs(page);
+    await openBoulder(page, 'Güllich', 9105);
+    assert(!(await page.getByRole('button', { name: 'Effacer cet échec' }).isVisible().catch(() => false)), '« Effacer cet échec » ne doit plus être proposé');
+    assert(await page.getByRole('button', { name: '❌ Échoué' }).isVisible(), 'la fiche doit redevenir saisissable');
+    await closeDialogs(page);
+    const after = await readMissions();
+    assert(JSON.stringify([...after.done].sort()) === JSON.stringify([...before.done].sort()), `grille modifiée par l'effacement : ${JSON.stringify(before.done)} -> ${JSON.stringify(after.done)}`);
+  });
+
   await step('Rechargement : la grille affichée reflète l\'état stocké (7 missions validées)', async () => {
     await page.reload();
     await page.getByText('Missions de la semaine', { exact: false }).waitFor({ timeout: 10000 });

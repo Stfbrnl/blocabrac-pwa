@@ -67,3 +67,12 @@ export const planResultWrite = (
   const asClassement = (r: StoredBoulderResult | null) => (r && r.success ? { attempts: r.attempts ?? 1 } : null);
   return { changed, next, patch, classementBefore: asClassement(previous), classementAfter: asClassement(next) };
 };
+
+// ✅ V2.70.2 (docs/handoffs/RETOUR-v2681-v269-v270.md §3) : un échec enregistré — y compris une
+// réussite annulée par « Corriger ma saisie » — ferme définitivement le flash (M3 exige qu'il
+// n'existe AUCUN résultat pour ce bloc). Un « Échoué » cliqué par erreur doit donc pouvoir
+// s'effacer : suppression du document, le bloc redevient « jamais tenté ». Aucun pouvoir de triche
+// nouveau — un grimpeur pouvait déjà ne pas saisir son échec. Refusé s'il porte encore un vote de
+// méthodes : `boulders.methodCounts` le compte, le supprimer ferait dériver l'agrégat.
+export const canEraseFailure = (stored: StoredBoulderResult | null | undefined): boolean =>
+  !!stored && !stored.success && stored.methods.length === 0;
