@@ -444,12 +444,23 @@ Commits `8765550` et `e680f5d`, poussés, déployés le 25/09 au soir (`--only h
 - enregistrer la fenêtre 2026-11-01 → 2027-05-31 avec « Enregistrer » ;
 - en juin 2027, enregistrer tout de suite la saison suivante, sinon le cron de clôture passe au rouge après 7 jours.
 
-**Question ouverte pour l'utilisateur** : trois textes déjà en prod depuis août parlent encore de la Finale :
-- la légende de l'onglet saison (visible à partir du 1er novembre) ;
-- l'aide ;
-- l'aide de la case « apparaître au classement » dans le profil.
+**Tranché par l'utilisateur, V2.71.1 déployée (`905e275`)** : les trois textes client qui parlaient
+de la Finale sont **retirés jusqu'à ce qu'elle soit confirmée** :
+- la légende de l'onglet saison ;
+- la ligne d'aide ;
+- la légende sous l'opt-in du profil.
 
-À aligner ou non avec sa décision de ne pas annoncer la Finale pour l'instant.
+Les textes d'origine sont consignés mot pour mot dans `CLAUDE.md` (section classement de
+saison), pour être remis tels quels. L'étape 5 de `e2e-season-classement-flow.mjs` vérifie
+maintenant que la légende est **absente** : elle est à inverser le jour venu.
+
+La mécanique de la Finale est intacte : archive, roster, mode `officiel`, et l'exclusion
+des opt-out dans `compute-classement-saison.js`. L'écran admin la mentionne toujours, ce
+qui est voulu puisqu'il ne s'adresse qu'au staff.
+
+Au passage, la ligne d'aide « au démarrage d'une saison, votre score repart de vos
+validations des blocs en place » décrivait le « Redémarrer » avec crédit. Elle dit
+maintenant que tout le monde repart de zéro.
 
 ---
 
