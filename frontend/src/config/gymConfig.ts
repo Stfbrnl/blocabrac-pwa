@@ -23,6 +23,14 @@ export const brandGreenDark = '#177038';
 export const logoPath = '/images/logo-blocabrac.png';
 export { default as logoAssetUrl } from '../assets/logo-blocabrac.png';
 
+// ✅ V2.70 (docs/handoffs/RETOUR-bug-missions-et-revalidation.md §2.11) : marque du tampon de
+// la grille de missions — la partie graphique du logo SANS typographie (illisible à 26 px),
+// fournie en masque alpha monochrome (blanc + transparence, texture grattée conservée : c'est
+// elle qui donne l'aspect d'encre). Recolorée en CSS (mask-image + background-color), jamais
+// vectorisée. Dans `src/assets/` (empreinte Vite + cache `immutable`), surtout pas `public/`
+// (piège du cache des icônes V2.58). Le fork "Grimpe !" fournira la sienne ici.
+export { default as missionStampMarkUrl } from '../assets/marque.png';
+
 // ✅ Ordre circulaire réel de la salle (validé avec l'utilisateur, docs/plans/CONCEPTION-roulette-et-defis.md
 // §1.7.A) — remplace l'ancien ordre (simple historique d'ajout des murs). Utilisé pour
 // l'affichage (ordre des boutons de sélection de mur) et par la famille "murs" de la Roulette

@@ -11,6 +11,17 @@ export interface ChangelogEntry {
 // tout l'historique ici, l'historique complet vit dans les commits git.
 export const changelog: ChangelogEntry[] = [
   {
+    version: '2.70',
+    date: '2026-09-25',
+    title: 'Une carte de missions tamponnée',
+    items: [
+      'La grille des missions de la semaine devient une carte à 8 cases : chaque mission réussie est tamponnée à la marque de la salle.',
+      'Les missions liées à votre niveau affichent la couleur concernée, les murs ont leur pictogramme (dévers, rétablissement, dalle) et la mission « 4 murs » se remplit segment par segment.',
+      'Votre première réussite fait toujours foi : un bloc déjà réussi s\'affiche « Déjà validé », et « Corriger ma saisie » permet de rectifier une erreur à tout moment.',
+      'Le nombre d\'essais se choisit avant « Réussi », et « J\'ai testé ce bloc » / « Je l\'ai refait » font avancer vos missions sans rien enregistrer.',
+    ],
+  },
+  {
     version: '2.69',
     date: '2026-09-25',
     title: 'Votre première réussite fait foi',

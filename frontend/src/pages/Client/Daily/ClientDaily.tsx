@@ -36,6 +36,7 @@ import {
   type DrawResult, type WallCounts, type RouletteCompletion,
 } from '../../../utils/roulette';
 import RouletteDialog, { type RouletteChosenBoulder } from './RouletteDialog';
+import WeeklyMissionsGrid from './WeeklyMissionsGrid';
 import { getLudicState, incrementRouletteCompleted, recordDeclarativeMission, recordMissionGesture } from '../../../services/ludicState';
 import {
   planResultWrite, storedResultFromDoc, isAlreadySucceeded,
@@ -43,8 +44,7 @@ import {
 } from '../../../utils/boulderResult';
 import {
   resolveWeeklyMissionsState, applyValidationToWeeklyMissions, mergeWeeklyMissionsForDisplay,
-  isAtLevelCeiling, isWeeklyMissionsGridComplete, describeMission, missionGestureAdvances,
-  MISSION_KEYS, MISSION_M4_BIS_LABEL, WEEKLY_MISSIONS_WALLS_TARGET,
+  isAtLevelCeiling, missionGestureAdvances,
   type WeeklyMissionsState, type BoulderValidationEvent,
 } from '../../../utils/weeklyMissions';
 import { getSeasonAge } from '../../../utils/ageCategory';
@@ -1166,50 +1166,14 @@ const ClientDaily: React.FC = () => {
           déclaratif identique à celui de la Roulette. Le niveau figé est rappelé explicitement
           (describeMission), sinon un grimpeur qui progresse en cours de semaine ne comprend
           pas pourquoi ses cases ne bougent pas. */}
-      {selfProfile.weeklyMissions && (() => {
-        const missions = selfProfile.weeklyMissions;
-        const atCeiling = isAtLevelCeiling(missions.level);
-        return (
-          <Card variant="outlined" sx={{ mb: 3 }}>
-            <CardContent>
-              <Typography variant="h6" sx={{ mb: 0.5 }}>🎯 Missions de la semaine</Typography>
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
-                Calées sur ton niveau {missions.level} — nouvelle grille lundi.
-              </Typography>
-              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 1 }}>
-                {MISSION_KEYS.map((key) => {
-                  const isM4Bis = key === 'M4' && atCeiling;
-                  const done = missions.done.includes(key);
-                  const label = isM4Bis ? MISSION_M4_BIS_LABEL : describeMission(key, missions);
-                  return (
-                    <Box key={key} data-mission-done={done ? 'true' : 'false'} sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5 }}>
-                      <Typography component="span">{done ? '✅' : '⬜'}</Typography>
-                      <Box>
-                        <Typography variant="body2">
-                          {label}
-                          {key === 'M2' && !done && ` (${missions.walls.length}/${WEEKLY_MISSIONS_WALLS_TARGET})`}
-                        </Typography>
-                        {isM4Bis && !done && (
-                          <Button size="small" variant="outlined" sx={{ mt: 0.5 }} onClick={handleMissionM4Bis}>
-                            Je l'ai fait
-                          </Button>
-                        )}
-                      </Box>
-                    </Box>
-                  );
-                })}
-              </Box>
-              {isWeeklyMissionsGridComplete(missions) && (
-                <Typography variant="body2" color="success.main" sx={{ mt: 1.5 }}>
-                  🏅 Grille complétée
-                  {(selfProfile.weeklyMissionsCompleted || 0) > 0 &&
-                    ` — ${selfProfile.weeklyMissionsCompleted} semaine${(selfProfile.weeklyMissionsCompleted || 0) > 1 ? 's' : ''} complétée${(selfProfile.weeklyMissionsCompleted || 0) > 1 ? 's' : ''} au total`}
-                </Typography>
-              )}
-            </CardContent>
-          </Card>
-        );
-      })()}
+      {/* ✅ V2.70 : grille « bingo » tamponnée (WeeklyMissionsGrid.tsx, RETOUR-bug-missions-et-revalidation.md §2.11). */}
+      {selfProfile.weeklyMissions && (
+        <WeeklyMissionsGrid
+          missions={selfProfile.weeklyMissions}
+          weeklyMissionsCompleted={selfProfile.weeklyMissionsCompleted || 0}
+          onM4Bis={handleMissionM4Bis}
+        />
+      )}
 
       <RouletteDialog
         open={openRoulette}
