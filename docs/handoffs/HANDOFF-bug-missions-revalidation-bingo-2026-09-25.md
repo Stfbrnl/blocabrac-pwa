@@ -8,6 +8,9 @@
 > `firestore.rules`** dans ces trois versions, donc pas de déploiement des règles.
 > `topo-blocabrac.pdf` a été mis à jour et régénéré (§6).
 > **Rien n'a encore été vérifié par l'utilisateur dans l'interface** (§5).
+> **Ajout du soir (§4 bis)** : l'audit §3.2 a été lancé en prod. Il a révélé que le badge de
+> mission **n'avait jamais été créé au catalogue**, et il est maintenant créé. Les e2e
+> saison passent (15/15 et 10/10).
 
 ---
 
@@ -131,8 +134,66 @@ Implémente ton §2 entier.
 | `npm run build` | OK, refait **après** le bump 2.70 et juste avant le déploiement (la chaîne `2.70` est présente dans `dist/`) |
 | `e2e-weekly-missions-flow.mjs` | **10/10** : nouveaux gestes, flush « missions seules » qui conserve la grille, contrôle §1.2, « Corriger ma saisie », M8 qui s'ajoute sans rien effacer, rechargement |
 | e2e quotidien, défis, premiers ascensionnistes | verts, adaptés à la saisie obligatoire des essais |
-| e2e saison (`season-classement`, `season-restart`) | **étapes d'interface vertes ; étapes pilotées par script en échec sur le PC** (voir §5) |
+| e2e saison (`season-classement`, `season-restart`) | **15/15 et 10/10** après installation de la clé (voir §4 bis) |
 | `npm run test:rules` | non relancé : aucun changement de règles |
+
+---
+
+## 4 bis. Contrôles faits après le déploiement (25/09, plus tard dans la soirée)
+
+L'utilisateur a installé une clé de compte de service sur le PC
+(`firestore-migration/serviceAccountKey.json`, exclue de git, vérifié avec
+`git check-ignore`). Deux points de §5 ont pu être levés.
+
+### Audit §3.2 en prod : 0 anomalie, mais le badge n'existait pas
+
+`scripts/audit-weekly-missions.js`, en lecture seule : 30 documents `user_ludic_state`,
+3 avec une grille de missions, **0 anomalie**. Un grimpeur a une grille complète (8/8,
+`weeklyMissionsCompleted = 1`).
+
+**🔴 Le badge de mission n'existait pas au catalogue `badges` de prod.** Le handoff V2.68
+annonçait un « badge `type: 'mission'` (nouveau, dans le catalogue `badges`) », mais aucune
+étape n'a jamais créé ce document :
+- le code d'attribution (`ClientStats.tsx`) était prêt ;
+- la règle (`type in ["automatic", "mission"]`) aussi ;
+- le test de règle crée **son propre** badge fictif (`badge-missions`), ce qui a masqué
+  l'absence en prod.
+
+Conséquence : **personne ne pouvait obtenir ce badge**, et la silhouette de badge de la
+grille ne pouvait correspondre à rien.
+
+**Corrigé le 25/09 au soir, avec l'accord de l'utilisateur**, par une écriture unique en
+prod (`create`, qui échoue si le document existe déjà) :
+
+```
+badges/badge-missions = {
+  name: 'Badge du grimpeur régulier',          // nom choisi par l'utilisateur
+  feminineName: 'Badge de la grimpeuse régulière',
+  type: 'mission',
+  description: 'Compléter une grille de missions de la semaine (8/8).'
+}
+```
+
+Pas de `color` ni de `criteria.color` : la synchronisation du niveau l'ignore (vérifié
+dans `ClientStats.tsx`), et `computeBadgeActive` le traite comme toujours actif une fois
+obtenu. Le grimpeur à 8/8 le recevra à sa prochaine ouverture de « Mes stats ».
+L'audit relancé trouve bien `["badge-missions"]`.
+
+**Leçon, même famille que §4 de ton retour** : un livrable qui est une *donnée de prod*, et
+pas du code, n'est vérifié par aucun test. Le test de règle avait fabriqué la donnée
+qu'il supposait. À l'avenir, tout chantier qui dépend d'un document de catalogue devrait
+avoir une étape explicite « créer en prod » dans sa checklist de déploiement, et un audit
+qui vérifie sa présence.
+
+### e2e saison : 15/15 et 10/10
+
+- `e2e-season-classement-flow.mjs` : **15/15**.
+- `e2e-season-restart-flow.mjs` : **10/10**. Le test a d'abord été lancé sur le même
+  émulateur, juste après le premier. Il a alors échoué à l'étape 8 : un écart de
+  réconciliation sur le compte client **du premier test**, resté dans l'émulateur. Sur un
+  émulateur redémarré à vide, il passe 10/10.
+- Les scripts appelés par ces tests forcent `FIRESTORE_EMULATOR_HOST`. Seul le journal
+  `.emulator.json` (exclu de git) a été écrit, et `git status` est resté propre.
 
 ---
 
@@ -145,14 +206,10 @@ Implémente ton §2 entier.
    - « Corriger ma saisie » ;
    - un geste de mission ;
    - le tampon en vrai.
-2. **`scripts/audit-weekly-missions.js` n'a pas été lancé sur la prod.** C'est ton contrôle
-   §3.2. Il doit tourner depuis le Codespace, qui a la clé de compte de service : le PC ne
-   l'a pas.
-3. **Les e2e saison sont à relancer dans le Codespace.** Leurs étapes pilotées par script
-   (`reconcile-classement-profiles.js`, `compute-classement-saison.js`) exigent
-   `serviceAccountKey.json` même contre l'émulateur, et elle n'existe pas sur le PC. C'est
-   un problème d'environnement, pas une régression présumée, mais c'est tout de même non
-   vérifié.
+2. ~~Audit §3.2~~ et ~~e2e saison~~ : **faits**, voir §4 bis.
+3. **L'attribution réelle du badge** au grimpeur à 8/8 n'a pas été observée. Elle se
+   fera à sa prochaine ouverture de « Mes stats ». Relancer l'audit ensuite : il doit
+   afficher `badge=true`.
 4. **La grille de cette semaine de l'utilisateur reste effacée** jusqu'au lundi 28/09,
    conformément à ton §3.1 (pas de réparation).
 
@@ -205,8 +262,9 @@ vérifié page par page) :
 
 ## Points ouverts par ailleurs (reportés, inchangés sauf mention contraire)
 
-- **Contrôle §3.2 en prod** (`audit-weekly-missions.js`, depuis le Codespace), **nouveau**.
-- **Relancer les e2e saison dans le Codespace**, **nouveau**.
+- **Vérifier l'attribution du « Badge du grimpeur régulier »** (relancer l'audit), **nouveau**.
+- La clé de compte de service est maintenant sur le PC : à révoquer quand elle ne servira
+  plus, ou à garder en connaissance de cause, **nouveau**.
 - Vérification visuelle de l'anecdote d'ouvreur et du carnet de méthodes (V2.66/V2.67) :
   toujours sans retour de l'utilisateur.
 - Migration de l'état ludique : Passe C déployée en V2.61, la purge
