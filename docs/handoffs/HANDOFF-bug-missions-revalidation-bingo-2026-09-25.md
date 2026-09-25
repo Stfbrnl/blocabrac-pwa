@@ -345,9 +345,27 @@ C'est le **seul** document à identifiant fixe que le code lit, vérifié par gr
 - `app_config/classement_saison` **absent** : la fenêtre de saison n'a jamais été réglée,
   c'est le point que tu connaissais.
 - **Un `client_badges` à l'ancien format** (`client_id`/`badge_id` en snake_case, mai 2026,
-  `badge-expert`, pour un `client_id` qui ne correspond à aucun compte). Aucun écran ne le
-  lit, puisque tous interrogent `userId`. C'est très probablement une donnée de test des
-  débuts. **Non supprimé** : c'est à l'utilisateur de décider.
+  `badge-expert`, décerné à la main par l'admin le 27/05/2026). Aucun écran ne le lit,
+  puisque tous interrogent `userId`. **Non supprimé** : c'est à l'utilisateur de décider.
+
+  **⚠️ Correctif de ce paragraphe** : j'avais d'abord écrit que le `client_id` ne
+  correspondait à aucun compte. C'était faux. Ma vérification cherchait un champ `clientId`
+  au lieu de `client_id`, donc un compte « none ».
+
+  En réalité, le `client_id` pointe vers un **compte de test des débuts**, « Maurice
+  Tartanpion ». Ce compte se compose de :
+  - un document `users` créé le 16/05/2026 avec un identifiant **auto-généré par Firestore**,
+    et non l'uid de connexion. Il est donc impossible de s'y connecter : son e-mail
+    correspond à un autre uid d'authentification, qui n'a lui-même aucun document `users`
+    (dernière connexion le 15/05/2026) ;
+  - un `classement_profiles` à zéro, sans nom ;
+  - aucun résultat de bloc, aucun badge au format actuel ;
+  - ce seul lien à l'ancien format, sans doute créé par un premier écran d'admin qui
+    utilisait `addDoc`.
+
+  **Proposition à l'utilisateur** : supprimer les trois documents Firestore (lien, `users`,
+  `classement_profiles`) et le compte d'authentification orphelin. En attente de sa
+  décision.
 
 La première version de l'audit le classait en erreur, avant que je lise le document ; il est
 maintenant classé à part. Code de sortie non nul en cas d'erreur, donc utilisable tel quel
