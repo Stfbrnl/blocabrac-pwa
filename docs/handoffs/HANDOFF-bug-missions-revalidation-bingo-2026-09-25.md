@@ -265,14 +265,14 @@ vérifié page par page) :
 - **Points de vigilance** : nouvel encadré « Une réussite ne se réécrit pas en revenant sur
   le bloc ».
 
-**Mise à jour du 25/09 au soir, pour V2.71.1**, régénéré, toujours 10 pages sans débordement :
+**Mise à jour du 25/09 au soir, pour V2.71.1 puis V2.71.2**, régénéré, toujours 10 pages sans débordement :
 - « Effacer cet échec » ;
 - « Badge du grimpeur régulier » au tampon, avec le compteur de semaines ;
 - onglet saison daté avant l'ouverture ;
 - écran admin : calendrier du 1er novembre au 31 mai, et « Enregistrer » pour une saison à zéro ;
 - encadré « Redémarrage & compteur monotone » remplacé par « Ouvrir une saison : Enregistrer, pas Redémarrer » ;
 - mention « la Finale n'est pas encore annoncée aux grimpeurs » ;
-- deux nouveaux points de vigilance : ne jamais « Redémarrer » pour une nouvelle saison, et enregistrer la saison suivante dès juin.
+- deux nouveaux points de vigilance : ne jamais « Redémarrer » pour une nouvelle saison, et « Enregistrer la saison suivante avant fin octobre ». La version V2.71.1 disait « dès juin » ; elle a été corrigée en V2.71.2 quand le délai d'alerte est passé à 150 jours (§11).
 
 Les autres mentions de la Finale restent dans le topo, puisqu'il ne s'adresse qu'à l'équipe.
 
