@@ -141,10 +141,14 @@ async function main() {
     await ouvreurP.getByText(`Bloc n°${BOULDER_NUMBER}`, { exact: false }).waitFor({ timeout: 10000 });
   });
 
-  await step('Client : voit le texte d\'aide sous l\'opt-in classement, l\'active', async () => {
+  // 25/09/2026 : la légende « Désactiver ce réglage vous retire aussi de la qualification pour
+  // la Finale… » est retirée tant que la Finale n'est pas confirmée — l'étape vérifie désormais
+  // qu'elle N'EST PAS affichée. À inverser le jour où la légende est remise.
+  await step('Client : aucune promesse de Finale sous l\'opt-in classement, l\'active', async () => {
     await gotoAndWait(clientP, '/client/profile', 'Modifier mes informations');
-    await clientP.getByText('Désactiver ce réglage vous retire aussi de la qualification pour la Finale', { exact: false })
-      .waitFor({ timeout: 10000 });
+    await clientP.getByLabel('Apparaître dans le classement des grimpeurs').waitFor({ timeout: 10000 });
+    const finaleText = await clientP.getByText('qualification pour la Finale', { exact: false }).count();
+    assert(finaleText === 0, 'la légende sur la Finale ne doit plus être affichée');
     const optInSwitch = clientP.getByLabel('Apparaître dans le classement des grimpeurs');
     if (!(await optInSwitch.isChecked())) await optInSwitch.click();
     await clientP.getByRole('button', { name: 'Enregistrer' }).click();

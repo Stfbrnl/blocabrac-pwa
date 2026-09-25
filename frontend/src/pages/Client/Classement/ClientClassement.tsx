@@ -259,8 +259,7 @@ const ClientClassement: React.FC = () => {
         {mode === 'saison' && phase === 'en_cours' && seasonConfig?.debut && seasonConfig?.fin && (
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             Saison du {formatSeasonDay(seasonConfig.debut)} au {formatSeasonDay(seasonConfig.fin)} :
-            seuls les blocs réussis pour la première fois pendant la saison comptent — ce classement
-            détermine les qualifiés pour la Finale de fin de saison.
+            seuls les blocs réussis pour la première fois pendant la saison comptent.
           </Typography>
         )}
         {mode === 'saison' && phase === 'a_venir' && seasonConfig?.debut && seasonConfig?.fin && (

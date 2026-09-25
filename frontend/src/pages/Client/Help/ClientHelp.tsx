@@ -121,10 +121,8 @@ const sections: HelpSection[] = [
       "Seuls les grimpeurs ayant activé l'option apparaissent — vous n'y êtes pas inclus par défaut.",
       'Pour apparaître (ou non) dans ce classement, rendez-vous dans « Modifier mes informations » et cochez la case « Apparaître dans le classement des grimpeurs ».',
       'Deux vues au choix : le classement général (cumulé depuis la création de votre compte) et le classement de la saison en cours.',
-      'Au démarrage d\'une saison, votre score de saison repart de vos validations des blocs actuellement en place — vous n\'avez rien à revalider, votre nombre d\'essais d\'origine est conservé.',
-      'Dans les deux classements, les points d\'un bloc que vous avez validé vous restent acquis même si ce bloc est retiré lors d\'une rotation des murs.',
-      'Le classement de saison détermine les qualifiés pour la Finale de fin de saison — désactiver votre apparition au classement vous retire aussi de cette qualification.',
-    ],
+      'Au démarrage d\'une saison, tout le monde repart de zéro : seuls les blocs réussis pour la première fois pendant la saison comptent. Le classement général, lui, ne s\'arrête jamais.',
+      'Dans les deux classements, les points d\'un bloc que vous avez validé vous restent acquis même si ce bloc est retiré lors d\'une rotation des murs.',    ],
   },
   {
     title: 'Mes cours',

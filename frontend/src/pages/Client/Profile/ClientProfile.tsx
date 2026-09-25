@@ -259,11 +259,10 @@ const ClientProfile: React.FC = () => {
             label="Apparaître dans le classement des grimpeurs"
           />
           {/* ✅ docs/plans/CONCEPTION-classement-saisonnier.md, décision §3 : désactiver ce réglage
-              retire aussi de la qualification à la Finale, pas seulement du classement
-              public — sans ce texte, l'effet serait invisible pour le grimpeur. */}
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-            Désactiver ce réglage vous retire aussi de la qualification pour la Finale de fin de saison.
-          </Typography>
+              retire aussi de la qualification à la Finale (compute-classement-saison.js). La
+              légende qui le disait est RETIRÉE le 25/09/2026 sur décision de l'utilisateur : la
+              Finale n'est pas encore confirmée. À remettre le jour où elle l'est (texte d'origine
+              dans CLAUDE.md, section classement de saison). */}
 
           <FormControlLabel
             sx={{ mt: 1 }}
