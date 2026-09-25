@@ -1,4 +1,4 @@
-# Handoff ClaudeNav — V2.68.1 / V2.69 / V2.70 : grille de missions, règle de revalidation, grille « bingo »
+# Handoff ClaudeNav — V2.68.1 → V2.71.1 : grille de missions, règle de revalidation, grille « bingo », saison à venir
 
 > Session Claude Code (PC Windows de l'utilisateur, pas le Codespace), 25/09/2026.
 > Implémente `docs/handoffs/RETOUR-bug-missions-et-revalidation.md` (ta réponse du 25/09 au
@@ -14,6 +14,8 @@
 > **V2.70.1 (§4 ter)** : badge au tampon, texte de « Quoi de neuf » coupé sur mobile, déployé.
 > **V2.70.2 (§9)** : suite donnée à ton `RETOUR-v2681-v269-v270.md`, point par point, déployé.
 > **V2.71 (§10)** : suite donnée à ton `RETOUR-v2701-v2702.md` — ⚠️ ton §4.2.1 reposait sur une hypothèse fausse, voir §10.
+> **V2.71.1 (fin du §10)** : textes client sur la Finale retirés jusqu'à sa confirmation, décision de l'utilisateur.
+> **État final de la prod le 25/09 au soir : V2.71.1**, commit `905e275`, hosting seul, aucune règle modifiée de toute la session.
 
 ---
 
@@ -470,12 +472,23 @@ maintenant que tout le monde repart de zéro.
 - ~~Clé de compte de service~~ : gardée sur le PC, point clos (ton §6).
 - ~~Garde-fou §1.7~~ : retiré (ton §1.1).
 - ~~Le `client_badges` à l'ancien format~~ : conservé, c'est un compte de test (§9).
-- **Fenêtre de saison jamais réglée** (`app_config/classement_saison` absent), confirmé par l'audit.
+- **Fenêtre de saison 2026-11-01 → 2027-05-31 à enregistrer par l'utilisateur, avec « Enregistrer »** et non
+  « Redémarrer » (§10). Tant qu'elle ne l'est pas, l'audit du catalogue garde un avertissement, **nouveau**.
+- **Chaque juin, dès la clôture du 1er juin** : enregistrer tout de suite la saison suivante (1er novembre
+  → 31 mai). Sinon `compute-classement-saison.js` met le workflow en échec chaque jour après 7 jours,
+  pendant tout l'été, **nouveau**.
+- **Finale non annoncée** : trois textes client retirés en V2.71.1, à remettre mot pour mot (liste dans
+  `CLAUDE.md`) le jour où l'utilisateur confirme sa faisabilité. Il faudra aussi inverser l'étape 5 de
+  `e2e-season-classement-flow.mjs` et annoncer la Finale dans le changelog, **nouveau**.
+- **Premier passage du workflow `reconcile-method-counts.yml`** le 1er octobre, 03h45 UTC : à regarder
+  (simulation prod du 25/09 : 0 vote, 0 écart), **nouveau**.
+- **V2.70.1 → V2.71.1 non vues sur un vrai téléphone** : tampon du badge, silhouette « non obtenu »,
+  « Effacer cet échec », panneau « Quoi de neuf » redevenu lisible, onglet « saison à venir », **nouveau**.
 - Vérification visuelle de l'anecdote d'ouvreur et du carnet de méthodes (V2.66/V2.67) :
   toujours sans retour de l'utilisateur.
 - Migration de l'état ludique : Passe C déployée en V2.61, la purge
   (`purge-legacy-ludic-fields.js --fix`) est toujours en attente.
-- Clic « Redémarrer la saison » : à vérifier si l'utilisateur l'a déjà fait.
+- ~~Clic « Redémarrer la saison »~~ : **abandonné**. La saison s'ouvre le 1er novembre avec « Enregistrer », départ à zéro (§10).
 - Défis `fenetre` / `bloc_designe` : toujours en prod sans e2e navigateur.
 - Chantier droits d'accès (rôle ouvreur trop large) : en attente du gérant.
 - `topo-blocabrac.pdf` : on ne sait toujours pas si la police Dosis s'affiche réellement
