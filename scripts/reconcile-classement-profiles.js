@@ -441,11 +441,22 @@ async function main() {
   // "existed"/"realDrift" et le "wasAbsent" de chaque champ (voir fieldDrift()) sont
   // conservés dans le journal pour que cette distinction reste visible après coup, pas
   // seulement dans la sortie console de ce run.
-  if (drifted.length > 0) {
+  // ⚠️ 02/10/2026 — UNE SIMULATION N'ÉCRIT RIEN, NULLE PART. Avant cette date, ce bloc
+  // écrivait le journal même sans `--fix` : une simulation lancée depuis un poste écrasait
+  // donc le journal de PRODUCTION suivi par git, celui que le cron mensuel venait de
+  // commiter. Constaté le 02/10 (le run du 1ᵉʳ octobre a été restauré par `git checkout`).
+  // C'est la même famille que le piège émulateur du 19/08, sous une variante que le garde-fou
+  // `FIRESTORE_EMULATOR_HOST` ne couvrait pas : ici la cible EST la production, c'est le MODE
+  // qui ne devrait rien écrire. Le détail reste affiché en console, qui est la bonne sortie
+  // pour une simulation.
+  if (drifted.length > 0 && FIX) {
     fs.mkdirSync(STATE_DIR, { recursive: true });
     const log = drifted.map((d) => ({ uid: d.uid, existed: d.existed, realDrift: d.realDrift, drift: d.drift, fixedAt: null }));
     fs.writeFileSync(LOG_PATH, JSON.stringify(log, null, 2));
     console.log(`Détail journalisé dans ${LOG_PATH}`);
+  } else if (drifted.length > 0) {
+    console.log('Simulation : aucun journal écrit (le détail ci-dessus suffit). Le journal n\'est mis à jour que par --fix.');
+    drifted.forEach((d) => console.log(`  ${d.uid} : ${JSON.stringify(d.drift)}`));
   }
 
   if (!FIX) {

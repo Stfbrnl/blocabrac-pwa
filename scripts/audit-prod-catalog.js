@@ -18,6 +18,13 @@
 //                                        « Mes stats » l'ignorerait sans rien dire) ;
 //   - `app_config/classement_saison`   : présent ou non, et son état (le code tolère l'absence,
 //                                        mais le classement de saison reste alors vide).
+//   - RÉFÉRENCES MORTES entre collections (02/10/2026, RETOUR-v2714-et-comptes-test.md §3.2) :
+//                                        `client_boulder_results.boulderId` → `boulders`,
+//                                        `challenges.participants`/`created_by`/`boulder_id`,
+//                                        `classement_profiles/{uid}` → `users`. Détecter un
+//                                        défaut demande d'interroger l'état ACCUMULÉ de la
+//                                        prod ; un compte de test, jeune et propre, n'en porte
+//                                        aucun (voir la note « Comptes de test » de CLAUDE.md).
 //
 //   node scripts/audit-prod-catalog.js   → n'écrit jamais rien, aucun mode --fix
 //
@@ -60,10 +67,11 @@ async function main() {
   const errors = [];
   const warnings = [];
 
-  const [badgesSnap, linksSnap, seasonSnap] = await Promise.all([
+  const [badgesSnap, linksSnap, seasonSnap, bouldersSnap] = await Promise.all([
     db.collection('badges').get(),
     db.collection('client_badges').get(),
     db.collection('app_config').doc('classement_saison').get(),
+    db.collection('boulders').get(),
   ]);
 
   const badges = badgesSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -112,6 +120,71 @@ async function main() {
     const key = `client_badges/${d.id}`;
     if (KNOWN_EXCEPTIONS[key]) known.push(`${key} : ${KNOWN_EXCEPTIONS[key]}`);
     else warnings.push(`${key} à l'ancien format (badge_id "${d.data().badge_id}") : ignoré par l'application.`);
+  }
+
+  // ========== Références mortes entre collections ==========
+  // RETOUR-v2714-et-comptes-test.md §3.2 : un compte de test ne détecte rien (il est jeune et
+  // propre, or les défauts de ce projet naissent de l'état ACCUMULÉ). L'instrument de
+  // détection, c'est l'audit de production — et en particulier : qu'est-ce qui pointe vers
+  // quelque chose qui n'existe plus ?
+  //
+  // ⚠️ Une ligne du tableau de ce §3.2 n'est PAS auditable ici, et c'est important de le
+  // dire plutôt que de laisser croire le contraire : « le défi actif d'un grimpeur » n'est
+  // stocké NULLE PART côté serveur. ClientDaily.tsx le reconstruit par une requête
+  // cache-first, et c'est le cache IndexedDB du navigateur qui garde la référence morte.
+  // Aucun script serveur ne peut la voir. Ce qui protège de ce défaut-là, c'est la règle
+  // (`resource == null ||`) et le découpage de la transaction, pas cet audit.
+  const [resultsSnap, challengesSnap, usersSnap, profilesSnap] = await Promise.all([
+    db.collection('client_boulder_results').get(),
+    db.collection('challenges').get(),
+    db.collection('users').get(),
+    db.collection('classement_profiles').get(),
+  ]);
+  const boulderIds = new Set(bouldersSnap.docs.map((d) => d.id));
+  const userIds = new Set(usersSnap.docs.map((d) => d.id));
+
+  console.log(`Références : ${resultsSnap.size} résultat(s) de bloc, ${challengesSnap.size} défi(s), `
+    + `${profilesSnap.size} profil(s) de classement, ${usersSnap.size} compte(s), ${boulderIds.size} bloc(s)`);
+
+  // client_boulder_results -> boulders. C'est LA référence qui porte le classement : la
+  // réconciliation recalcule le score attendu en joignant chaque résultat au bloc. Un bloc
+  // disparu ferait silencieusement chuter le score recalculé — d'où l'invariant « ne jamais
+  // supprimer un document boulders » (CLAUDE.md). Cet audit le vérifie au lieu de l'espérer.
+  const resultatsMorts = resultsSnap.docs.filter((d) => !boulderIds.has(d.data().boulderId));
+  for (const d of resultatsMorts.slice(0, 10)) {
+    errors.push(`client_boulder_results/${d.id} pointe vers un bloc absent : "${d.data().boulderId}".`);
+  }
+  if (resultatsMorts.length > 10) {
+    errors.push(`… et ${resultatsMorts.length - 10} autre(s) résultat(s) pointant vers un bloc absent.`);
+  }
+
+  // client_boulder_results -> users (compte supprimé mais résultats conservés).
+  const resultatsSansCompte = new Set(
+    resultsSnap.docs.map((d) => d.data().userId).filter((uid) => uid && !userIds.has(uid))
+  );
+  for (const uid of resultatsSansCompte) {
+    warnings.push(`Des résultats de bloc appartiennent à un compte absent de "users" : ${uid}.`);
+  }
+
+  // classement_profiles -> users : un profil orphelin apparaîtrait au classement sans nom.
+  for (const d of profilesSnap.docs) {
+    if (!userIds.has(d.id)) warnings.push(`classement_profiles/${d.id} sans compte "users" correspondant.`);
+  }
+
+  // challenges -> users / boulders.
+  for (const d of challengesSnap.docs) {
+    const c = d.data();
+    for (const uid of c.participants || []) {
+      if (!userIds.has(uid)) errors.push(`challenges/${d.id} a un participant absent de "users" : ${uid}.`);
+    }
+    if (c.created_by && !userIds.has(c.created_by)) {
+      errors.push(`challenges/${d.id} créé par un compte absent de "users" : ${c.created_by}.`);
+    }
+    // Structure "bloc_designe" : le défi désigne un bloc précis. Si ce bloc n'existe plus,
+    // le défi ne peut plus jamais avancer.
+    if (c.boulder_id && !boulderIds.has(c.boulder_id)) {
+      errors.push(`challenges/${d.id} (${c.structure}) désigne un bloc absent : "${c.boulder_id}".`);
+    }
   }
 
   // Fenêtre de saison.
