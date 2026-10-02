@@ -1,39 +1,37 @@
 [
   {
-    "uid": "4Urs3bj8KWOKKZXgJ1g2gTGmpUF3",
+    "uid": "1gq6Jyr4hXaMIDaKQmJVijIQtyW2",
     "existed": true,
     "realDrift": true,
     "drift": {
       "score": {
-        "stored": 4770,
-        "expected": 825,
-        "wasAbsent": false
-      },
-      "bouldersValidated": {
-        "stored": 46,
-        "expected": 6,
+        "stored": 15125,
+        "expected": 15225,
         "wasAbsent": false
       },
       "colorCounts": {
         "stored": {
-          "rose": 0,
-          "jaune": 8,
-          "vert": 14,
-          "violet": 9,
-          "bleu": 13,
-          "rouge": 2
+          "blanc": 2,
+          "noir": 7,
+          "vert": 11,
+          "jaune": 7,
+          "bleu": 18,
+          "violet": 14,
+          "rouge": 10
         },
         "expected": {
-          "jaune": 1,
-          "vert": 2,
-          "rouge": 1,
-          "violet": 1,
-          "bleu": 1
+          "jaune": 7,
+          "rouge": 10,
+          "vert": 11,
+          "violet": 15,
+          "noir": 7,
+          "bleu": 17,
+          "blanc": 2
         },
         "wasAbsent": false
       }
     },
-    "fixedAt": "2026-10-01T10:22:23.204Z"
+    "fixedAt": "2026-10-02T18:45:27.128Z"
   },
   {
     "uid": "5erGHVpDAnbEzkypzOxKSt1VKo53",
@@ -41,69 +39,166 @@
     "realDrift": true,
     "drift": {
       "score": {
-        "stored": 3345,
-        "expected": 5070,
+        "stored": 5665,
+        "expected": 5965,
         "wasAbsent": false
       },
       "bouldersValidated": {
-        "stored": 23,
-        "expected": 33,
+        "stored": 37,
+        "expected": 38,
         "wasAbsent": false
       },
       "colorCounts": {
         "stored": {
-          "vert": 4,
-          "jaune": 3,
-          "bleu": 7,
-          "violet": 4,
-          "rouge": 5
+          "vert": 5,
+          "rouge": 8,
+          "noir": 1,
+          "jaune": 5,
+          "bleu": 10,
+          "violet": 8
         },
         "expected": {
           "rouge": 8,
-          "jaune": 4,
+          "noir": 1,
+          "jaune": 5,
           "vert": 5,
-          "violet": 7,
+          "violet": 10,
           "bleu": 9
         },
         "wasAbsent": false
       }
     },
-    "fixedAt": "2026-10-01T10:22:23.204Z"
+    "fixedAt": "2026-10-02T18:45:27.128Z"
   },
   {
-    "uid": "7SvZhyuXM7gEaQkuLLAKOyRlYFM2",
+    "uid": "DsyfChO90eOeDSTS3XWXrI2eX7R2",
     "existed": true,
     "realDrift": true,
     "drift": {
       "score": {
-        "stored": 4910,
-        "expected": 4360,
-        "wasAbsent": false
-      },
-      "bouldersValidated": {
-        "stored": 65,
-        "expected": 43,
+        "stored": 8855,
+        "expected": 8955,
         "wasAbsent": false
       },
       "colorCounts": {
         "stored": {
-          "rouge": 2,
-          "jaune": 30,
-          "vert": 12,
-          "bleu": 14,
-          "violet": 7
+          "jaune": 1,
+          "vert": 2,
+          "violet": 12,
+          "rouge": 11,
+          "noir": 3,
+          "bleu": 4
         },
         "expected": {
-          "jaune": 8,
-          "bleu": 14,
-          "vert": 12,
-          "violet": 7,
-          "rouge": 2
+          "rouge": 11,
+          "noir": 3,
+          "violet": 13,
+          "jaune": 1,
+          "vert": 2,
+          "bleu": 3
         },
         "wasAbsent": false
       }
     },
-    "fixedAt": "2026-10-01T10:22:23.204Z"
+    "fixedAt": "2026-10-02T18:45:27.128Z"
+  },
+  {
+    "uid": "EHEBHrOCtEa7jdktJICt8HFuR492",
+    "existed": true,
+    "realDrift": true,
+    "drift": {
+      "score": {
+        "stored": 2185,
+        "expected": 2285,
+        "wasAbsent": false
+      },
+      "colorCounts": {
+        "stored": {
+          "jaune": 1,
+          "vert": 1,
+          "blanc": 1,
+          "noir": 1,
+          "bleu": 2,
+          "violet": 1,
+          "rouge": 1
+        },
+        "expected": {
+          "jaune": 1,
+          "vert": 1,
+          "violet": 2,
+          "blanc": 1,
+          "noir": 1,
+          "bleu": 1,
+          "rouge": 1
+        },
+        "wasAbsent": false
+      }
+    },
+    "fixedAt": "2026-10-02T18:45:27.128Z"
+  },
+  {
+    "uid": "aGkno50EN5bMlrTGK0nhgmz62K72",
+    "existed": true,
+    "realDrift": true,
+    "drift": {
+      "score": {
+        "stored": 14515,
+        "expected": 14615,
+        "wasAbsent": false
+      },
+      "colorCounts": {
+        "stored": {
+          "blanc": 1,
+          "jaune": 5,
+          "vert": 9,
+          "bleu": 15,
+          "violet": 15,
+          "rouge": 12,
+          "noir": 7
+        },
+        "expected": {
+          "rouge": 12,
+          "noir": 7,
+          "violet": 16,
+          "bleu": 14,
+          "jaune": 5,
+          "vert": 9,
+          "blanc": 1
+        },
+        "wasAbsent": false
+      }
+    },
+    "fixedAt": "2026-10-02T18:45:27.128Z"
+  },
+  {
+    "uid": "lTKfW9XbFiSV8scNJWlcR9kz5ck2",
+    "existed": true,
+    "realDrift": true,
+    "drift": {
+      "score": {
+        "stored": 3495,
+        "expected": 3595,
+        "wasAbsent": false
+      },
+      "colorCounts": {
+        "stored": {
+          "jaune": 3,
+          "vert": 8,
+          "bleu": 11,
+          "violet": 6,
+          "rouge": 2
+        },
+        "expected": {
+          "rouge": 2,
+          "jaune": 3,
+          "bleu": 10,
+          "vert": 8,
+          "violet": 7
+        },
+        "wasAbsent": false
+      }
+    },
+    "fixedAt": "2026-10-02T18:45:27.128Z"
   },
   {
     "uid": "nP1TFARqrTgVTZf4Q9dcY1DVju52",
@@ -111,13 +206,8 @@
     "realDrift": true,
     "drift": {
       "score": {
-        "stored": 6835,
-        "expected": 4915,
-        "wasAbsent": false
-      },
-      "bouldersValidated": {
-        "stored": 31,
-        "expected": 26,
+        "stored": 4915,
+        "expected": 5015,
         "wasAbsent": false
       },
       "colorCounts": {
@@ -126,20 +216,20 @@
           "vert": 3,
           "bleu": 6,
           "violet": 6,
-          "rouge": 12,
-          "noir": 1
+          "noir": 1,
+          "rouge": 7
         },
         "expected": {
           "rouge": 7,
           "jaune": 3,
           "vert": 3,
-          "bleu": 6,
-          "violet": 6,
+          "violet": 7,
+          "bleu": 5,
           "noir": 1
         },
         "wasAbsent": false
       }
     },
-    "fixedAt": "2026-10-01T10:22:23.204Z"
+    "fixedAt": "2026-10-02T18:45:27.128Z"
   }
 ]
