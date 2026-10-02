@@ -61,6 +61,12 @@ const levelColors: Record<string, string> = Object.fromEntries(
   colorGrades.map(({ value, hex }) => [value, hex])
 );
 
+// Couleurs de niveau trop claires pour porter du texte blanc. Utilisé uniquement par la
+// carte « Partager ma progression » : elle finit publiée sur un réseau social, là où un
+// libellé illisible est définitif (contrairement à l'écran, où la couleur est redondante
+// avec le reste de la page). Les autres écrans gardent leur règle historique (blanc seul).
+const LIGHT_LEVELS = new Set(['jaune', 'vert', 'blanc', 'rose']);
+
 interface NextCompetition {
   name: string;
   date: string;
@@ -396,7 +402,9 @@ const ClientScreen: React.FC = () => {
     const canvas = await html2canvas.default(cardRef.current, {
       scale: 2,
       useCORS: true,
-      backgroundColor: null,
+      // ✅ Fond opaque plutôt que `null` : les coins arrondis laissaient des pixels
+      // transparents, que les réseaux sociaux aplatissent sur un fond de leur choix.
+      backgroundColor: '#ffffff',
     });
 
     canvas.toBlob(async (blob) => {
@@ -714,19 +722,43 @@ const ClientScreen: React.FC = () => {
                 textAlign: 'center',
               }}
             >
-              <Box component="img" src={logoPath} alt={gymName} sx={{ width: 56, height: 56, mb: 1 }} />
+              {/* ✅ Le logo n'est pas carré (316x468) : forcer width ET height l'écrasait
+                  horizontalement, sur l'écran comme dans l'image exportée. Même recette que
+                  la Navbar — on ne contraint que la hauteur, objectFit en filet. */}
+              <Box
+                component="img"
+                src={logoPath}
+                alt={gymName}
+                sx={{ height: 56, width: 'auto', objectFit: 'contain', mb: 1, display: 'inline-block' }}
+              />
               <Typography variant="h6" sx={{ fontWeight: 700 }}>
                 {userData?.first_name ? `Bravo ${userData.first_name} !` : 'Bravo !'}
               </Typography>
               {userData?.level && (
-                <Chip
-                  label={levelOptions[userData.level] || userData.level}
+                /* ⚠️ Surtout pas un <Chip> MUI ici : html2canvas 1.4.1 (dernière version
+                   publiée, 2022) n'écrit jamais le texte de .MuiChip-label — le libellé du
+                   niveau disparaissait sous la pastille dans l'image partagée, alors qu'il
+                   s'affiche normalement à l'écran (d'où "ça marche en capture d'écran").
+                   Reproduit en isolant le composant ; une pastille faite d'un seul <span>
+                   portant à la fois le fond et le texte s'exporte, elle, correctement.
+                   Toute pastille ajoutée à cette carte doit suivre la même forme. */
+                <Box
+                  component="span"
                   sx={{
+                    display: 'inline-block',
                     mt: 1,
+                    px: 1.5,
+                    py: 0.75,
+                    borderRadius: 16,
+                    fontSize: '0.8125rem',
+                    lineHeight: 1.25,
+                    fontWeight: 500,
                     backgroundColor: levelColors[userData.level],
-                    color: userData.level === 'blanc' ? 'black' : 'white'
+                    color: LIGHT_LEVELS.has(userData.level) ? 'black' : 'white',
                   }}
-                />
+                >
+                  {levelOptions[userData.level] || userData.level}
+                </Box>
               )}
               {lastBadge && (
                 <Typography variant="body2" sx={{ mt: 1.5 }}>

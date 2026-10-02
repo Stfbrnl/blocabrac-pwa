@@ -13,6 +13,15 @@ export interface ChangelogEntry {
 // les commits git.
 export const changelog: ChangelogEntry[] = [
   {
+    version: '2.71.3',
+    date: '2026-10-02',
+    title: 'L\'image de progression partageable corrigée',
+    items: [
+      'Sur l\'image générée par « Partager ma progression », le libellé de votre niveau n\'apparaissait pas une fois publiée sur un réseau social (il s\'affichait pourtant bien à l\'écran).',
+      'Le logo de la salle y était aussi étiré en largeur : il garde maintenant ses proportions.',
+    ],
+  },
+  {
     version: '2.71',
     date: '2026-09-26',
     title: 'La saison démarre le 1er novembre',
