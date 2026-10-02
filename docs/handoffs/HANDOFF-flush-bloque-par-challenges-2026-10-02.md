@@ -241,7 +241,7 @@ Noté en mémoire de session ; mérite sans doute une ligne dans les conventions
 
 | Étape du plan | État |
 |---|---|
-| §1.1 réconciliation `--fix` | ❌ **non lancée** — voir ci-dessous, la situation a changé |
+| §1.1 réconciliation `--fix` | ✅ **lancée**, après tes quatre lectures de contrôle — 7 profils corrigés, simulation de contrôle à 0 écart, journal commité (`7087d9e`) |
 | §1.2 quatre lignes de documentation | ✅ faites (déjà au tour précédent ; la formulation française est maintenant conservée **verbatim**) |
 | §1.3 ne PAS déployer V2.71.4, mais pousser | ✅ `b7ea103` poussé sur `main`, **aucun déploiement d'application** |
 | §1.4 purge suspendue | ✅ inchangée |
@@ -285,11 +285,24 @@ par le défaut des défis, la prédiction du plan) **et +100 / un bleu→violet*
 **Le risque n°2 non plus** : 7 profils sur 61, soit **11,5 %**, sous le seuil de 30 %. Le
 garde-fou ne se déclenchera pas et `--force` est inutile.
 
-**Reste le risque n°3**, et c'est pour lui que je n'ai pas lancé `--fix` : la correction
-déplacerait **ce soir** le score public de 7 grimpeurs, alors que l'annonce qui l'explique
-(§2.3 point 5) est rattachée à V2.71.4, qui ne se déploie que demain (§1.3). Faire les deux
-dans le même mouvement demain matin évite une nuit de scores qui bougent sans explication.
-L'entrée de changelog est écrite et n'attend que le déploiement.
+**Reste le risque n°3** (un score qui bouge sans explication). J'avais d'abord suspendu `--fix`
+pour cette raison ; ton argument l'a emporté et il était meilleur : **ne pas corriger n'évite
+rien**, ça reporte le même recalcul au cron du 1ᵉʳ novembre, qui l'appliquerait *silencieusement*.
+Autant que ça arrive maintenant, vérifié et assumé. L'entrée de changelog est écrite et partira
+avec V2.71.4.
+
+### `--fix` lancé — les quatre lectures de contrôle, toutes propres
+
+| lecture | résultat |
+|---|---|
+| 1. forme identique sur les 7 | ✅ un bleu se déplace en violet, rien d'autre ne bouge |
+| 2. compte composite décomposé | ✅ +100 (recotation) + 200 (violet perdu à 19h17) = +300 |
+| 3. `bestColorRank` | ✅ inchangé pour les 7 — aucun badge, aucun niveau |
+| 4. personne ne perd de points | ✅ +100 pour six, +300 pour le septième |
+
+Garde-fou non déclenché (11,5 %). **7 profils corrigés**, puis **simulation de contrôle :
+0 écart sur 61 profils**. Le compte de l'utilisateur lit désormais **5965 / 38 blocs /
+violet 10 / bleu 9** — exactement l'attendu décomposé. Journal commité (`7087d9e`).
 
 ### Les trois comptes du 1ᵉʳ octobre n'ont pas re-dérivé (ton §1.1 point 2)
 
