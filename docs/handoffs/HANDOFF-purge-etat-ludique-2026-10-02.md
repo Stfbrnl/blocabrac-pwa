@@ -178,6 +178,34 @@ humaine : **question posée à l'utilisateur, exécution en attente de sa répon
 
 ---
 
+## §4 bis — Ordre de reprise arrêté le 02/10 au soir (décision : on ne purge pas ce soir)
+
+Raison, et ce n'est pas une réserve sur l'exécution : **asymétrie**. La purge supprime
+définitivement des champs sur seize comptes, elle attend depuis le 17/09 (un jour de plus ne
+coûte rien), et il est 21h après deux heures de diagnostic — le moment exact de la faute
+d'inattention, sur la seule opération de la soirée qui ne se rejoue pas.
+
+Il manque surtout l'étape proposée l'après-midi et jamais faite : **la répétition sur un
+compte de test**. Elle a une valeur réelle ici, parce que **la simulation n'a jamais exercé le
+chemin d'ÉCRITURE** — seulement la lecture et la comparaison.
+
+Ordre de reprise, dans cet ordre exact :
+
+1. Ajouter un drapeau **`--uid`** à `purge-legacy-ludic-fields.js` (il ne l'a pas) — donc du
+   code, à écrire à tête reposée.
+2. Purger **un seul compte de test**, en production.
+3. Vérifier : les quatre champs ont disparu de `users`, `user_ludic_state` est **intact**.
+4. **Ouvrir l'application sur ce compte** (objectif de la semaine, compteurs de murs, compteur
+   Roulette, grille de missions).
+5. Seulement ensuite, les seize comptes.
+6. **La mesure du poids de la requête `users` dans `AdminUsers.tsx`** (§4 du plan) — l'utilisateur
+   seul peut la faire, et sans elle le chantier n'est pas terminé.
+7. Traiter la dérogation du §4 ci-dessus pour `weeklyGoalItems`, **sans jamais relancer le
+   backfill** (voir `CLAUDE.md`, corrigé le 02/10 : l'affirmation « safe to rerun at any time »
+   était fausse et aurait rendu à l'utilisateur des objectifs qu'il avait supprimés).
+
+Compter environ quarante-cinq minutes, salle calme.
+
 ## §5 — Ce qui reste à faire (ton §7, étapes 5 à 9)
 
 - [ ] Dérogation pour `5erGHVpD….weeklyGoalItems`, puis `--fix`.
