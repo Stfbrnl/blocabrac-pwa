@@ -589,6 +589,54 @@ describe('challenges : défis entre potes', () => {
     const otherDb = testEnv.authenticatedContext(OTHER_CLIENT_UID).firestore();
     await assertFails(deleteDoc(doc(otherDb, 'challenges', 'defi-1')));
   });
+
+  // ⚠️ Les deux tests suivants reproduisent le défaut de production du 02/10/2026
+  // (docs/URGENT-flush-bloque-par-challenges.md) : `allow read` évaluait
+  // `resource.data.participants` SANS vérifier que le document existe. Sur un document
+  // absent, `resource` est null, l'évaluation de la règle PLANTE, et un plantage de règle
+  // se présente au client comme `permission-denied` — indiscernable d'un vrai refus.
+  //
+  // Conséquence réelle : `ClientDaily.tsx` charge ses défis actifs en cache-first
+  // (getDocsCacheFirst), donc un défi supprimé par son créateur sur un AUTRE appareil
+  // reste dans le cache IndexedDB local. À chaque validation faisant avancer ce défi, la
+  // transaction partagée du flush fait `tx.get(challenges/<id supprimé>)`, se fait refuser,
+  // et TOUTE la transaction avorte : score, wallCounts, missions et défis perdus d'un coup.
+  // Le garde-fou `if (!challengeData || !challengeRef) return;` de buildClassementFlushWrites
+  // n'est jamais atteint — la lecture meurt avant lui. Le commentaire de `allow delete`
+  // ci-dessus ("ClientDaily.tsx ignore proprement un défi disparu") était donc faux.
+  it('⚠️ lire un défi INEXISTANT est refusé proprement, sans faire planter la règle', async () => {
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertSucceeds(getDoc(doc(clientDb, 'challenges', 'defi-jamais-cree')));
+  });
+
+  it('⚠️ un défi supprimé en cours de route n\'avorte pas la transaction de validation', async () => {
+    // Reproduit le scénario exact : le client a le défi en mémoire (cache), le document
+    // n'existe plus côté serveur, et la transaction du flush tente de le lire.
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertSucceeds(runTransaction(clientDb, async (tx) => {
+      const snap = await tx.get(doc(clientDb, 'challenges', 'defi-supprime'));
+      // Le code de production ignore un défi disparu plutôt que d'écrire dessus.
+      if (snap.exists()) tx.set(doc(clientDb, 'challenges', 'defi-supprime'), {}, { merge: true });
+    }));
+  });
+
+  it('un défi TERMINÉ reste lisible par ses participants (plus jouable ≠ illisible)', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'challenges', 'defi-1'), {
+        ...baseChallenge, status: 'termine', winner_uid: CLIENT_UID,
+      });
+    });
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertSucceeds(getDoc(doc(clientDb, 'challenges', 'defi-1')));
+  });
+
+  it('un non-participant ne peut toujours pas lire un défi EXISTANT', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'challenges', 'defi-1'), baseChallenge);
+    });
+    const etrangerDb = testEnv.authenticatedContext('client-3').firestore();
+    await assertFails(getDoc(doc(etrangerDb, 'challenges', 'defi-1')));
+  });
 });
 
 describe('client_badges : auto-attribution des badges couleur par le client', () => {

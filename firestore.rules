@@ -727,7 +727,19 @@ service cloud.firestore {
     // utilisateur du 19/08/2026) : jamais les deux à la fois, et jamais participants/structure/
     // created_by/les paramètres du défi, qui restent figés après création.
     match /challenges/{challengeId} {
-      allow read: if request.auth != null && request.auth.uid in resource.data.participants;
+      // ⚠️ `resource == null` D'ABORD : sur un document inexistant, `resource.data` fait
+      // PLANTER l'évaluation de la règle, et un plantage se présente au client comme
+      // `permission-denied` — indiscernable d'un vrai refus. Défaut constaté en production
+      // le 02/10/2026 (docs/URGENT-flush-bloque-par-challenges.md) : `ClientDaily.tsx`
+      // charge ses défis actifs en cache-first, donc un défi supprimé par son créateur sur
+      // un autre appareil survit dans le cache IndexedDB local. La transaction partagée du
+      // flush lisait alors un document disparu, se faisait refuser, et avortait EN ENTIER —
+      // score, wallCounts, missions et défis perdus ensemble, en silence.
+      // Autoriser la lecture d'un document absent ne divulgue que son inexistence (le
+      // client doit déjà connaître l'identifiant), et c'est ce qui permet au code appelant
+      // de traiter « défi disparu » comme le cas normal qu'il est.
+      allow read: if request.auth != null &&
+                    (resource == null || request.auth.uid in resource.data.participants);
 
       allow create: if request.auth != null &&
                       request.resource.data.created_by == request.auth.uid &&

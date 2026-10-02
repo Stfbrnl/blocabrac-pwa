@@ -9,9 +9,13 @@ import { useDebouncedFlushQueue } from '../../../utils/useDebouncedFlushQueue';
 import { runReadThenWriteTransaction } from '../../../utils/firestoreTransaction';
 import {
   buildClassementFlushWrites, mergeClassementFlushPending, emptyClassementFlushPending,
-  classementFlushReadKeys, challengeReadKey,
+  classementFlushReadKeys,
   type ClassementFlushPending,
 } from '../../../utils/classementFlushWrites';
+import {
+  buildChallengeProgressWrites, challengeProgressIds, challengeProgressReadKey,
+  challengeProgressReadKeys, hasPendingChallengeProgress,
+} from '../../../utils/challengeProgressWrite';
 import { buildFirstAscentWrite } from '../../../utils/firstAscentWrites';
 import type { FirstAscentEntry } from '../../../utils/firstAscents';
 import { buildMethodVoteWrite } from '../../../utils/methodVoteWrite';
@@ -262,8 +266,6 @@ const ClientDaily: React.FC = () => {
       // la passe A/B). Toujours dans la liste des LECTURES de la transaction, jamais un
       // `get()` en ligne (voir firestoreTransaction.ts).
       const userLudicRef = doc(db, 'user_ludic_state', user.uid);
-      const challengeIds = new Set<string>([...pending.challengeDeltas.keys(), ...pending.blocDesigneScores.keys()]);
-      const challengeRefs = new Map(Array.from(challengeIds, (id) => [id, doc(db, 'challenges', id)]));
 
       // ✅ V2.68.1 (docs/handoffs/RETOUR-bug-missions-et-revalidation.md §1.5) : les lectures sont
       // dérivées du `pending` par la fonction pure `classementFlushReadKeys` — plus aucune
@@ -272,8 +274,10 @@ const ClientDaily: React.FC = () => {
       const readKeys = classementFlushReadKeys(pending);
       const reads: Record<string, ReturnType<typeof doc>> = { classementProfile: classementProfileRef };
       if (readKeys.has('userLudic')) reads.userLudic = userLudicRef;
-      challengeRefs.forEach((ref, id) => { if (readKeys.has(challengeReadKey(id))) reads[challengeReadKey(id)] = ref; });
 
+      // 1) Le classement, les murs et les missions : ce qui ne peut PAS être perdu. Cette
+      //    transaction ne touche plus `challenges` du tout, donc aucune lecture de défi ne
+      //    peut plus la faire échouer. Si elle échoue, la file retentera tout le `pending`.
       await runReadThenWriteTransaction(db, reads, (readData) => buildClassementFlushWrites(
         user.uid,
         pending,
@@ -281,10 +285,41 @@ const ClientDaily: React.FC = () => {
           readKeys,
           classementProfile: readData.classementProfile,
           userLudic: readData.userLudic,
-          challenges: new Map(Array.from(challengeIds, (id) => [id, readData[challengeReadKey(id)]])),
         },
-        { classementProfileRef, userLudicRef, challengeRefs }
+        { classementProfileRef, userLudicRef }
       ));
+
+      // 2) La progression des défis : un bonus, dans sa propre transaction, APRÈS la
+      //    précédente (docs/URGENT-flush-bloque-par-challenges.md §3). Son échec est
+      //    journalisé et s'arrête là — surtout pas propagé, sinon la file retenterait tout
+      //    le `pending` et ré-appliquerait un delta de classement déjà écrit.
+      //    ⚠️ Cet `await` avalé est une exception ASSUMÉE à PROCESSUS-erreurs-avalees.md,
+      //    pas un oubli : rien n'est dérivé de `challenges.progress` (ni score, ni badge, ni
+      //    niveau), un défi est court et sans script de réconciliation par choix (voir
+      //    CLAUDE.md). Le perdre coûte une progression de jeu, pas une donnée.
+      if (hasPendingChallengeProgress(pending)) {
+        const challengeIds = challengeProgressIds(pending);
+        const challengeRefs = new Map(Array.from(challengeIds, (id) => [id, doc(db, 'challenges', id)]));
+        const challengeKeys = challengeProgressReadKeys(pending);
+        const challengeReads: Record<string, ReturnType<typeof doc>> = {};
+        challengeRefs.forEach((ref, id) => { challengeReads[challengeProgressReadKey(id)] = ref; });
+        try {
+          await runReadThenWriteTransaction(db, challengeReads, (readData) => buildChallengeProgressWrites(
+            user.uid,
+            pending,
+            {
+              readKeys: challengeKeys,
+              challenges: new Map(Array.from(challengeIds, (id) => [id, readData[challengeProgressReadKey(id)]])),
+            },
+            challengeRefs
+          ));
+        } catch (challengeErr) {
+          console.error(
+            'Progression de défi non enregistrée (sans conséquence sur le classement, déjà écrit) :',
+            challengeErr
+          );
+        }
+      }
     },
     // ✅ Niveau 3 (docs/processus/PROCESSUS-erreurs-avalees.md §2) : réutilise l'état error/Alert déjà
     // présent sur cet écran plutôt qu'un nouveau Snackbar.

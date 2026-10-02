@@ -68,7 +68,10 @@ export interface UseDebouncedFlushQueueOptions<T> {
   merge: (older: T, newer: T) => T;
   persist: (key: string, payload: T) => Promise<void>;
   // Au-delà de ce nombre d'échecs CONSÉCUTIFS (remis à zéro par tout succès), l'échec
-  // n'est plus traité comme transitoire — voir §2 niveau 2 du même document.
+  // n'est plus traité comme transitoire — voir §2 niveau 2 du même document. Depuis le
+  // 02/10/2026 un échec replanifie lui-même un essai (repli progressif), donc ces tentatives
+  // ont réellement lieu : avant, le seuil ne pouvait être atteint que si l'utilisateur
+  // enchaînait assez d'actions, ce qui rendait l'alerte inatteignable sur un échec sélectif.
   failureThreshold?: number;
   onDurableFailure?: (failureCount: number) => void;
   onRecovered?: () => void;
@@ -105,6 +108,21 @@ export function useDebouncedFlushQueue<T>(options: UseDebouncedFlushQueueOptions
     latestOptionsRef.current = options;
   });
 
+  // ✅ 02/10/2026 (docs/URGENT-flush-bloque-par-challenges.md §4.17) : indirection par ref
+  // pour que le chemin d'échec puisse replanifier un essai sans dépendance circulaire avec
+  // `runPersist`.
+  const runPersistRef = useRef<(key: string, payload: T) => Promise<void>>(async () => {});
+
+  const scheduleFlush = useCallback((key: string, delayMs: number) => {
+    if (timersRef.current[key]) clearTimeout(timersRef.current[key]);
+    timersRef.current[key] = setTimeout(() => {
+      delete timersRef.current[key];
+      const toPersist = pendingRef.current[key];
+      delete pendingRef.current[key];
+      if (toPersist !== undefined) void runPersistRef.current(key, toPersist);
+    }, delayMs);
+  }, []);
+
   const runPersist = useCallback(async (key: string, payload: T) => {
     try {
       await latestOptionsRef.current.persist(key, payload);
@@ -130,22 +148,29 @@ export function useDebouncedFlushQueue<T>(options: UseDebouncedFlushQueueOptions
         );
         durableFailureRef.current = true;
         latestOptionsRef.current.onDurableFailure?.(failureCountRef.current);
+      } else {
+        // ⚠️ 02/10/2026 — SANS ceci, le `failureThreshold` ci-dessus était inatteignable en
+        // pratique, et l'alerte destinée au grimpeur ne pouvait pas se déclencher : rien ne
+        // RÉESSAYAIT. Le payload remis en file attendait la prochaine action de l'utilisateur
+        // (ou un `pagehide`, qui n'est pas garanti d'aboutir). Un échec sélectif — celui du
+        // 02/10 ne frappait que les validations faisant avancer un défi — était donc suivi
+        // d'un succès sur la validation suivante, qui remettait le compteur à zéro. Trois
+        // échecs consécutifs ne pouvaient jamais s'accumuler, et le grimpeur ne voyait rien
+        // alors que son score ne bougeait pas.
+        // Repli progressif : le payload est déjà en file, on se contente de réarmer.
+        scheduleFlush(key, latestOptionsRef.current.debounceMs * failureCountRef.current);
       }
     }
-  }, []);
+  }, [scheduleFlush]);
+
+  useEffect(() => { runPersistRef.current = runPersist; }, [runPersist]);
 
   const enqueue = useCallback((key: string, payload: T) => {
     // ✅ Ce qui est déjà en file est ANTÉRIEUR (`older`) au payload qui vient d'arriver
     // (`newer`) — sens direct, voir le contrat en tête de fichier.
     pendingRef.current[key] = combineByFreshness(pendingRef.current[key], payload, latestOptionsRef.current.merge)!;
-    if (timersRef.current[key]) clearTimeout(timersRef.current[key]);
-    timersRef.current[key] = setTimeout(() => {
-      delete timersRef.current[key];
-      const toPersist = pendingRef.current[key];
-      delete pendingRef.current[key];
-      if (toPersist !== undefined) void runPersist(key, toPersist);
-    }, latestOptionsRef.current.debounceMs);
-  }, [runPersist]);
+    scheduleFlush(key, latestOptionsRef.current.debounceMs);
+  }, [scheduleFlush]);
 
   const writeNow = useCallback((key: string, payload: T) => {
     if (timersRef.current[key]) {

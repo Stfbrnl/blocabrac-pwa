@@ -48,7 +48,6 @@ export interface ClassementFlushRefs {
   // ne le concerne dans ce flush (comparé par identité uniquement si utilisé, jamais
   // déréférencé sinon).
   userLudicRef: DocumentReference<DocumentData>;
-  challengeRefs: Map<string, DocumentReference<DocumentData>>;
 }
 
 // ✅ docs/handoffs/RETOUR-bug-missions-et-revalidation.md §1.5 (V2.68.1) : la liste des
@@ -57,15 +56,18 @@ export interface ClassementFlushRefs {
 // précisément une telle condition (`if (pending.wallDeltas.size > 0) reads.userLudic = …`,
 // héritée d'avant les missions) qui a laissé V2.68 réécrire `weeklyMissions` depuis une
 // grille vide dès qu'un flush ne portait QUE des missions (un échec pour M4, une revalidation
-// pour M1). Clés : 'classementProfile', 'userLudic', `challenge:${id}` (challengeReadKey).
-export const challengeReadKey = (challengeId: string): string => `challenge:${challengeId}`;
+// pour M1). Clés : 'classementProfile' et 'userLudic' — plus aucune clé de défi depuis le
+// 02/10/2026 (challengeProgressWrite.ts a sa propre transaction et ses propres clés).
 
 export const classementFlushReadKeys = (pending: ClassementFlushPending): Set<string> => {
   const keys = new Set<string>(['classementProfile']);
   if (pending.wallDeltas.size > 0 || pending.missionsNewlyDone.size > 0 || pending.wallsNewlyVisited.size > 0) {
     keys.add('userLudic');
   }
-  [...pending.challengeDeltas.keys(), ...pending.blocDesigneScores.keys()].forEach((id) => keys.add(challengeReadKey(id)));
+  // ⚠️ Aucune clé de défi ici : depuis le 02/10/2026 la transaction du classement ne lit
+  // plus `challenges` du tout (voir challengeProgressWrite.ts). C'est ce qui rend le score
+  // structurellement indépendant d'un défi supprimé — le test de propriété sur les 1024
+  // combinaisons le verrouille.
   return keys;
 };
 
@@ -77,7 +79,6 @@ export interface ClassementFlushReadData {
   readKeys: ReadonlySet<string>;
   classementProfile?:{ score?: number; colorCounts?: ColorCounts; season?: { score?: number; colorCounts?: ColorCounts; baseScore?: number } };
   userLudic?: { wallCounts?: WallCounts; weeklyMissions?: WeeklyMissionsState; weeklyMissionsCompleted?: number };
-  challenges: Map<string, { progress?: Record<string, { value?: number }> } | undefined>;
 }
 
 // `now` est injectable (défaut : l'horloge réelle, donc aucun appelant de production n'a
@@ -165,32 +166,15 @@ export const buildClassementFlushWrites = (
     writes.push({ ref: refs.userLudicRef, data: { ...userLudicPatch, updated_at: now.toISOString() } });
   }
 
-  // ✅ Défis entre potes : "seuil"/"fenetre" appliquent un delta cumulatif ; "bloc_designe"
-  // écrit le MEILLEUR score observé (jamais un cumul), donc un max plutôt qu'une addition.
-  const challengeIds = new Set<string>([...pending.challengeDeltas.keys(), ...pending.blocDesigneScores.keys()]);
-  challengeIds.forEach((challengeId) => {
-    const challengeData = readData.challenges.get(challengeId);
-    const challengeRef = refs.challengeRefs.get(challengeId);
-    // ✅ Défi supprimé/disparu entre le moment où le delta a été accumulé et ce flush : rien
-    // à écrire plutôt qu'une erreur — plus rare que fréquent, jamais observé, mais un
-    // `challenges/{id}` reste supprimable en théorie (aucun chemin de suppression aujourd'hui,
-    // mais rien ne l'interdit non plus côté règles).
-    if (!challengeData || !challengeRef) return;
-    const currentValue = challengeData.progress?.[uid]?.value || 0;
-    let newValue = currentValue;
-    if (pending.challengeDeltas.has(challengeId)) newValue = currentValue + (pending.challengeDeltas.get(challengeId) || 0);
-    if (pending.blocDesigneScores.has(challengeId)) newValue = Math.max(currentValue, pending.blocDesigneScores.get(challengeId) || 0);
-    writes.push({
-      ref: challengeRef,
-      data: { progress: { [uid]: { value: newValue, updated_at: now.toISOString() } } },
-    });
-  });
+  // ⚠️ Les défis entre potes ne sont PLUS écrits ici : voir challengeProgressWrite.ts et
+  // docs/URGENT-flush-bloque-par-challenges.md §3. Leur progression est un bonus, le score du
+  // grimpeur ne l'est pas — un `tx.get()` refusé sur un défi supprimé faisait avorter toute
+  // cette transaction et emportait score, wallCounts et missions avec lui.
 
   // ✅ Garde §1.6 : chaque document écrit doit avoir été lu dans CETTE transaction.
   const readKeyOf = (ref: DocumentReference<DocumentData>): string | undefined => {
     if (ref === refs.classementProfileRef) return 'classementProfile';
     if (ref === refs.userLudicRef) return 'userLudic';
-    for (const [id, challengeRef] of refs.challengeRefs) if (challengeRef === ref) return challengeReadKey(id);
     return undefined;
   };
   writes.forEach(({ ref }) => {

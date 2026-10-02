@@ -5,7 +5,6 @@ import {
   emptyClassementFlushPending,
   hasPendingClassementDelta,
   classementFlushReadKeys,
-  challengeReadKey,
   type ClassementFlushRefs,
   type ClassementFlushPending,
   type ClassementFlushReadData,
@@ -29,10 +28,6 @@ const fakeRef = (id: string) => ({ id }) as unknown as DocumentReference<Documen
 const refs: ClassementFlushRefs = {
   classementProfileRef: fakeRef('classement_profiles/u1'),
   userLudicRef: fakeRef('user_ludic_state/u1'),
-  challengeRefs: new Map([
-    ['c1', fakeRef('challenges/c1')],
-    ['c2', fakeRef('challenges/c2')],
-  ]),
 };
 
 // Appelle la fonction testée avec les lectures qu'aurait faites ClientDaily.tsx pour ce
@@ -57,7 +52,7 @@ describe('buildClassementFlushWrites', () => {
       scoreDelta: 100,
       colorDeltas: new Map([['rouge', 1]]),
     };
-    const writes = build(pending, { challenges: new Map() });
+    const writes = build(pending, {});
     expect(writes).toHaveLength(1);
     expect(writes[0].ref).toBe(refs.classementProfileRef);
     expect(writes[0].data.score).toBe(100);
@@ -67,18 +62,18 @@ describe('buildClassementFlushWrites', () => {
 
   it('cumule les deltas par-dessus un profil existant', () => {
     const pending = { ...emptyClassementFlushPending(), scoreDelta: 50, colorDeltas: new Map([['rouge', 1]]) };
-    const readData = { classementProfile: { score: 200, colorCounts: { rouge: 3 } }, challenges: new Map() };
+    const readData = { classementProfile: { score: 200, colorCounts: { rouge: 3 } } };
     const writes = build(pending, readData);
     expect(writes[0].data.score).toBe(250);
     expect(writes[0].data.colorCounts).toEqual({ rouge: 4 });
   });
 
   it('n\'écrit user_ludic_state.wallCounts que si un delta de mur est en attente', () => {
-    const withoutWall = build(emptyClassementFlushPending(), { challenges: new Map() });
+    const withoutWall = build(emptyClassementFlushPending(), {});
     expect(withoutWall).toHaveLength(1); // seulement classement_profiles
 
     const withWall = build({ ...emptyClassementFlushPending(), wallDeltas: new Map([['Dalle', 1]]) },
-      { challenges: new Map() });
+      {});
     expect(withWall).toHaveLength(2);
     const ludicWrite = withWall.find((w) => w.ref === refs.userLudicRef);
     expect(ludicWrite?.data.wallCounts).toEqual({ Dalle: 1 });
@@ -86,30 +81,31 @@ describe('buildClassementFlushWrites', () => {
 
   it('cumule wallCounts par-dessus un compteur existant dans user_ludic_state', () => {
     const writes = build({ ...emptyClassementFlushPending(), wallDeltas: new Map([['Dalle', 1]]) },
-      { userLudic: { wallCounts: { Dalle: 4, Gullich: 2 } }, challenges: new Map() });
+      { userLudic: { wallCounts: { Dalle: 4, Gullich: 2 } } });
     const ludicWrite = writes.find((w) => w.ref === refs.userLudicRef);
     expect(ludicWrite?.data.wallCounts).toEqual({ Dalle: 5, Gullich: 2 });
   });
 
-  it('applique un delta cumulatif à un défi "seuil"', () => {
-    const writes = build({ ...emptyClassementFlushPending(), challengeDeltas: new Map([['c1', 1]]) },
-      { challenges: new Map([['c1', { progress: { u1: { value: 1 } } }]]) });
-    const challengeWrite = writes.find((w) => w.ref === refs.challengeRefs.get('c1'));
-    expect(challengeWrite?.data.progress.u1.value).toBe(2);
+  // ⚠️ Les trois tests sur les défis ont déménagé dans challengeProgressWrite.test.ts
+  // (02/10/2026, docs/URGENT-flush-bloque-par-challenges.md §3) : cette transaction-ci
+  // n'écrit plus — et surtout ne LIT plus — `challenges`.
+  it('⚠️ n\'écrit JAMAIS vers challenges, même en portant des deltas de défi', () => {
+    const writes = build({
+      ...emptyClassementFlushPending(),
+      scoreDelta: 200,
+      challengeDeltas: new Map([['c1', 1]]),
+      blocDesigneScores: new Map([['c2', 380]]),
+    }, {});
+    expect(writes.every((w) => w.ref === refs.classementProfileRef || w.ref === refs.userLudicRef)).toBe(true);
   });
 
-  it('applique un MAX (jamais une addition) à un défi "bloc_designe"', () => {
-    const writes = build({ ...emptyClassementFlushPending(), blocDesigneScores: new Map([['c1', 380]]) },
-      { challenges: new Map([['c1', { progress: { u1: { value: 400 } } }]]) });
-    const challengeWrite = writes.find((w) => w.ref === refs.challengeRefs.get('c1'));
-    // 380 < 400 déjà enregistré : le meilleur score existant ne doit jamais reculer.
-    expect(challengeWrite?.data.progress.u1.value).toBe(400);
-  });
-
-  it('ignore un défi dont le document a disparu entre l\'accumulation et le flush', () => {
-    const writes = build({ ...emptyClassementFlushPending(), challengeDeltas: new Map([['c1', 1]]) },
-      { challenges: new Map([['c1', undefined]]) });
-    expect(writes.some((w) => w.ref === refs.challengeRefs.get('c1'))).toBe(false);
+  it('⚠️ ne demande AUCUNE lecture de défi : c\'est ce qui rend le score indépendant d\'un défi supprimé', () => {
+    const keys = classementFlushReadKeys({
+      ...emptyClassementFlushPending(),
+      challengeDeltas: new Map([['c1', 1]]),
+      blocDesigneScores: new Map([['c2', 380]]),
+    });
+    expect([...keys].some((k) => k.startsWith('challenge:'))).toBe(false);
   });
 
   // ✅ PLAN-anecdote-methodes-missions.md §C.5
@@ -121,7 +117,7 @@ describe('buildClassementFlushWrites', () => {
         wallsNewlyVisited: new Set(['Dalle']),
         missionsFige: { level: 'rouge', countsChildWalls: false },
       },
-      { userLudic: { weeklyMissions: { isoWeek: SEMAINE_COURANTE, level: 'rouge', countsChildWalls: false, done: [], walls: [], completedAt: null } }, challenges: new Map() });
+      { userLudic: { weeklyMissions: { isoWeek: SEMAINE_COURANTE, level: 'rouge', countsChildWalls: false, done: [], walls: [], completedAt: null } } });
     const ludicWrites = writes.filter((w) => w.ref === refs.userLudicRef);
     expect(ludicWrites).toHaveLength(1);
     expect(ludicWrites[0].data.wallCounts).toEqual({ Dalle: 1 });
@@ -131,7 +127,7 @@ describe('buildClassementFlushWrites', () => {
 
   it('ouvre une nouvelle semaine (repli figé) quand la grille stockée est d\'une semaine passée', () => {
     const writes = build({ ...emptyClassementFlushPending(), missionsNewlyDone: new Set<MissionKey>(['M8']), missionsFige: { level: 'noir', countsChildWalls: false } },
-      { userLudic: { weeklyMissions: { isoWeek: '2020-W01', level: 'jaune', countsChildWalls: true, done: ['M1', 'M2'], walls: ['Dalle'], completedAt: null } }, challenges: new Map() });
+      { userLudic: { weeklyMissions: { isoWeek: '2020-W01', level: 'jaune', countsChildWalls: true, done: ['M1', 'M2'], walls: ['Dalle'], completedAt: null } } });
     const ludicWrite = writes.find((w) => w.ref === refs.userLudicRef);
     expect(ludicWrite?.data.weeklyMissions.level).toBe('noir');
     expect(ludicWrite?.data.weeklyMissions.countsChildWalls).toBe(false);
@@ -142,7 +138,7 @@ describe('buildClassementFlushWrites', () => {
   it('incrémente weeklyMissionsCompleted seulement au moment où la grille passe à 8/8', () => {
     const almost: WeeklyMissionsState = { isoWeek: SEMAINE_COURANTE, level: 'rouge', countsChildWalls: false, done: ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7'], walls: [], completedAt: null };
     const writes = build({ ...emptyClassementFlushPending(), missionsNewlyDone: new Set<MissionKey>(['M8']), missionsFige: { level: 'rouge', countsChildWalls: false } },
-      { userLudic: { weeklyMissions: almost, weeklyMissionsCompleted: 2 }, challenges: new Map() });
+      { userLudic: { weeklyMissions: almost, weeklyMissionsCompleted: 2 } });
     const ludicWrite = writes.find((w) => w.ref === refs.userLudicRef);
     expect(ludicWrite?.data.weeklyMissionsCompleted).toBe(3);
     expect(ludicWrite?.data.weeklyMissions.completedAt).not.toBeNull();
@@ -150,14 +146,14 @@ describe('buildClassementFlushWrites', () => {
 
   it('ne touche pas weeklyMissionsCompleted quand la grille n\'est pas encore complète', () => {
     const writes = build({ ...emptyClassementFlushPending(), missionsNewlyDone: new Set<MissionKey>(['M1']), missionsFige: { level: 'rouge', countsChildWalls: false } },
-      { userLudic: { weeklyMissions: { isoWeek: SEMAINE_COURANTE, level: 'rouge', countsChildWalls: false, done: [], walls: [], completedAt: null }, weeklyMissionsCompleted: 2 }, challenges: new Map() });
+      { userLudic: { weeklyMissions: { isoWeek: SEMAINE_COURANTE, level: 'rouge', countsChildWalls: false, done: [], walls: [], completedAt: null }, weeklyMissionsCompleted: 2 } });
     const ludicWrite = writes.find((w) => w.ref === refs.userLudicRef);
     expect(ludicWrite?.data.weeklyMissionsCompleted).toBeUndefined();
   });
 
   it('n\'écrit rien sur weeklyMissions sans missionsFige (rien à ouvrir)', () => {
     const writes = build({ ...emptyClassementFlushPending(), missionsNewlyDone: new Set<MissionKey>(['M1']), missionsFige: null },
-      { challenges: new Map() });
+      {});
     expect(writes.some((w) => w.ref === refs.userLudicRef)).toBe(false);
   });
 });
@@ -217,21 +213,18 @@ describe('invariant lectures/écritures du flush', () => {
       const pending = emptyClassementFlushPending();
       fields.forEach((apply, i) => { if (mask & (1 << i)) apply(pending); });
       const readKeys = classementFlushReadKeys(pending);
-      // Documents présents pour tout ce qui est lu (le cas "absent" ne change pas l'ensemble
-      // des refs écrites, sauf pour un défi disparu — couvert par son propre test ci-dessus).
+      // Documents présents pour tout ce qui est lu.
       const writes = buildClassementFlushWrites('u1', pending, {
         readKeys,
         classementProfile: {},
         userLudic: readKeys.has('userLudic') ? { weeklyMissions: stored } : undefined,
-        challenges: new Map([
-          ['c1', readKeys.has(challengeReadKey('c1')) ? { progress: {} } : undefined],
-          ['c2', readKeys.has(challengeReadKey('c2')) ? { progress: {} } : undefined],
-        ]),
       }, refs, MAINTENANT);
       const keyOf = (ref: unknown) => ref === refs.classementProfileRef ? 'classementProfile'
-        : ref === refs.userLudicRef ? 'userLudic'
-        : ref === refs.challengeRefs.get('c1') ? challengeReadKey('c1') : challengeReadKey('c2');
+        : ref === refs.userLudicRef ? 'userLudic' : 'référence inconnue';
       writes.forEach((w) => expect(readKeys.has(keyOf(w.ref)), `mask ${mask}`).toBe(true));
+      // ⚠️ Verrou du 02/10/2026 : aucune combinaison de `pending`, même portant des deltas
+      // de défi, ne doit faire lire `challenges` dans la transaction du classement.
+      expect([...readKeys].some((k) => k.startsWith('challenge:')), `mask ${mask}`).toBe(false);
     }
   });
 
@@ -245,7 +238,7 @@ describe('invariant lectures/écritures du flush', () => {
       missionsFige: { level: 'rouge', countsChildWalls: false },
     };
     expect(classementFlushReadKeys(pending).has('userLudic')).toBe(true);
-    const writes = build(pending, { userLudic: { weeklyMissions: stored }, challenges: new Map() });
+    const writes = build(pending, { userLudic: { weeklyMissions: stored } });
     const ludicWrite = writes.find((w) => w.ref === refs.userLudicRef);
     expect(ludicWrite?.data.weeklyMissions.done).toEqual(['M6', 'M3', 'M4']);
     expect(ludicWrite?.data.weeklyMissions.walls).toEqual(['Réta Adultes', 'Dévers 30°']);
@@ -259,7 +252,6 @@ describe('invariant lectures/écritures du flush', () => {
     };
     expect(() => buildClassementFlushWrites('u1', pending, {
       readKeys: new Set(['classementProfile']), // la condition de lecture de V2.68
-      challenges: new Map(),
     }, refs)).toThrow(/sans lecture préalable/);
   });
 });
@@ -268,18 +260,18 @@ describe('base de saison à zéro (V2.71.2, RETOUR-v271.md §2)', () => {
   const seasonPending = { ...emptyClassementFlushPending(), scoreDelta: 400, colorDeltas: new Map([['rouge', 1]]), seasonScoreDelta: 400, seasonColorDeltas: new Map([['rouge', 1]]) };
 
   it('pose baseScore = 0 sur un profil neuf qui reçoit son premier delta de saison', () => {
-    const season = build(seasonPending, { challenges: new Map() })[0].data.season;
+    const season = build(seasonPending, {})[0].data.season;
     expect(season).toMatchObject({ score: 400, baseScore: 0, baseColorCounts: {} });
   });
 
   it("ne touche JAMAIS une base existante (crédit d'un « Redémarrer » ou zéro déjà posé)", () => {
-    const season = build(seasonPending, { challenges: new Map(), classementProfile: { season: { score: 1200, baseScore: 800 } } })[0].data.season;
+    const season = build(seasonPending, { classementProfile: { season: { score: 1200, baseScore: 800 } } })[0].data.season;
     expect(season.score).toBe(1600);
     expect('baseScore' in season).toBe(false);
   });
 
   it('ne pose pas de base sans delta de saison (validation hors fenêtre)', () => {
     const outOfWindow = { ...emptyClassementFlushPending(), scoreDelta: 400, colorDeltas: new Map([['rouge', 1]]) };
-    expect('baseScore' in build(outOfWindow, { challenges: new Map() })[0].data.season).toBe(false);
+    expect('baseScore' in build(outOfWindow, {})[0].data.season).toBe(false);
   });
 });
