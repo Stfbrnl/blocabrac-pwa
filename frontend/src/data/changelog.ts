@@ -20,6 +20,7 @@ export const changelog: ChangelogEntry[] = [
       'Un bloc validé pouvait, dans certains cas, être bien enregistré sans que votre score, vos murs ni vos missions ne bougent — la réconciliation mensuelle rattrapait les points, un mois plus tard.',
       'Les défis entre potes sont désormais enregistrés séparément : un défi supprimé par son créateur ne peut plus empêcher votre score de se mettre à jour.',
       'Et si un enregistrement échoue vraiment, l\'application vous le dit maintenant au lieu de rester muette.',
+      'Le bloc n°4 de la Grande Face a été recoté en violet : les points de celles et ceux qui l\'avaient déjà validé ont été ajustés en conséquence.',
     ],
   },
   {
