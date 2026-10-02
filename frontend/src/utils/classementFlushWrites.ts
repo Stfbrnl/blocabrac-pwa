@@ -80,11 +80,18 @@ export interface ClassementFlushReadData {
   challenges: Map<string, { progress?: Record<string, { value?: number }> } | undefined>;
 }
 
+// `now` est injectable (défaut : l'horloge réelle, donc aucun appelant de production n'a
+// changé) parce que ce module est censé être une fonction pure de ses entrées — c'est tout
+// l'intérêt de l'avoir extrait de ClientDaily.tsx. Il lui restait une dépendance cachée à
+// l'horloge, qui a fini par rendre ses tests faux au changement de semaine ISO : les fixtures
+// figeaient « 2026-W39 » comme si c'était toujours la semaine courante. Voir le §1.1 de
+// docs/plans/PLAN-purge-etat-ludique.md.
 export const buildClassementFlushWrites = (
   uid: string,
   pending: ClassementFlushPending,
   readData: ClassementFlushReadData,
-  refs: ClassementFlushRefs
+  refs: ClassementFlushRefs,
+  now: Date = new Date()
 ): TransactionWrite[] => {
   const writes: TransactionWrite[] = [];
 
@@ -134,7 +141,7 @@ export const buildClassementFlushWrites = (
 
   if ((pending.missionsNewlyDone.size > 0 || pending.wallsNewlyVisited.size > 0) && pending.missionsFige) {
     const base = resolveWeeklyMissionsState(
-      readData.userLudic?.weeklyMissions, new Date(),
+      readData.userLudic?.weeklyMissions, now,
       pending.missionsFige.level, pending.missionsFige.countsChildWalls
     );
     const wasComplete = isWeeklyMissionsGridComplete(base);
@@ -146,7 +153,7 @@ export const buildClassementFlushWrites = (
     const provisional: WeeklyMissionsState = { ...base, done, walls: Array.from(wallsSet), completedAt: base.completedAt };
     const weeklyMissions: WeeklyMissionsState = {
       ...provisional,
-      completedAt: isWeeklyMissionsGridComplete(provisional) ? (base.completedAt ?? new Date().toISOString()) : base.completedAt,
+      completedAt: isWeeklyMissionsGridComplete(provisional) ? (base.completedAt ?? now.toISOString()) : base.completedAt,
     };
     userLudicPatch.weeklyMissions = weeklyMissions;
     if (!wasComplete && isWeeklyMissionsGridComplete(weeklyMissions)) {
@@ -155,7 +162,7 @@ export const buildClassementFlushWrites = (
   }
 
   if (Object.keys(userLudicPatch).length > 0) {
-    writes.push({ ref: refs.userLudicRef, data: { ...userLudicPatch, updated_at: new Date().toISOString() } });
+    writes.push({ ref: refs.userLudicRef, data: { ...userLudicPatch, updated_at: now.toISOString() } });
   }
 
   // ✅ Défis entre potes : "seuil"/"fenetre" appliquent un delta cumulatif ; "bloc_designe"
@@ -175,7 +182,7 @@ export const buildClassementFlushWrites = (
     if (pending.blocDesigneScores.has(challengeId)) newValue = Math.max(currentValue, pending.blocDesigneScores.get(challengeId) || 0);
     writes.push({
       ref: challengeRef,
-      data: { progress: { [uid]: { value: newValue, updated_at: new Date().toISOString() } } },
+      data: { progress: { [uid]: { value: newValue, updated_at: now.toISOString() } } },
     });
   });
 

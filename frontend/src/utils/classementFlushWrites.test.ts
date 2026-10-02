@@ -11,7 +11,16 @@ import {
   type ClassementFlushReadData,
 } from './classementFlushWrites';
 import type { DocumentReference, DocumentData } from 'firebase/firestore';
+import { isoWeekKey } from './weeklyMissions';
 import type { WeeklyMissionsState, MissionKey } from './weeklyMissions';
+
+// Date de référence fixe pour tous les tests de missions : la fonction testée reçoit
+// désormais son horloge (5e argument), donc une fixture peut dire `SEMAINE_COURANTE` sans
+// dépendre du jour où la suite tourne. Figer la semaine ISO dans la fixture SANS figer
+// l'horloge avait rendu deux tests rouges au passage en W40 (02/10/2026) : la grille
+// stockée était vue comme périmée et réinitialisée, ce qui est le comportement correct.
+const MAINTENANT = new Date(2026, 8, 25); // vendredi 25/09/2026
+const SEMAINE_COURANTE = isoWeekKey(MAINTENANT);
 
 // Références factices : jamais déréférencées par la fonction testée (comparées par
 // identité uniquement), un objet quelconque suffit.
@@ -29,7 +38,7 @@ const refs: ClassementFlushRefs = {
 // Appelle la fonction testée avec les lectures qu'aurait faites ClientDaily.tsx pour ce
 // `pending` (classementFlushReadKeys) — même chemin qu'en production.
 const build = (pending: ClassementFlushPending, readData: Omit<ClassementFlushReadData, 'readKeys'>) =>
-  buildClassementFlushWrites('u1', pending, { ...readData, readKeys: classementFlushReadKeys(pending) }, refs);
+  buildClassementFlushWrites('u1', pending, { ...readData, readKeys: classementFlushReadKeys(pending) }, refs, MAINTENANT);
 
 describe('hasPendingClassementDelta', () => {
   it('renvoie false pour un jeu de deltas vide', () => {
@@ -112,7 +121,7 @@ describe('buildClassementFlushWrites', () => {
         wallsNewlyVisited: new Set(['Dalle']),
         missionsFige: { level: 'rouge', countsChildWalls: false },
       },
-      { userLudic: { weeklyMissions: { isoWeek: '2026-W39', level: 'rouge', countsChildWalls: false, done: [], walls: [], completedAt: null } }, challenges: new Map() });
+      { userLudic: { weeklyMissions: { isoWeek: SEMAINE_COURANTE, level: 'rouge', countsChildWalls: false, done: [], walls: [], completedAt: null } }, challenges: new Map() });
     const ludicWrites = writes.filter((w) => w.ref === refs.userLudicRef);
     expect(ludicWrites).toHaveLength(1);
     expect(ludicWrites[0].data.wallCounts).toEqual({ Dalle: 1 });
@@ -131,7 +140,7 @@ describe('buildClassementFlushWrites', () => {
   });
 
   it('incrémente weeklyMissionsCompleted seulement au moment où la grille passe à 8/8', () => {
-    const almost: WeeklyMissionsState = { isoWeek: '2026-W39', level: 'rouge', countsChildWalls: false, done: ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7'], walls: [], completedAt: null };
+    const almost: WeeklyMissionsState = { isoWeek: SEMAINE_COURANTE, level: 'rouge', countsChildWalls: false, done: ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7'], walls: [], completedAt: null };
     const writes = build({ ...emptyClassementFlushPending(), missionsNewlyDone: new Set<MissionKey>(['M8']), missionsFige: { level: 'rouge', countsChildWalls: false } },
       { userLudic: { weeklyMissions: almost, weeklyMissionsCompleted: 2 }, challenges: new Map() });
     const ludicWrite = writes.find((w) => w.ref === refs.userLudicRef);
@@ -141,7 +150,7 @@ describe('buildClassementFlushWrites', () => {
 
   it('ne touche pas weeklyMissionsCompleted quand la grille n\'est pas encore complète', () => {
     const writes = build({ ...emptyClassementFlushPending(), missionsNewlyDone: new Set<MissionKey>(['M1']), missionsFige: { level: 'rouge', countsChildWalls: false } },
-      { userLudic: { weeklyMissions: { isoWeek: '2026-W39', level: 'rouge', countsChildWalls: false, done: [], walls: [], completedAt: null }, weeklyMissionsCompleted: 2 }, challenges: new Map() });
+      { userLudic: { weeklyMissions: { isoWeek: SEMAINE_COURANTE, level: 'rouge', countsChildWalls: false, done: [], walls: [], completedAt: null }, weeklyMissionsCompleted: 2 }, challenges: new Map() });
     const ludicWrite = writes.find((w) => w.ref === refs.userLudicRef);
     expect(ludicWrite?.data.weeklyMissionsCompleted).toBeUndefined();
   });
@@ -201,7 +210,7 @@ describe('invariant lectures/écritures du flush', () => {
     (p) => { p.wallsNewlyVisited = new Set(['Dévers 30°']); },
     (p) => { p.missionsFige = { level: 'rouge', countsChildWalls: false }; },
   ];
-  const stored: WeeklyMissionsState = { isoWeek: '2026-W39', level: 'rouge', countsChildWalls: false, done: ['M6', 'M3'], walls: ['Réta Adultes'], completedAt: null };
+  const stored: WeeklyMissionsState = { isoWeek: SEMAINE_COURANTE, level: 'rouge', countsChildWalls: false, done: ['M6', 'M3'], walls: ['Réta Adultes'], completedAt: null };
 
   it('toute référence écrite appartient à classementFlushReadKeys(pending), pour les 1024 combinaisons', () => {
     for (let mask = 0; mask < 1 << fields.length; mask += 1) {
@@ -218,7 +227,7 @@ describe('invariant lectures/écritures du flush', () => {
           ['c1', readKeys.has(challengeReadKey('c1')) ? { progress: {} } : undefined],
           ['c2', readKeys.has(challengeReadKey('c2')) ? { progress: {} } : undefined],
         ]),
-      }, refs);
+      }, refs, MAINTENANT);
       const keyOf = (ref: unknown) => ref === refs.classementProfileRef ? 'classementProfile'
         : ref === refs.userLudicRef ? 'userLudic'
         : ref === refs.challengeRefs.get('c1') ? challengeReadKey('c1') : challengeReadKey('c2');

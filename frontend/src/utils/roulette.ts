@@ -5,8 +5,10 @@
 // C'est la propriété qui rend la fonctionnalité gratuite (§1.9 du document) — le tirage et le
 // "relancer" ne doivent jamais coûter de lecture/écriture. Toutes les données dont ce module a
 // besoin (blocs du jour, niveau, compteurs) sont déjà en mémoire côté appelant (ClientDaily.tsx).
-// L'anti-lassitude (localStorage) et le compteur par mur (Firestore, sur `users/{uid}.wallCounts`)
-// sont gérés par l'appelant, jamais par ce module.
+// L'anti-lassitude (localStorage) et le compteur par mur (Firestore, sur
+// `user_ludic_state/{uid}.wallCounts` depuis la passe C de
+// docs/plans/PLAN-etat-ludique-hors-users.md — plus sur `users`) sont gérés par l'appelant,
+// jamais par ce module.
 
 import type { Level } from './competitionEligibility';
 import { levelOrder } from './competitionEligibility';

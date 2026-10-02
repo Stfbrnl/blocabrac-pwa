@@ -33,7 +33,7 @@ export async function runReadThenWriteTransaction(
     // données déjà lues — jamais `tx`, donc jamais l'occasion de relire après avoir écrit.
     const writes = buildWrites(readData);
     // Toujours en fusion (merge) : c'est le seul mode utilisé par tous les appelants
-    // actuels (classement_profiles, users.wallCounts, challenges.progress) — un futur
+    // actuels (classement_profiles, user_ludic_state, challenges.progress) — un futur
     // besoin d'écraser un document entier justifierait une option dédiée, pas un défaut
     // implicite different.
     writes.forEach(({ ref, data }) => {
