@@ -237,6 +237,85 @@ Noté en mémoire de session ; mérite sans doute une ligne dans les conventions
 
 ---
 
+## §9 bis — Clôture du soir (application de `PLAN-cloture-ce-soir-et-recotation.md`)
+
+| Étape du plan | État |
+|---|---|
+| §1.1 réconciliation `--fix` | ❌ **non lancée** — voir ci-dessous, la situation a changé |
+| §1.2 quatre lignes de documentation | ✅ faites (déjà au tour précédent ; la formulation française est maintenant conservée **verbatim**) |
+| §1.3 ne PAS déployer V2.71.4, mais pousser | ✅ `b7ea103` poussé sur `main`, **aucun déploiement d'application** |
+| §1.4 purge suspendue | ✅ inchangée |
+| §1.5 points ouverts | ✅ inscrits — **dont un déjà fait**, voir §9 ter |
+| §2 recotation | ⚠️ **déjà faite avant l'exécution du plan** — analyse d'impact ci-dessous |
+
+### 🔴 Le §1.1 s'est arrêté sur sa propre clause de garde, et c'était justifié
+
+Prédiction du plan : **1 compte**, score 5665 → 5865, 37 → 38 blocs, violet 8 → 9.
+Mesure réelle : **7 comptes**, et pour l'utilisateur 5665 → **5965**, violet 8 → **10**,
+bleu 10 → **9**.
+
+La clause « si l'écart est différent, s'arrêter et signaler » a donc joué. Cause trouvée, et
+elle est entièrement explicative :
+
+**La recotation du §2 a déjà été faite.** Le bloc `ENaQkqYtY6FuyjngcYz0` (**n°4, Grande
+Face**) est aujourd'hui `violet`. Attribution certaine et non supposée : **les 7 comptes en
+écart sont exactement les 7 qui ont réussi ce bloc**, et chacun porte la même signature — un
+bleu qui devient un violet, +100 points.
+
+L'écart de l'utilisateur est donc la somme de deux choses : **+200 / +1 violet** (le bloc perdu
+par le défaut des défis, la prédiction du plan) **et +100 / un bleu→violet** (la recotation).
+5665 + 200 + 100 = 5965. Le compte est juste.
+
+### Analyse d'impact du §2.3 point 1 (lecture seule, faite avant toute correction)
+
+| compte | prénom | niveau | meilleure couleur avant → après | violets déjà acquis |
+|---|---|---|---|---|
+| `1gq6Jyr4` | Alice | blanc | blanc → blanc | 14 |
+| `5erGHVpD` | Stéphane | noir | noir → noir | 8 |
+| `DsyfChO9` | Kenzo | noir | noir → noir | 12 |
+| `EHEBHrOC` | Ludovic | blanc | blanc → blanc | 1 |
+| `aGkno50E` | Robin | blanc | blanc → blanc | 15 |
+| `lTKfW9Xb` | Samuel | rouge | rouge → rouge | 6 |
+| `nP1TFARq` | Cécile | noir | noir → noir | 6 |
+
+**Le risque n°1 de ton §2.2 est nul dans ce cas précis** : les sept avaient déjà des violets
+(de 1 à 15), aucune meilleure couleur ne bouge, donc aucun badge automatique ne s'attribue et
+**aucun niveau ne monte**. Ni les missions hebdomadaires ni la roulette ne sont affectées.
+
+**Le risque n°2 non plus** : 7 profils sur 61, soit **11,5 %**, sous le seuil de 30 %. Le
+garde-fou ne se déclenchera pas et `--force` est inutile.
+
+**Reste le risque n°3**, et c'est pour lui que je n'ai pas lancé `--fix` : la correction
+déplacerait **ce soir** le score public de 7 grimpeurs, alors que l'annonce qui l'explique
+(§2.3 point 5) est rattachée à V2.71.4, qui ne se déploie que demain (§1.3). Faire les deux
+dans le même mouvement demain matin évite une nuit de scores qui bougent sans explication.
+L'entrée de changelog est écrite et n'attend que le déploiement.
+
+### Les trois comptes du 1ᵉʳ octobre n'ont pas re-dérivé (ton §1.1 point 2)
+
+`4Urs3bj8`, `7SvZhyuX` et `nP1TFARq` n'apparaissent dans la liste que pour la recotation —
+`4Urs3bj8` et `7SvZhyuX` n'y sont même pas. Rien de nouveau sur l'énigme des 46 blocs → 6,
+qui a par ailleurs trouvé sa réponse (§9 ter).
+
+## §9 ter — Un point ouvert de ton §1.5 était déjà fait, et il a réfuté ton hypothèse
+
+Ton §1.5 demande d'« étendre `audit-prod-catalog.js` aux références mortes », en ajoutant que
+« ça répond à l'énigme des 46 blocs → 6 ». **C'était fait cet après-midi**, et le résultat va
+dans l'autre sens :
+
+- **0 référence morte** sur 775 résultats, 3 défis, 61 profils. Aucun `client_boulder_results`
+  ne pointe vers un bloc supprimé.
+- Les trois comptes du 1ᵉʳ octobre avaient des compteurs **gonflés**, pas amputés. Leurs
+  profils correspondent aujourd'hui exactement à leurs résultats : 6/6, 43/43, 26/26.
+- Signature probable : la **revalidation répétée d'avant V2.69** — `nP1TFARq` a 24 de ses 28
+  résultats réécrits après coup. Le premier cron suivant le correctif a nettoyé l'inflation
+  historique.
+
+⚠️ Et une ligne de ton tableau du §3.2 n'est **pas auditable** : le défi actif d'un grimpeur
+n'est stocké nulle part côté serveur, la référence morte vit dans le cache IndexedDB du
+navigateur. Écrit dans le script et dans `CLAUDE.md` pour que le vert de l'audit ne laisse pas
+croire cette classe couverte.
+
 ## §9 — Ce que je ferais ensuite, dans l'ordre
 
 1. **Déployer les règles seules** (`--only firestore:rules`). Trois minutes, effet immédiat
