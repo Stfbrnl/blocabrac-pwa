@@ -53,6 +53,17 @@ interface LiveParticipant extends ParticipantBase {
   submitted: boolean;
 }
 
+// Les seuls champs de `users` que cet écran consomme, en repli du document de
+// participation (voir `usersById`). Ne rien ajouter ici sans raison : c'est un écran
+// d'affichage public, sur un téléviseur.
+interface LiveUserDoc {
+  first_name?: string;
+  last_name?: string;
+  dateOfBirth?: string;
+  legacyAge?: number;
+  gender?: string;
+}
+
 // ✅ N'alimente plus que le mode à points (blocabrac/blocs_valides/personnalise) — le
 // mode "Officiel" a son propre rendu séparé (officialGenderGroups), sans rotation.
 interface LivePage {
@@ -129,6 +140,17 @@ const LiveCompetitionView: React.FC<{ competition: Competition }> = ({ competiti
   const isOfficialMode = scoringMode === 'officiel';
   const [boulders, setBoulders] = useState<BoulderInput[]>([]);
   const [bouldersLoaded, setBouldersLoaded] = useState(false);
+  // ⚠️ Repli sur `users`, aligné sur AdminCompetitionStats/CompetitionStats (03/10/2026).
+  // Cet écran lisait le nom, la date de naissance et le genre UNIQUEMENT sur le document
+  // de participation — or l'auto-inscription du grimpeur ne les y écrivait pas, et tout
+  // grimpeur inscrit par lui-même atterrissait dans la catégorie « Inconnu » sur la
+  // télévision pendant que les deux autres écrans l'affichaient correctement.
+  // L'inscription a été corrigée en même temps, mais ce repli reste nécessaire : les
+  // participations DÉJÀ écrites en production n'ont pas ces champs et rien ne les
+  // rétroremplit. Une lecture au montage, jamais par recalcul (écran admin, `users` est
+  // déjà lu en entier par les deux autres écrans de classement).
+  const [usersById, setUsersById] = useState<Map<string, LiveUserDoc>>(new Map());
+  const [usersLoaded, setUsersLoaded] = useState(false);
   const [globalClassement, setGlobalClassement] = useState<ScoreEntry<LiveParticipant>[]>([]);
   const [byAgeClassement, setByAgeClassement] = useState<CategoryGroup<ScoreEntry<LiveParticipant>>[]>([]);
   // ✅ Mode "Officiel" uniquement — voir isOfficialMode. États séparés plutôt qu'un
@@ -173,13 +195,39 @@ const LiveCompetitionView: React.FC<{ competition: Competition }> = ({ competiti
     return () => { cancelled = true; };
   }, [competition.id]);
 
+  // ✅ Voir usersById : une seule lecture au montage, indépendante de la compétition.
+  useEffect(() => {
+    let cancelled = false;
+    const fetchUsers = async () => {
+      try {
+        const snapshot = await getDocs(collection(db, 'users'));
+        if (cancelled) return;
+        setUsersById(new Map(snapshot.docs.map(d => [d.id, {
+          first_name: d.data().first_name,
+          last_name: d.data().last_name,
+          dateOfBirth: d.data().dateOfBirth,
+          legacyAge: d.data().age,
+          gender: d.data().gender,
+        }])));
+      } catch (err) {
+        // Non bloquant : sans ce repli l'écran reste fonctionnel, il range simplement les
+        // participations incomplètes en « Inconnu » — l'état d'avant ce correctif.
+        console.error('Erreur lors du chargement des comptes (repli identité) :', err);
+      } finally {
+        if (!cancelled) setUsersLoaded(true);
+      }
+    };
+    fetchUsers();
+    return () => { cancelled = true; };
+  }, []);
+
   // ✅ Deux onSnapshot montés une fois, jamais de refetch : le classement se recalcule
   // depuis les données en mémoire (resultsRef/participantsRef), pas par une nouvelle
   // requête à chaque delta (§4, "règle absolue"). Les refs (pas de setState par callback
   // de snapshot) + le debounce ci-dessous évitent qu'une vague de 20 validations en
   // 2 secondes déclenche 20 tris de 90 entrées sur 3 150 résultats.
   useEffect(() => {
-    if (!bouldersLoaded) return;
+    if (!bouldersLoaded || !usersLoaded) return;
 
     const resultsRef: { current: CompetitionResultInput[] } = { current: [] };
     const participantsRef: { current: LiveParticipant[] } = { current: [] };
@@ -226,15 +274,20 @@ const LiveCompetitionView: React.FC<{ competition: Competition }> = ({ competiti
       where('competition_id', '==', competition.id)
     );
     const unsubscribeParticipants = onSnapshot(participantsQuery, (snapshot) => {
-      participantsRef.current = snapshot.docs.map(d => ({
-        user_id: d.data().user_id || '',
-        first_name: d.data().first_name || '',
-        last_name: d.data().last_name || '',
-        dateOfBirth: d.data().dateOfBirth,
-        legacyAge: d.data().age,
-        gender: d.data().gender,
-        submitted: d.data().submitted || false,
-      }));
+      // ⚠️ `users` d'abord, le document de participation en repli — même ordre de priorité
+      // que AdminCompetitionStats/CompetitionStats. Voir usersById pour le pourquoi.
+      participantsRef.current = snapshot.docs.map(d => {
+        const u = usersById.get(d.data().user_id || '');
+        return {
+          user_id: d.data().user_id || '',
+          first_name: u?.first_name || d.data().first_name || '',
+          last_name: u?.last_name || d.data().last_name || '',
+          dateOfBirth: u?.dateOfBirth || d.data().dateOfBirth,
+          legacyAge: u?.legacyAge || d.data().age,
+          gender: u?.gender || d.data().gender,
+          submitted: d.data().submitted || false,
+        };
+      });
       scheduleRecompute();
     }, (err) => console.error('Erreur du listener competition_participants :', err));
 
@@ -243,7 +296,7 @@ const LiveCompetitionView: React.FC<{ competition: Competition }> = ({ competiti
       unsubscribeParticipants();
       if (recomputeTimer) clearTimeout(recomputeTimer);
     };
-  }, [competition.id, bouldersLoaded, boulders, scoringMode, customScoring, isOfficialMode]);
+  }, [competition.id, bouldersLoaded, boulders, usersLoaded, usersById, scoringMode, customScoring, isOfficialMode]);
 
   // ✅ "ne pas afficher 90 lignes" (§5) : rotation par catégorie FFME plutôt qu'un
   // classement général complet (8 pages de 90 lignes = ~90s par tour, un grimpeur

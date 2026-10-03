@@ -32,6 +32,19 @@ const levelColors: Record<string, string> = {
 
 const levelOrder: string[] = ['jaune', 'vert', 'bleu', 'violet', 'rouge', 'noir', 'blanc', 'rose'];
 
+// ✅ Ce que l'inscription recopie depuis `users` sur le document de participation.
+// `level` est ce dont canUserRegister a besoin ; les autres champs sont lus par l'écran
+// live de compétition, qui n'a pas d'autre source pour eux (voir handleRegister).
+interface ClientUserDoc extends RegistrableUser {
+  uid: string;
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+  dateOfBirth?: string;
+  age?: number;
+  gender?: string;
+}
+
 interface Competition {
   id: string;
   name: string;
@@ -150,7 +163,10 @@ const ClientCompetitions: React.FC = () => {
   // chaque clic sur "Valider mes blocs"/"S'inscrire".
   const confirmedRegistrations = useRef<Set<string>>(new Set());
 
-  const [currentUserDoc, setCurrentUserDoc] = useState<RegistrableUser | null>(null);
+  // ✅ Le document `users` du grimpeur, au-delà du seul `level` dont `canUserRegister` a
+  // besoin : l'inscription dénormalise son identité et son âge sur le document de
+  // participation (voir handleRegister), et ces champs doivent donc être typés ici.
+  const [currentUserDoc, setCurrentUserDoc] = useState<ClientUserDoc | null>(null);
 
   // ✅ Détection mobile pour passer les Dialogs en plein écran
   const theme = useTheme();
@@ -181,9 +197,16 @@ const ClientCompetitions: React.FC = () => {
     const fetchCompetitions = async () => {
       try {
         setLoading(true);
+        // ✅ Règle d'inscription (utilisateur, 03/10/2026) : un grimpeur doit pouvoir
+        // s'inscrire à une compétition **à venir** comme **en cours** (pour les
+        // retardataires), jamais à une **terminée** ni à une **annulée**. Jusqu'ici la
+        // requête ne ramenait que « en cours » : impossible de s'inscrire à l'avance, ce
+        // que personne n'avait remarqué parce que l'écran s'intitulait « Compétitions en
+        // cours » et décrivait donc fidèlement ce qu'il montrait.
+        // `in` sur un seul champ ne demande aucun index composite (rien à déployer).
         const q = query(
           collection(db, 'competitions'),
-          where('status', '==', 'en cours')
+          where('status', 'in', ['à venir', 'en cours'])
         );
         const snapshot = await getDocs(q);
         const competitionsData: Competition[] = snapshot.docs.map(doc => ({
@@ -405,12 +428,30 @@ const ClientCompetitions: React.FC = () => {
         return;
       }
 
+      // ⚠️ L'identité et l'âge viennent du document `users` du grimpeur, PAS de
+      // `user.displayName` de Firebase Auth (03/10/2026). Deux raisons, les deux vues dans
+      // le navigateur avant correction (`test/e2e-client-registration-flow.mjs`) :
+      //
+      //   ① `displayName` n'est pas renseigné par ce projet — le nom vit dans `users`. Le
+      //      découpage `displayName.split(' ')` écrivait donc des noms VIDES, et l'écran
+      //      live de compétition affichait des lignes sans nom.
+      //   ② `dateOfBirth`/`gender`/`level` n'étaient pas écrits du tout, alors que
+      //      `AdminCompetitionLiveDisplay` les lit UNIQUEMENT ici, sans repli sur `users` :
+      //      tout grimpeur inscrit par lui-même atterrissait dans la catégorie « Inconnu »
+      //      sur la télévision, et la rotation par catégorie d'âge dégénérait en une page.
+      //
+      // Mêmes champs, et même `?? null` que « Générer le roster » : Firestore refuse
+      // `undefined` dans un setDoc, et un compte ancien peut n'avoir ni date ni genre.
       await setDoc(participationRef, {
         user_id: user.uid,
         competition_id: competition.id,
-        email: user.email || '',
-        first_name: user.displayName?.split(' ')[0] || '',
-        last_name: user.displayName?.split(' ')[1] || '',
+        email: currentUserDoc?.email ?? user.email ?? null,
+        first_name: currentUserDoc?.first_name ?? null,
+        last_name: currentUserDoc?.last_name ?? null,
+        age: currentUserDoc?.age ?? null,
+        dateOfBirth: currentUserDoc?.dateOfBirth ?? null,
+        gender: currentUserDoc?.gender ?? null,
+        level: currentUserDoc?.level ?? null,
         registered_at: new Date().toISOString(),
         is_client: true
       });
@@ -584,9 +625,12 @@ const ClientCompetitions: React.FC = () => {
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
       {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
 
-      <Typography variant="h6" sx={{ mb: 2 }}>Compétitions en cours</Typography>
+      {/* ✅ Le titre doit décrire ce que la liste contient : depuis le 03/10/2026 elle
+          comprend aussi les compétitions à venir. Un titre resté « en cours » aurait
+          rendu une compétition à venir incompréhensible dans cette liste. */}
+      <Typography variant="h6" sx={{ mb: 2 }}>Compétitions ouvertes aux inscriptions</Typography>
       {competitions.length === 0 ? (
-        <Typography>Aucune compétition en cours.</Typography>
+        <Typography>Aucune compétition à venir ou en cours.</Typography>
       ) : (
         <Grid container spacing={2}>
           {competitions.map((competition) => {
