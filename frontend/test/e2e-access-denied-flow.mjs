@@ -95,12 +95,25 @@ try {
     );
   });
 
-  await step('l\'écran propose un retour à l\'accueil, sans y rediriger seul', async () => {
-    const lien = page.getByRole('link', { name: 'Retour à l\'accueil' });
-    assert(await lien.count() > 0, 'le lien de retour à l\'accueil est absent');
+  await step('l\'écran ne navigue pas tout seul', async () => {
     const avant = page.url();
     await page.waitForTimeout(1500);
     assert(page.url() === avant, `l\'écran a navigué tout seul (${avant} -> ${page.url()})`);
+  });
+
+  // ⚠️ L'invariant complet (ClaudeNav, 03/10/2026) : une page terminale doit TOUJOURS offrir
+  // une issue, sinon on a remplacé une boucle infinie par un cul-de-sac. Et pour CE compte,
+  // « Retour à l'accueil » n'en est pas une : Home repousse vers /client/screen, qui réaffiche
+  // cet écran. Seule la déconnexion sort vraiment — c'est donc elle que ce test exige.
+  await step('l\'écran offre une issue réelle : la déconnexion', async () => {
+    assert(
+      await page.getByRole('button', { name: 'Se déconnecter' }).count() > 0,
+      'aucun bouton de déconnexion : l\'écran terminal est un cul-de-sac'
+    );
+    assert(
+      await page.getByRole('link', { name: 'Retour à l\'accueil' }).count() > 0,
+      'le lien de retour à l\'accueil est absent (utile aux comptes qui ont bien le rôle client)'
+    );
   });
 
   await step('l\'espace autorisé par son rôle reste accessible', async () => {
@@ -109,6 +122,19 @@ try {
     await page.goto(`${BASE_URL}/ouvreur/daily-boulders`);
     await page.getByRole('heading', { name: 'Sélectionnez un mur pour gérer les blocs quotidiens' })
       .waitFor({ timeout: 15000 });
+  });
+
+  // ⚠️ EN DERNIER, délibérément : cette étape déconnecte le compte, donc toute vérification
+  // qui suivrait échouerait pour une raison sans rapport avec ce qu'elle teste.
+  await step('la déconnexion ramène effectivement à l\'écran de connexion', async () => {
+    await page.goto(`${BASE_URL}/client/screen`);
+    await page.getByRole('button', { name: 'Se déconnecter' }).waitFor({ timeout: 15000 });
+    await page.getByRole('button', { name: 'Se déconnecter' }).click();
+    // performLogout() termine par un window.location.reload() : on attend la reprise.
+    await page.waitForTimeout(5000);
+    const surConnexion = await page.locator('#email').count() > 0
+      || await page.getByRole('button', { name: 'Se connecter' }).count() > 0;
+    assert(surConnexion, `la déconnexion n'a pas abouti à un écran de connexion (${page.url()})`);
   });
 } finally {
   await browser.close();
