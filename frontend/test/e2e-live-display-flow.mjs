@@ -80,6 +80,36 @@ async function lireLignes(page) {
 
 const titreCourant = (page) => page.locator('h4').first().innerText();
 
+/**
+ * Nom tel que CET écran l'affiche : prénom + initiale du nom (« Prenom7 N. »).
+ *
+ * L'écran live est le seul des trois à abréger (`displayName` dans
+ * AdminCompetitionLiveDisplay.tsx) — l'oracle, lui, porte le nom complet. Comparer au nom
+ * complet faisait échouer le test alors que l'écran avait raison.
+ */
+const nomAffiche = (nomComplet) => {
+  const [prenom, nom] = nomComplet.split(' ');
+  return nom ? `${prenom} ${nom.charAt(0).toUpperCase()}.` : prenom;
+};
+
+/**
+ * Attend que la rotation amène la page dont le titre correspond, et la renvoie.
+ *
+ * ⚠️ Indispensable : sans ça, un pas lit « la page courante », c'est-à-dire n'importe
+ * laquelle. Le pas 6 est ainsi passé À VIDE une fois, sur une page de catégorie à UNE seule
+ * ligne — un jeu d'une ligne ne peut exhiber aucun défaut de rang partagé. C'est la règle de
+ * CLAUDE.md (« quels défauts ce jeu de données est-il physiquement incapable d'exprimer ? »),
+ * rencontrée ici non pas sur le seed mais sur la PAGE observée.
+ */
+async function attendrePage(page, motif) {
+  await page.waitForFunction(
+    (source) => new RegExp(source).test(document.querySelector('h4')?.textContent || ''),
+    motif.source,
+    { timeout: ROTATION_WAIT_MS * 2 }
+  );
+  return titreCourant(page);
+}
+
 /** Une numérotation de compétition valide : commence à 1, et chaque rang vaut i+1 ou le précédent. */
 function rangsValides(rangs) {
   if (rangs.length === 0) return true;
@@ -136,7 +166,8 @@ try {
         rang === String(dixPremiers[i].rang),
         `ligne ${i + 1} : rang affiché ${rang}, oracle ${dixPremiers[i].rang} (une tranche renumérotée ?)`
       );
-      assert(nom === dixPremiers[i].nom, `ligne ${i + 1} : « ${nom} » au lieu de « ${dixPremiers[i].nom} »`);
+      const nomAttendu = nomAffiche(dixPremiers[i].nom);
+      assert(nom === nomAttendu, `ligne ${i + 1} : « ${nom} » au lieu de « ${nomAttendu} »`);
       assert(
         score === `${dixPremiers[i].score} pts`,
         `ligne ${i + 1} : score ${score} au lieu de ${dixPremiers[i].score} pts`
@@ -162,7 +193,7 @@ try {
     );
     assert(rangsValides(rangs), `page « ${titre} » : numérotation invalide (${rangs.join(', ')})`);
     // Ordre interne : la catégorie est un filtre de la liste globale, l'ordre doit être conservé.
-    const attenduCategorie = (attendu.parCategorie[titre.trim()] || []).map((e) => e.nom);
+    const attenduCategorie = (attendu.parCategorie[titre.trim()] || []).map((e) => nomAffiche(e.nom));
     if (attenduCategorie.length > 0) {
       assert(
         JSON.stringify(lignes.map((l) => l.nom)) === JSON.stringify(attenduCategorie),
@@ -185,8 +216,18 @@ try {
     await lot.commit();
 
     await page.waitForTimeout(RECOMPUTE_WAIT_MS);
+    // ⚠️ Lire la page « Top 10 » explicitement, et non « la page courante » : la rotation
+    // tourne pendant le test, et ce pas est déjà passé À VIDE sur une page de catégorie à
+    // UNE ligne, où « tous les rangs valent 1 » est vrai sans rien prouver.
+    //
+    // On recharge pour y arriver, au lieu d'attendre le tour de rotation : un tour complet
+    // fait 1 + N pages à 18 s (ici neuf, soit plus de deux minutes), et attendre était
+    // justement ce qui faisait expirer ce pas. Le rechargement remet `pageIndex` à 0.
+    // La poussée en DIRECT par onSnapshot reste couverte par le pas 7, qui ne recharge pas.
+    await page.reload();
+    const titre = await attendrePage(page, /Top 10/);
     const lignes = await lireLignes(page);
-    assert(lignes.length > 0, 'plus aucune ligne affichée');
+    assert(lignes.length >= 2, `page « ${titre} » : ${lignes.length} ligne(s), un rang partagé ne peut pas s'y exprimer`);
     const rangs = lignes.map((l) => Number(l.rang));
     const scores = lignes.map((l) => l.score);
     assert(scores.every((s) => s === '0 pts'), `scores non nuls : ${scores.join(', ')}`);
@@ -218,8 +259,13 @@ try {
     // la télévision allumée, l'application journalise le refus et continue. C'est le
     // comportement voulu, pas un défaut — et sur la vraie télévision la permission est
     // accordée. Tout le reste doit être vide.
+    // Le « Could not reach Cloud Firestore backend » est la première tentative de connexion
+    // du SDK au démarrage, avant que l'émulateur ne réponde. Il est toléré ici parce que les
+    // pas 4 à 7 PROUVENT que la connexion fonctionne ensuite : ils lisent des données, puis
+    // observent deux mutations arriver en direct. Sans ces pas, filtrer cette ligne
+    // masquerait une absence totale de connexion.
     const graves = erreursConsole.filter(
-      (e) => !/favicon|Download the React DevTools|Wake Lock/i.test(e)
+      (e) => !/favicon|Download the React DevTools|Wake Lock|Could not reach Cloud Firestore backend/i.test(e)
     );
     assert(graves.length === 0, `${graves.length} erreur(s) console : ${graves[0]}`);
   });
