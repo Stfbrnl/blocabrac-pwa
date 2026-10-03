@@ -163,6 +163,15 @@ const ClientCompetitions: React.FC = () => {
   // chaque clic sur "Valider mes blocs"/"S'inscrire".
   const confirmedRegistrations = useRef<Set<string>>(new Set());
 
+  // ⚠️ Les compétitions auxquelles CE grimpeur est inscrit — un état, pas le ref ci-dessus,
+  // parce que le libellé du bouton en dépend et doit donc provoquer un rendu (03/10/2026).
+  // Le libellé se basait sur `registered_count`, le compteur GLOBAL : dès qu'un seul
+  // grimpeur s'inscrivait, tous les autres lisaient « Valider mes blocs » alors qu'ils
+  // n'étaient pas inscrits. Le clic faisait la bonne chose (il vérifie vraiment), mais un
+  // retardataire pouvait croire l'inscription fermée et ne jamais cliquer.
+  // Une requête au montage, la même que celle de ClientScreen.tsx.
+  const [registeredCompIds, setRegisteredCompIds] = useState<Set<string>>(new Set());
+
   // ✅ Le document `users` du grimpeur, au-delà du seul `level` dont `canUserRegister` a
   // besoin : l'inscription dénormalise son identité et son âge sur le document de
   // participation (voir handleRegister), et ces champs doivent donc être typés ici.
@@ -189,6 +198,29 @@ const ClientCompetitions: React.FC = () => {
       }
     };
     fetchOwnUser();
+  }, [user]);
+
+  // ✅ Voir registeredCompIds : une requête au montage sur ses propres participations.
+  // Alimente aussi `confirmedRegistrations`, pour que le clic n'ait plus à reposer la
+  // question à Firestore quand la réponse est déjà connue.
+  useEffect(() => {
+    if (!user) return;
+    const fetchOwnRegistrations = async () => {
+      try {
+        const snapshot = await getDocs(query(
+          collection(db, 'competition_participants'),
+          where('user_id', '==', user.uid)
+        ));
+        const ids = new Set(snapshot.docs.map(d => d.data().competition_id as string).filter(Boolean));
+        ids.forEach(id => confirmedRegistrations.current.add(id));
+        setRegisteredCompIds(ids);
+      } catch (err) {
+        // Non bloquant : sans cette liste le bouton affiche « S'inscrire », et le clic
+        // vérifie de toute façon avant d'agir (voir isAlreadyRegistered).
+        console.error('Erreur lors du chargement de ses inscriptions :', err);
+      }
+    };
+    fetchOwnRegistrations();
   }, [user]);
 
   useEffect(() => {
@@ -462,9 +494,14 @@ const ClientCompetitions: React.FC = () => {
         registered_count: increment(1)
       });
 
-      // ✅ Sans ça, le libellé du bouton ("S'inscrire" vs "Valider mes blocs", basé sur
-      // registered_count) restait figé sur l'ancienne valeur jusqu'au rechargement de
-      // la page, alors que l'inscription venait de réussir.
+      // ✅ Le libellé du bouton doit basculer tout de suite : l'inscription vient de
+      // réussir. Il dépend désormais de registeredCompIds (cette inscription-ci), plus de
+      // registered_count (le compteur global) — voir registeredCompIds.
+      confirmedRegistrations.current.add(competition.id);
+      setRegisteredCompIds(prev => new Set(prev).add(competition.id));
+
+      // ✅ Et le compteur affiché « Participants: X/Y », lui, est bien global : il doit
+      // refléter cette inscription sans attendre un rechargement de la page.
       setCompetitions(prev => prev.map(c =>
         c.id === competition.id ? { ...c, registered_count: (c.registered_count || 0) + 1 } : c
       ));
@@ -673,7 +710,7 @@ const ClientCompetitions: React.FC = () => {
                         }}
                         disabled={!canRegister}
                       >
-                        {competition.registered_count > 0 ? "Valider mes blocs" : "S'inscrire"}
+                        {registeredCompIds.has(competition.id) ? "Valider mes blocs" : "S'inscrire"}
                       </Button>
                       <Button
                         variant="outlined"

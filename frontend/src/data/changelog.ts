@@ -13,6 +13,14 @@ export interface ChangelogEntry {
 // les commits git.
 export const changelog: ChangelogEntry[] = [
   {
+    version: '2.72.1',
+    date: '2026-10-03',
+    title: 'Le bouton d\'inscription dit à nouveau la vérité',
+    items: [
+      'Sur une compétition où quelqu\'un d\'autre s\'était déjà inscrit, votre bouton affichait « Valider mes blocs » alors que vous n\'étiez pas inscrit — de quoi croire les inscriptions fermées. Il affiche désormais « S\'inscrire » tant que vous ne l\'êtes pas.',
+    ],
+  },
+  {
     version: '2.72',
     date: '2026-10-03',
     title: 'En compétition, les points égaux sont départagés',

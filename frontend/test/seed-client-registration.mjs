@@ -51,6 +51,17 @@ await db.collection('users').doc(adminUser.uid).set({
   email: ADMIN_EMAIL, first_name: 'Ada', last_name: 'Minne', roles: ['admin', 'client'],
 });
 
+// ⚠️ UN SECOND GRIMPEUR, DÉJÀ INSCRIT, et il est indispensable. Le libellé du bouton se
+// basait sur `registered_count`, le compteur GLOBAL : le défaut (lire « Valider mes blocs »
+// sans être inscrit) ne peut donc apparaître que s'il existe un AUTRE inscrit. Avec un seul
+// grimpeur, `registered_count` vaut 0 partout et ce jeu d'essai serait physiquement
+// incapable d'exprimer le défaut — il resterait vert sans rien vérifier.
+const autre = await auth.createUser({ email: 'autre.inscrit@blocabrac.test', password: PASSWORD });
+await db.collection('users').doc(autre.uid).set({
+  email: 'autre.inscrit@blocabrac.test', first_name: 'Noé', last_name: 'Premier',
+  roles: ['client'], dateOfBirth: '1990-03-02', gender: 'Homme', level: 'rouge',
+});
+
 const aujourdHui = new Date().toISOString().slice(0, 10);
 const competitions = {};
 for (const [cle, statut, nom] of [
@@ -65,10 +76,19 @@ for (const [cle, statut, nom] of [
     date: aujourdHui,
     access_code: 'INSCR2026',
     max_participants: 50,
-    registered_count: 0,
+    // Le second grimpeur est inscrit partout : `registered_count` vaut donc 1 avant que
+    // notre grimpeur ne touche à quoi que ce soit. Voir le commentaire sur `autre`.
+    registered_count: 1,
     liveDisplayEnabled: true,
   });
   competitions[cle] = { id: ref.id, name: nom, status: statut };
+
+  await db.collection('competition_participants').doc(`${autre.uid}_${ref.id}`).set({
+    user_id: autre.uid, competition_id: ref.id, submitted: false,
+    email: 'autre.inscrit@blocabrac.test', first_name: 'Noé', last_name: 'Premier',
+    dateOfBirth: '1990-03-02', gender: 'Homme', level: 'rouge', is_client: true,
+    registered_at: new Date().toISOString(),
+  });
 
   // Un bloc par compétition, pour que l'écran de validation ait de quoi s'afficher.
   await db.collection('boulders').add({

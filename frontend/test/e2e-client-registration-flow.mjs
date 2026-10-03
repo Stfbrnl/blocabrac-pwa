@@ -82,6 +82,22 @@ try {
     assert(aVenir, 'la compétition « à venir » n\'est pas proposée : impossible de s\'inscrire à l\'avance');
   });
 
+  // ⚠️ Le défaut ne peut apparaître que parce qu'un AUTRE grimpeur est déjà inscrit : le
+  // libellé se basait sur `registered_count`, le compteur global. Avec un seul grimpeur, ce
+  // pas serait vert sans rien vérifier (voir le commentaire sur `autre` dans le seed).
+  await step('Libellé : « S\'inscrire » tant que CE grimpeur n\'est pas inscrit, bien qu\'un autre le soit', async () => {
+    for (const cle of ['enCours', 'aVenir']) {
+      const nom = attendu.competitions[cle].name;
+      const libelle = await carte(page, nom)
+        .getByRole('button', { name: /S'inscrire|Valider mes blocs/i }).first().innerText();
+      console.log(`   ${nom} : « ${libelle.trim()} »`);
+      assert(
+        /S'INSCRIRE/i.test(libelle),
+        `« ${nom} » affiche « ${libelle.trim()} » alors que ce grimpeur n'est pas inscrit : un retardataire croira l'inscription fermée`
+      );
+    }
+  });
+
   await step('Le grimpeur s\'inscrit lui-même à la compétition en cours', async () => {
     const bloc = carte(page, attendu.competitions.enCours.name);
     await bloc.getByRole('button', { name: /S'inscrire|Valider mes blocs/i }).first().click();
@@ -90,6 +106,18 @@ try {
     // ne correspondait à rien. Une seule action : confirmer.
     await page.getByRole('button', { name: /Confirmer l'inscription/i }).click({ timeout: 10000 });
     await page.waitForTimeout(3000);
+
+    // Le libellé doit basculer tout de suite sur CETTE compétition, et seulement celle-là.
+    const apres = await carte(page, attendu.competitions.enCours.name)
+      .getByRole('button', { name: /S'inscrire|Valider mes blocs/i }).first().innerText();
+    assert(/VALIDER MES BLOCS/i.test(apres), `après inscription, le bouton affiche encore « ${apres.trim()} »`);
+    const autreCarte = await carte(page, attendu.competitions.aVenir.name)
+      .getByRole('button', { name: /S'inscrire|Valider mes blocs/i }).first().innerText();
+    assert(
+      /S'INSCRIRE/i.test(autreCarte),
+      `« ${attendu.competitions.aVenir.name} » est passée à « ${autreCarte.trim()} » : le libellé n'est pas par compétition`
+    );
+    console.log(`   en cours : « ${apres.trim()} » | à venir : « ${autreCarte.trim()} »`);
   });
 
   // B. Ce que l'auto-inscription écrit vraiment. Lu côté serveur (firebase-admin), donc
