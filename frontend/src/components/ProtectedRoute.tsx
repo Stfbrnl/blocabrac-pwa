@@ -3,6 +3,7 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '../services/firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
+import AccessDenied from './AccessDenied';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -59,7 +60,12 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles,
   if (requiredRoles && requiredRoles.length > 0) {
     const hasRequiredRole = requiredRoles.some(r => userRoles.includes(r));
     if (!hasRequiredRole) {
-      return <Navigate to="/" replace />;
+      // ⚠️ NE JAMAIS remettre `<Navigate to="/" replace />` ici : `/` est `Home`, qui
+      // pousse vers `/client/screen`, lui-même protégé par `role="client"` — donc un compte
+      // sans ce rôle repartait en boucle de redirection infinie, application inutilisable.
+      // Un écran TERMINAL supprime la classe entière, pour toute combinaison de rôles
+      // présente ou future. Voir le commentaire de tête d'AccessDenied.tsx.
+      return <AccessDenied requiredRoles={requiredRoles} />;
     }
   }
 

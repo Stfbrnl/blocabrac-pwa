@@ -18,6 +18,14 @@ async function main() {
   const client = await auth.createUser({ email: CLIENT_EMAIL, password: PASSWORD });
 
   await db.collection('users').doc(ouvreur.uid).set({
+    // ⚠️ `roles: ['ouvreur']` SANS `client` est DÉLIBÉRÉ — ne pas « corriger ».
+    // Ce compte viole sciemment l'invariant « tout compte porte client » (AdminUsers.tsx +
+    // hasClientRole() dans les règles), et c'est ce qui a permis de découvrir le 03/10/2026
+    // une boucle de redirection rendant l'application totalement inutilisable pour un tel
+    // compte (Home pousse vers /client/screen, ProtectedRoute renvoyait vers /, Home
+    // repoussait). Y ajouter `client` ferait disparaître la seule chose qui exerce ce chemin.
+    // Le cas est désormais couvert par test/e2e-access-denied-flow.mjs, qui dépend de ce seed.
+    // Voir docs/handoffs/RETOUR-labels-apres-dom.md §3.1.
     email: OUVREUR_EMAIL, first_name: 'Ova', last_name: 'Reur', roles: ['ouvreur'],
   });
   await db.collection('users').doc(client.uid).set({
