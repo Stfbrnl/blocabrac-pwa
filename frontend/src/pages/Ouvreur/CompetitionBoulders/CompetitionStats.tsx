@@ -11,6 +11,7 @@ import { getSeasonAge, getFfmeCategory, OPEN_CATEGORY } from '../../../utils/age
 // ✅ Extrait dans competitionClassement.ts (docs/plans/CONCEPTION-ecran-live-competition.md §1) :
 // ce calcul existait en double avec AdminCompetitionStats.tsx.
 import {
+  rankedEntries,
   getClassementByCategory as computeClassementByCategory,
   getOfficialClassementByCategory as computeOfficialClassementByCategory,
   rankOfficialEntries,
@@ -408,9 +409,9 @@ const CompetitionStats: React.FC = () => {
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {getClassementByCategory('global').map((item, index) => (
+                      {rankedEntries(getClassementByCategory('global')).map(({ entry: item, rank }, index) => (
                         <TableRow key={index}>
-                          <TableCell>{index + 1}</TableCell>
+                          <TableCell>{rank}</TableCell>
                           <TableCell>{item.participant.first_name} {item.participant.last_name}</TableCell>
                           <TableCell>{item.score}</TableCell>
                           <TableCell>{item.boulders}</TableCell>
@@ -441,9 +442,9 @@ const CompetitionStats: React.FC = () => {
                             </TableRow>
                           </TableHead>
                           <TableBody>
-                            {category.participants.map((item: ScoreEntry<Participant>, index: number) => (
+                            {rankedEntries(category.participants).map(({ entry: item, rank }, index: number) => (
                               <TableRow key={index}>
-                                <TableCell>{index + 1}</TableCell>
+                                <TableCell>{rank}</TableCell>
                                 <TableCell>{item.participant.first_name} {item.participant.last_name}</TableCell>
                                 <TableCell>{item.score}</TableCell>
                                 <TableCell>{item.boulders}</TableCell>
@@ -474,9 +475,9 @@ const CompetitionStats: React.FC = () => {
                             </TableRow>
                           </TableHead>
                           <TableBody>
-                            {gender.participants.map((item: ScoreEntry<Participant>, index: number) => (
+                            {rankedEntries(gender.participants).map(({ entry: item, rank }, index: number) => (
                               <TableRow key={index}>
-                                <TableCell>{index + 1}</TableCell>
+                                <TableCell>{rank}</TableCell>
                                 <TableCell>{item.participant.first_name} {item.participant.last_name}</TableCell>
                                 <TableCell>{item.score}</TableCell>
                                 <TableCell>{item.boulders}</TableCell>

@@ -5,8 +5,10 @@
 > 02/10 (perte de points à cause d'un défi supprimé) peut-il atteindre le comptage en
 > compétition ?**, puis **simuler une compétition complète et vérifier que tout est juste.**
 >
-> **Réponse courte : non pour le premier, oui pour le second — à une réserve près, sur les
-> ex æquo, qui demande un arbitrage.**
+> **Réponse courte : non pour le premier, oui pour le second.** La seule réserve trouvée —
+> l'affichage et le départage des ex æquo — a été **arbitrée par l'utilisateur le soir même,
+> puis implémentée, testée et vue à l'écran : voir le §6**, qui est la partie à lire si tu n'en
+> lis qu'une.
 
 ---
 
@@ -128,7 +130,14 @@ nommant le grimpeur et l'écart (`score affiché 6640, attendu 6700`).
 
 ---
 
-## §3 — 🟠 La réserve, et elle demande un arbitrage : les ex æquo
+## §3 — ✅ La réserve est tranchée et implémentée : le départage des ex æquo
+
+> **Arbitré par l'utilisateur le 03/10/2026, le soir même, puis implémenté et testé.**
+> La règle retenue est la sienne, et elle est meilleure que les trois options que je
+> proposais ci-dessous — voir le §6 pour la règle, son implémentation et ses preuves.
+> Le texte qui suit est conservé tel quel : c'est l'état des lieux qui a motivé la décision.
+
+### (état des lieux avant arbitrage)
 
 ### Ce qui a été mesuré
 
@@ -205,7 +214,125 @@ quatre étaient **du bon ordre de grandeur et cohérents avec l'attente**. Ce qu
 Ce qui est garanti par les tests : les scores, les blocs validés, les catégories d'âge et de
 genre, la partition sans perte ni doublon, et le fait qu'un résultat orphelin ne compte jamais.
 
-Ce qui reste à décider : l'affichage des ex æquo (§3).
+Ce qui était à décider — l'affichage des ex æquo — **est tranché, implémenté et prouvé**, voir le §6.
+
+⚠️ **Et la seule chose qui reste à faire est humaine : annoncer la règle de départage aux grimpeurs AVANT l'épreuve.** Elle s'appuie sur les cotations, cachées pendant la compétition : personne ne peut l'anticiper, ce qui est sain, mais quelqu'un qui perd dessus sans l'avoir entendue avant croira à une règle inventée après coup.
 
 Ce qui reste à surveiller, et c'est du bon sens : qu'un grimpeur voie bien sa validation après
 un rechargement — couvert par l'étape dédiée de `e2e-competition-flow.mjs`, verte.
+
+---
+
+## §6 — La règle de départage retenue, implémentée et prouvée (03/10/2026)
+
+**Décision de l'utilisateur**, formulée par lui et retenue telle quelle. À points égaux :
+
+1. le **bloc le plus dur réussi** — le plus dur devant ;
+2. à difficulté égale, le **nombre d'essais sur ce bloc** — le moins d'essais devant ;
+3. puis le **deuxième** bloc le plus dur, puis ses essais, et ainsi de suite ;
+4. si une liste s'épuise avant l'autre, **celui qui a un bloc de plus passe devant** ;
+5. si tout est identique, les grimpeurs sont **déclarés ex æquo** et partagent leur rang.
+
+### 6.1 — Pourquoi cette règle est bonne, et pourquoi elle bat mes trois options
+
+C'est un **ordre lexicographique** sur la liste des blocs réussis triée par difficulté
+décroissante : total, déterministe, et il termine toujours (les listes sont finies). Surtout,
+il récompense ce que les grimpeurs tiennent pour la performance — un blanc bat deux rouges —
+là où le barème à points les égalise.
+
+Et un argument que l'utilisateur n'avait pas avancé mais qui renforce sa règle : **ce départage
+ne s'applique qu'à l'intérieur d'un groupe à points égaux**, ce qui borne tout seul son côté
+lexicographique brutal. On pourrait craindre qu'un grimpeur ayant réussi un seul bloc dur
+dépasse quelqu'un ayant réussi ce même bloc *plus* d'autres : c'est impossible, le second
+aurait strictement plus de points et ne serait donc pas à égalité.
+
+### 6.2 — Les trois précisions apportées à la règle, validées par l'utilisateur
+
+- **① Liste épuisée.** « Et ainsi de suite » impliquait un cas non dit : à préfixe égal, celui
+  qui a un bloc de plus passe devant. C'est le cas le plus fréquent après le premier critère,
+  d'où son inscription explicite (clause 4).
+- **② « Le plus dur » = la valeur du bloc réussi AU PREMIER ESSAI dans le barème de la
+  compétition**, et non sa couleur. En mode Blocabrac c'est équivalent (la base de la couleur) ;
+  en mode « blocs validés », c'est le `points_value` posé par l'ouvreur — et c'est là que ça
+  compte, puisque la cotation y est cachée et ne reflète plus la difficulté. **Une seule
+  définition qui reste juste dans les trois modes à points**, au lieu d'une règle à réécrire si
+  la salle change de barème.
+- **③ L'ex æquo final s'affiche comme tel.** La clause 5 n'avait nulle part où s'exprimer tant
+  que l'écran numérotait en `index + 1` : les modes à points passent donc au **rang de
+  compétition** (1, 1, 3), exactement comme le mode « officiel » le faisait déjà.
+
+### 6.3 — Implémentation
+
+Tout dans `utils/competitionClassement.ts`, en miroir de ce qui existait pour le mode officiel :
+`TieBreakBoulder`, `compareTieBreak`, `compareScoreEntries`, `rankPointEntries`, et
+`rankedEntries` (un assistant partagé, pour que les **six** tableaux des trois écrans ne
+recalculent pas les rangs chacun à leur façon — c'est exactement l'endroit où deux
+implémentations divergent en silence).
+
+`ScoreEntry` gagne un champ `tieBreak`, rempli par `getParticipantScores` : **seuls les blocs
+réussis** y entrent, un échec n'étant pas une performance à comparer.
+
+Branché sur les quatre endroits qui numérotent un classement à points :
+`AdminCompetitionStats.tsx` (global, âge, genre), `Ouvreur/CompetitionBoulders/CompetitionStats.tsx`
+(idem), `AdminCompetitionLiveDisplay.tsx`, **et le message d'annonce publié aux grimpeurs** —
+une annonce qui numéroterait autrement que l'écran serait la pire incohérence possible sur ce
+sujet précis.
+
+### 6.4 — Les preuves
+
+**Huit cas calculés à la main**, un par clause, dans `competitionSimulation.test.ts` — même
+choix que le jeu d'essai « Finale de l'année » : à cette échelle, un calcul vérifiable au
+crayon est la garantie la plus forte disponible.
+
+| clause | cas | attendu |
+|---|---|---|
+| 1 | un blanc à vue (800) vs deux rouges à vue (400+400) | le blanc devant |
+| 2 | blanc en 2 essais (750) vs blanc en 4 essais + bleu (650+100) | le moins d'essais devant |
+| 3 | noir+rouge (1000) vs noir+violet+2 bleus (1000) | le 2ᵉ bloc tranche |
+| 4 | rouge (400) vs rouge + bleu en 11 essais (400+0) | le bloc de plus devant |
+| 5 | deux grimpeurs strictement identiques | rangs **1, 1, 3** |
+
+Plus : un échec n'entre pas dans le départage ; en mode « blocs validés » la dureté est le
+`points_value` et non la couleur.
+
+**Et la propriété qui résume le chantier**, vérifiée sur 60 tirages : **le rang d'un grimpeur ne
+dépend plus de l'ordre d'écriture des résultats.** On rejoue chaque tirage avec les résultats
+mélangés et on exige des rangs identiques. Avant, l'ordre des ex æquo venait de l'ordre
+lexicographique des identifiants de documents, donc d'uid Firebase aléatoires.
+
+**Vu rouge** : en remettant l'ancien tri (sans départage), la clause 4 **et** la propriété
+d'invariance tombent toutes les deux.
+
+### 6.5 — Vu à l'écran, les deux comportements
+
+Sur la graine 17, qui produit deux égalités de points, l'écran affiche maintenant :
+
+```
+à 5750 pts : 2. Prenom1  |  3. Prenom3     (départagés par la règle)
+à 5180 pts : 4. Prenom7  |  5. Prenom5     (départagés par la règle)
+```
+
+À 5750, le départage place Prenom1 devant Prenom3 — soit **l'inverse** de ce que l'écran
+affichait avant, quand l'ordre venait des uid. Deux implémentations indépendantes du départage
+(celle de l'application, celle de l'oracle du seed) s'accordent sur le résultat affiché.
+
+Et la clause 5, que le hasard ne produit jamais (0 sur 399 tirages), est **forcée** par
+`SIMU_EX_AEQUO=1`, qui recopie le tirage d'un grimpeur sur un autre :
+
+```
+à 5750 pts : 2. Prenom1  |  2. Prenom2  |  4. Prenom4   (rang PARTAGÉ : départage épuisé)
+```
+
+Rang 2 partagé, rang 3 sauté. ⚠️ Ce drapeau existe pour une raison précise : sans lui, le jeu
+de données serait **physiquement incapable d'exprimer** la clause 5, et elle n'aurait jamais été
+vue à l'écran — c'est la leçon du jour, inscrite dans `CLAUDE.md`.
+
+### 6.6 — Ce qu'il reste à annoncer aux grimpeurs
+
+Le départage s'appuie sur les **cotations, cachées pendant l'épreuve**. Un grimpeur ne peut donc
+ni l'anticiper ni le viser — c'est un avantage (ça ne se joue pas), mais **il faut l'annoncer
+avant l'épreuve**, sinon quelqu'un qui perd sur ce critère aura l'impression d'une règle sortie
+après coup.
+
+Vérifications : `npm test` **338/338**, `tsc`, `lint`, `e2e-competition-simulation` 10/10 sur
+les deux graines (avec et sans ex æquo forcé), `e2e-competition-flow` 16/16.

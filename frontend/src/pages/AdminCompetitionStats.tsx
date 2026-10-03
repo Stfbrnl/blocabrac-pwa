@@ -14,6 +14,7 @@ import {
   getClassementByCategory as computeClassementByCategory,
   getOfficialClassementByCategory as computeOfficialClassementByCategory,
   rankOfficialEntries,
+  rankedEntries,
   type ScoreEntry,
   type OfficialScoreEntry,
   type CategoryGroup,
@@ -288,24 +289,27 @@ const AdminCompetitionStats: React.FC = () => {
         });
       });
     } else {
-      getClassementByCategory('global').forEach((item, index) => {
-        message += `${index + 1}. ${item.participant.first_name} ${item.participant.last_name} - ${item.score} pts (${item.boulders} blocs validés)\n`;
+      // ⚠️ Les mêmes rangs que les tableaux ci-dessous, départage compris : une annonce
+      // publiée aux grimpeurs qui numéroterait autrement que l'écran serait la pire des
+      // incohérences possibles sur ce sujet.
+      rankedEntries(getClassementByCategory('global')).forEach(({ entry: item, rank }) => {
+        message += `${rank}. ${item.participant.first_name} ${item.participant.last_name} - ${item.score} pts (${item.boulders} blocs validés)\n`;
       });
 
       // ✅ Ajouter les classements par âge et genre
       message += `\n📊 Classement par âge :\n`;
       getClassementByCategory('age').forEach(category => {
         message += `\n${category.category} :\n`;
-        category.participants.forEach((item: ScoreEntry<Participant>, index: number) => {
-          message += `${index + 1}. ${item.participant.first_name} ${item.participant.last_name} - ${item.score} pts\n`;
+        rankedEntries(category.participants).forEach(({ entry: item, rank }) => {
+          message += `${rank}. ${item.participant.first_name} ${item.participant.last_name} - ${item.score} pts\n`;
         });
       });
 
       message += `\n📊 Classement par genre :\n`;
       getClassementByCategory('gender').forEach(gender => {
         message += `\n${gender.category} :\n`;
-        gender.participants.forEach((item: ScoreEntry<Participant>, index: number) => {
-          message += `${index + 1}. ${item.participant.first_name} ${item.participant.last_name} - ${item.score} pts\n`;
+        rankedEntries(gender.participants).forEach(({ entry: item, rank }) => {
+          message += `${rank}. ${item.participant.first_name} ${item.participant.last_name} - ${item.score} pts\n`;
         });
       });
     }
@@ -496,9 +500,9 @@ const AdminCompetitionStats: React.FC = () => {
                         </TableRow>
                       </TableHead>
                       <TableBody>
-                        {getClassementByCategory('global').map((item, index) => (
+                        {rankedEntries(getClassementByCategory('global')).map(({ entry: item, rank }, index) => (
                           <TableRow key={index}>
-                            <TableCell>{index + 1}</TableCell>
+                            <TableCell>{rank}</TableCell>
                             <TableCell>
                               <strong>{item.participant.first_name} {item.participant.last_name}</strong>
                             </TableCell>
@@ -532,9 +536,9 @@ const AdminCompetitionStats: React.FC = () => {
                               </TableRow>
                             </TableHead>
                             <TableBody>
-                              {category.participants.map((item: ScoreEntry<Participant>, index: number) => (
+                              {rankedEntries(category.participants).map(({ entry: item, rank }, index: number) => (
                                 <TableRow key={index}>
-                                  <TableCell>{index + 1}</TableCell>
+                                  <TableCell>{rank}</TableCell>
                                   <TableCell>{item.participant.first_name} {item.participant.last_name}</TableCell>
                                   <TableCell>{item.score}</TableCell>
                                   <TableCell>{item.boulders}</TableCell>
@@ -565,9 +569,9 @@ const AdminCompetitionStats: React.FC = () => {
                               </TableRow>
                             </TableHead>
                             <TableBody>
-                              {gender.participants.map((item: ScoreEntry<Participant>, index: number) => (
+                              {rankedEntries(gender.participants).map(({ entry: item, rank }, index: number) => (
                                 <TableRow key={index}>
-                                  <TableCell>{index + 1}</TableCell>
+                                  <TableCell>{rank}</TableCell>
                                   <TableCell>{item.participant.first_name} {item.participant.last_name}</TableCell>
                                   <TableCell>{item.score}</TableCell>
                                   <TableCell>{item.boulders}</TableCell>

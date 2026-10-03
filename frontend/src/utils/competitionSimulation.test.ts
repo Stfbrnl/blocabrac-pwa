@@ -18,6 +18,7 @@ import { describe, it, expect } from 'vitest';
 import {
   getClassementByCategory,
   getParticipantScores,
+  rankPointEntries,
   type CompetitionResultInput,
   type BoulderInput,
   type ParticipantBase,
@@ -272,5 +273,144 @@ describe('Simulation de compétition : 3 murs x 10 blocs (bleu -> blanc), 10 par
     // impossible, la remarque ci-dessus n'aurait plus d'objet et ce test le signalerait.
     expect(avecExAequo.length, 'aucun ex æquo sur 60 tirages : revoir la remarque ci-dessus')
       .toBeGreaterThan(0);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════════════════
+// Départage des ex æquo (règle fixée par l'utilisateur le 03/10/2026)
+//
+// Chaque cas ci-dessous est calculé À LA MAIN et vérifiable au crayon — c'est la garantie
+// la plus forte disponible à cette échelle, et le même choix que pour le jeu d'essai
+// "Finale de l'année" de competitionClassement.test.ts.
+// ════════════════════════════════════════════════════════════════════════════════════════
+describe('Départage des ex æquo à points égaux', () => {
+  const blocs = construireBlocs();
+  const participants = construireParticipants();
+  const unBloc = (couleur: string, rang = 0) => blocs.filter((b) => b.difficulty === couleur)[rang];
+  const res = (uid: string, bloc: BoulderInput, essais: number): CompetitionResultInput =>
+    ({ user_id: uid, boulder_id: bloc.id, success: true, attempts: essais });
+
+  const classer = (resultats: CompetitionResultInput[]) =>
+    getClassementByCategory(resultats, participants, blocs, 'global');
+
+  it('clause 1 — à points égaux, le bloc le plus dur passe devant', () => {
+    // u0 : un blanc au 1er essai    = 800
+    // u1 : deux rouges au 1er essai = 400 + 400 = 800
+    const resultats = [
+      res('u0', unBloc('blanc'), 1),
+      res('u1', unBloc('rouge', 0), 1),
+      res('u1', unBloc('rouge', 1), 1),
+    ];
+    const open = classer(resultats);
+    expect(open.map((e) => e.score)).toEqual([800, 800]);
+    expect(open[0].participant.user_id, 'le blanc doit passer devant deux rouges').toBe('u0');
+    expect(rankPointEntries(open)).toEqual([1, 2]);
+  });
+
+  it('clause 2 — à difficulté égale sur le bloc le plus dur, le moins d\'essais passe devant', () => {
+    // u0 : blanc en 2 essais                      = 800 - 50  = 750
+    // u1 : blanc en 4 essais + bleu au 1er essai  = 650 + 100 = 750
+    const resultats = [
+      res('u0', unBloc('blanc'), 2),
+      res('u1', unBloc('blanc'), 4),
+      res('u1', unBloc('bleu'), 1),
+    ];
+    const open = classer(resultats);
+    expect(open.map((e) => e.score)).toEqual([750, 750]);
+    expect(open[0].participant.user_id, 'même bloc le plus dur, moins d\'essais devant').toBe('u0');
+    expect(rankPointEntries(open)).toEqual([1, 2]);
+  });
+
+  it('clause 3 — si le premier bloc ne départage pas, on compare le deuxième', () => {
+    // u0 : noir 1er essai (600) + rouge 1er essai (400)                     = 1000
+    // u1 : noir 1er essai (600) + violet 1er (200) + deux bleus (100 + 100) = 1000
+    const resultats = [
+      res('u0', unBloc('noir'), 1), res('u0', unBloc('rouge'), 1),
+      res('u1', unBloc('noir'), 1), res('u1', unBloc('violet'), 1),
+      res('u1', unBloc('bleu', 0), 1), res('u1', unBloc('bleu', 1), 1),
+    ];
+    const open = classer(resultats);
+    expect(open.map((e) => e.score)).toEqual([1000, 1000]);
+    // Premier bloc identique (noir, 1 essai) : le deuxième tranche, rouge (400) > violet (200).
+    expect(open[0].participant.user_id).toBe('u0');
+  });
+
+  it('clause 4 — à préfixe égal, celui qui a un bloc de plus passe devant', () => {
+    // Un bloc réussi peut valoir 0 point : bleu en 11 essais = 100 - 10 x 10 = 0.
+    // u0 : rouge au 1er essai                     = 400
+    // u1 : rouge au 1er essai + bleu en 11 essais = 400 + 0 = 400
+    const resultats = [
+      res('u0', unBloc('rouge'), 1),
+      res('u1', unBloc('rouge'), 1),
+      res('u1', unBloc('bleu'), 11),
+    ];
+    const open = classer(resultats);
+    expect(open.map((e) => e.score)).toEqual([400, 400]);
+    expect(open[0].participant.user_id, 'un bloc de plus passe devant').toBe('u1');
+    expect(open[0].boulders).toBe(2);
+    expect(open[1].boulders).toBe(1);
+  });
+
+  it('clause 5 — si tout est identique, les grimpeurs partagent leur rang (1, 1, 3)', () => {
+    const noir = unBloc('noir');
+    const violet = unBloc('violet');
+    const resultats = [
+      res('u0', noir, 2), res('u0', violet, 1),   // 580 + 200 = 780
+      res('u1', noir, 2), res('u1', violet, 1),   // identique
+      res('u2', noir, 3), res('u2', violet, 1),   // 560 + 200 = 760
+    ];
+    const open = classer(resultats);
+    expect(open.map((e) => e.score)).toEqual([780, 780, 760]);
+    expect(rankPointEntries(open), 'les deux premiers sont réellement ex æquo').toEqual([1, 1, 3]);
+  });
+
+  it('un échec n\'entre pas dans le départage', () => {
+    const resultats: CompetitionResultInput[] = [
+      res('u0', unBloc('violet'), 1),
+      { user_id: 'u0', boulder_id: unBloc('blanc').id, success: false, attempts: 1 },
+    ];
+    const [e] = classer(resultats);
+    // Le blanc échoué ne doit pas compter comme "bloc le plus dur réussi".
+    expect(e.tieBreak).toHaveLength(1);
+    expect(e.tieBreak[0].hardness).toBe(BASE.violet);
+  });
+
+  it('mode "blocs_valides" : la difficulté est la valeur du bloc, pas sa couleur', () => {
+    // Dans ce mode la cotation ne reflète plus la difficulté (cachée pendant l'épreuve) :
+    // c'est le `points_value` posé par l'ouvreur qui fait foi.
+    const faible = blocs.find((b) => b.difficulty === 'blanc' && (b.points_value || 0) < 150)!;
+    const fort = blocs.find((b) => b.difficulty === 'bleu' && (b.points_value || 0) > 200)!;
+    const open = getClassementByCategory(
+      [res('u0', faible, 1), res('u1', fort, 1)],
+      participants, blocs, 'global', 'blocs_valides'
+    );
+    expect(open[0].participant.user_id, 'le bloc à plus forte valeur devant, pas le blanc').toBe('u1');
+    expect(open[0].tieBreak[0].hardness).toBe(fort.points_value);
+  });
+
+  it('⚠️ le rang d\'un grimpeur ne dépend plus de l\'ordre d\'écriture des résultats', () => {
+    // C'est LA propriété que ce chantier apporte : avant le 03/10/2026, à points égaux,
+    // l'ordre affiché venait de l'ordre lexicographique des identifiants de documents, donc
+    // d'uid Firebase aléatoires. On le vérifie en rejouant chaque tirage avec les résultats
+    // mélangés : le rang de chacun doit être identique.
+    const graines = Array.from({ length: 60 }, (_, i) => i + 1);
+    graines.forEach((graine) => {
+      const { resultats } = tirer(graine, blocs, participants);
+      const rangsDe = (liste: CompetitionResultInput[]): Record<string, number> => {
+        const open = getClassementByCategory(liste, participants, blocs, 'global');
+        const rangs = rankPointEntries(open);
+        return Object.fromEntries(open.map((e, i) => [e.participant.user_id, rangs[i]]));
+      };
+      const reference = rangsDe(resultats);
+
+      const alea = rng(graine * 7919);
+      const melange = [...resultats];
+      for (let i = melange.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(alea() * (i + 1));
+        [melange[i], melange[j]] = [melange[j], melange[i]];
+      }
+      expect(rangsDe(melange), `graine ${graine} : les rangs changent avec l'ordre d'écriture`)
+        .toEqual(reference);
+    });
   });
 });

@@ -113,6 +113,15 @@ async function main() {
   }
 
   // Inscriptions + résultats tirés au hasard.
+  //
+  // ⚠️ SIMU_EX_AEQUO=1 force la clause 5 du départage — le VRAI ex æquo, celui où tout est
+  // identique et où les grimpeurs partagent leur rang. L'utilisateur l'a qualifié de
+  // « hautement improbable », et c'est exact : sur 399 tirages aléatoires, le départage sépare
+  // toujours. Sans ce drapeau, cette clause ne serait donc jamais vue à l'écran — exactement
+  // le piège du jeu de données incapable d'exprimer le cas (voir CLAUDE.md, section Testing).
+  // Le tirage du 2e grimpeur est alors recopié à l'identique sur le 3e.
+  const forcerExAequo = process.env.SIMU_EX_AEQUO === '1';
+  const tirageParGrimpeur = {};
   const attendu = {};
   let nbResultats = 0;
   for (const g of grimpeurs) {
@@ -120,12 +129,26 @@ async function main() {
       competition_id: competition.id, user_id: g.uid, submitted: false,
       registered_at: new Date().toISOString(),
     });
-    attendu[g.uid] = { nom: g.nom, score: 0, blocs: 0, categorie: categoriePour(g.age), genre: g.gender };
+    attendu[g.uid] = { nom: g.nom, score: 0, blocs: 0, departage: [], categorie: categoriePour(g.age), genre: g.gender };
+
+    // Index de ce grimpeur, pour la recopie éventuelle (clause 5).
+    const iGrimpeur = grimpeurs.indexOf(g);
+    const recopier = forcerExAequo && iGrimpeur === 2 ? tirageParGrimpeur[grimpeurs[1].uid] : null;
+    tirageParGrimpeur[g.uid] = [];
 
     for (const bloc of blocs) {
-      if (alea() > 0.7) continue;                 // ~70 % des blocs tentés
-      const reussi = alea() > 0.35;
-      const essais = 1 + Math.floor(alea() * 8);  // 1 à 8 essais
+      let reussi;
+      let essais;
+      if (recopier) {
+        const copie = recopier.find((t) => t.blocId === bloc.id);
+        if (!copie) continue;
+        ({ reussi, essais } = copie);
+      } else {
+        if (alea() > 0.7) continue;               // ~70 % des blocs tentés
+        reussi = alea() > 0.35;
+        essais = 1 + Math.floor(alea() * 8);      // 1 à 8 essais
+      }
+      tirageParGrimpeur[g.uid].push({ blocId: bloc.id, reussi, essais });
       await db.collection('competition_results')
         .doc(`${g.uid}_${bloc.id}_${competition.id}`)
         .set({
@@ -137,16 +160,50 @@ async function main() {
         });
       nbResultats += 1;
       attendu[g.uid].score += pointsAttendus(bloc.couleur, essais, reussi);
-      if (reussi) attendu[g.uid].blocs += 1;
+      if (reussi) {
+        attendu[g.uid].blocs += 1;
+        // Difficulté = valeur du bloc réussi AU PREMIER ESSAI dans ce barème (mode Blocabrac
+        // ici, donc la base de la couleur). Seuls les blocs réussis entrent au départage.
+        attendu[g.uid].departage.push({ hardness: BASE[bloc.couleur], attempts: essais });
+      }
     }
   }
 
-  // Classement Open attendu : score décroissant. Les ex æquo sont signalés à part, l'écran
-  // affichant la position comme `index + 1` sans les départager (constat documenté).
+  // Classement Open attendu : score décroissant, puis le DÉPARTAGE fixé par l'utilisateur le
+  // 03/10/2026 — bloc le plus dur, puis essais sur ce bloc, puis le deuxième plus dur, etc. ;
+  // à préfixe égal celui qui a un bloc de plus passe devant ; si tout est identique, rang
+  // partagé. Réimplémenté ici À LA MAIN, indépendamment de competitionClassement.ts : c'est
+  // ce qui permet à l'e2e de vérifier l'écran contre un calcul séparé.
+  const comparerDepartage = (a, b) => {
+    const n = Math.max(a.length, b.length);
+    for (let i = 0; i < n; i += 1) {
+      if (!a[i]) return 1;
+      if (!b[i]) return -1;
+      if (a[i].hardness !== b[i].hardness) return b[i].hardness - a[i].hardness;
+      if (a[i].attempts !== b[i].attempts) return a[i].attempts - b[i].attempts;
+    }
+    return 0;
+  };
+  const comparerEntrees = (a, b) =>
+    (b.score !== a.score ? b.score - a.score : comparerDepartage(a.departage, b.departage));
+
   const open = Object.entries(attendu)
-    .map(([uid, d]) => ({ uid, ...d }))
-    .sort((a, b) => b.score - a.score);
-  const exAequo = open.filter((e, i) => i > 0 && e.score === open[i - 1].score).map((e) => e.score);
+    .map(([uid, d]) => ({
+      uid, ...d,
+      departage: [...d.departage].sort((x, y) =>
+        (y.hardness !== x.hardness ? y.hardness - x.hardness : x.attempts - y.attempts)),
+    }))
+    .sort(comparerEntrees);
+
+  // Rang de compétition (1, 1, 3) : deux grimpeurs que le départage ne sépare pas partagent.
+  const rangs = [];
+  open.forEach((e, i) => {
+    rangs.push(i === 0 || comparerEntrees(open[i - 1], e) !== 0 ? i + 1 : rangs[i - 1]);
+  });
+  open.forEach((e, i) => { e.rang = rangs[i]; });
+
+  const exAequo = [...new Set(open.filter((e, i) => i > 0 && e.score === open[i - 1].score).map((e) => e.score))];
+  const rangsPartages = rangs.filter((r, i) => i > 0 && r === rangs[i - 1]).length;
 
   const parCategorie = {};
   for (const e of open) {
@@ -162,18 +219,20 @@ async function main() {
     nbBlocs: blocs.length,
     nbParticipants: grimpeurs.length,
     nbResultats,
-    open: open.map((e) => ({ nom: e.nom, score: e.score, blocs: e.blocs, categorie: e.categorie, genre: e.genre })),
+    open: open.map((e) => ({ rang: e.rang, nom: e.nom, score: e.score, blocs: e.blocs, categorie: e.categorie, genre: e.genre })),
     exAequo,
+    rangsPartages,
     parCategorie,
   };
   writeFileSync(join(__dirname, '.simulation-attendu.json'), JSON.stringify(sortie, null, 2));
 
   console.log(`SEED_OK graine=${GRAINE} blocs=${blocs.length} participants=${grimpeurs.length} resultats=${nbResultats}`);
   console.log('Classement Open attendu (oracle indépendant) :');
-  sortie.open.forEach((e, i) => {
-    console.log(`  ${String(i + 1).padStart(2)}. ${e.nom.padEnd(18)} ${String(e.score).padStart(5)} pts  ${String(e.blocs).padStart(2)} blocs  ${e.categorie}`);
+  sortie.open.forEach((e) => {
+    console.log(`  ${String(e.rang).padStart(2)}. ${e.nom.padEnd(18)} ${String(e.score).padStart(5)} pts  ${String(e.blocs).padStart(2)} blocs  ${e.categorie}`);
   });
-  console.log(`Ex æquo dans ce tirage : ${exAequo.length ? exAequo.join(', ') : 'aucun'}`);
+  console.log(`Égalités de POINTS dans ce tirage : ${exAequo.length ? exAequo.join(', ') : 'aucune'}`);
+  console.log(`Dont non départagées (rang partagé) : ${rangsPartages}`);
 }
 
 main().then(() => process.exit(0)).catch((err) => {

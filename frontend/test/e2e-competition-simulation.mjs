@@ -90,34 +90,21 @@ try {
     await page.screenshot({ path: '/tmp/simu-classement.png', fullPage: true });
   });
 
-  // ⚠️ L'ordre AFFICHÉ n'est comparable que GROUPE D'ÉGALITÉ par groupe d'égalité, jamais
-  // ligne à ligne. À score égal, l'application départage sur l'ordre dans lequel la requête
-  // renvoie les résultats, c'est-à-dire sur l'ordre lexicographique des identifiants de
-  // documents — donc sur des uid Firebase aléatoires. Comparer un ordre strict rendait ce
-  // test faux : il a échoué sur la graine 17 alors que l'application était juste (constaté
-  // le 03/10/2026). La séquence des SCORES, elle, est parfaitement déterministe et comparable.
-  await step(`Le classement Open affiche les ${attendu.nbParticipants} participants, scores en ordre décroissant exact`, async () => {
+  // ✅ Depuis le départage du 03/10/2026, l'ordre affiché est ENTIÈREMENT DÉTERMINÉ : il ne
+  // dépend plus de l'ordre dans lequel la requête renvoie les résultats (donc plus d'uid
+  // Firebase aléatoires). On peut donc à nouveau le comparer ligne à ligne — et c'est
+  // précisément ce que ce chantier a rendu possible. Si cette étape redevenait flottante,
+  // c'est que le départage ne s'applique plus.
+  await step(`Le classement Open affiche les ${attendu.nbParticipants} participants dans l'ordre exact, départage compris`, async () => {
     const lignes = await lireTableau(page, 'Classement Open');
     assert(lignes.length === attendu.nbParticipants,
       `${lignes.length} lignes affichées, ${attendu.nbParticipants} attendues`);
-    const scoresAffiches = lignes.map((l) => Number(l.score));
-    const scoresAttendus = attendu.open.map((e) => e.score);
-    assert(scoresAffiches.join(',') === scoresAttendus.join(','),
-      `séquence de scores affichée [${scoresAffiches}] ≠ attendue [${scoresAttendus}]`);
-    lignes.forEach((l, i) => {
-      assert(l.position === String(i + 1), `position affichée « ${l.position} » au rang ${i + 1}`);
+    attendu.open.forEach((att, i) => {
+      assert(lignes[i].nom === att.nom,
+        `rang ${i + 1} : « ${lignes[i].nom} » affiché, « ${att.nom} » attendu (départage)`);
+      assert(lignes[i].position === String(att.rang),
+        `${att.nom} : position affichée « ${lignes[i].position} », rang attendu ${att.rang}`);
     });
-    // Composition de chaque groupe d'égalité : les mêmes noms, dans un ordre libre.
-    let i = 0;
-    while (i < scoresAttendus.length) {
-      let j = i;
-      while (j + 1 < scoresAttendus.length && scoresAttendus[j + 1] === scoresAttendus[i]) j += 1;
-      const attendus = attendu.open.slice(i, j + 1).map((e) => e.nom).sort();
-      const affiches = lignes.slice(i, j + 1).map((l) => l.nom).sort();
-      assert(attendus.join('|') === affiches.join('|'),
-        `groupe à ${scoresAttendus[i]} pts : [${affiches}] affiché, [${attendus}] attendu`);
-      i = j + 1;
-    }
   });
 
   await step('Chaque score et chaque nombre de blocs validés correspond au calcul indépendant', async () => {
@@ -142,25 +129,29 @@ try {
     });
   });
 
-  // ⚠️ CONSTAT, pas une correction : l'écran numérote les positions avec `index + 1`, donc
-  // deux grimpeurs à égalité reçoivent DEUX positions différentes. Le mode "officiel" utilise
-  // lui `rankOfficialEntries` (1, 1, 3). Changer l'affichage d'une position est une décision
-  // de produit — à trancher par l'utilisateur, d'où cette étape qui documente l'écart au lieu
-  // de le masquer. Mesure : 40 tirages sur 399 produisent au moins un ex æquo (~1 sur 10).
-  await step('⚠️ constat : à égalité de score, deux positions distinctes sont affichées', async () => {
+  // Le départage à l'œuvre, sur les égalités réelles du tirage : chaque groupe à points
+  // égaux est soit séparé par la règle (positions distinctes, ordre déterminé par le bloc le
+  // plus dur), soit réellement ex æquo et affiché avec un RANG PARTAGÉ (1, 1, 3).
+  await step('Les égalités de points sont départagées, ou affichées en rang partagé', async () => {
     if (attendu.exAequo.length === 0) {
-      console.log('      (pas d\'ex æquo dans ce tirage — relancer le seed avec SIMU_GRAINE=17)');
+      console.log('      (aucune égalité de points dans ce tirage — relancer le seed avec SIMU_GRAINE=17)');
       return;
     }
     const lignes = await lireTableau(page, 'Classement Open');
     attendu.exAequo.forEach((score) => {
       const concernes = lignes.filter((l) => Number(l.score) === score);
       assert(concernes.length >= 2, `le groupe à ${score} pts devrait contenir au moins 2 grimpeurs`);
+      const attendusDuGroupe = attendu.open.filter((e) => e.score === score);
+      concernes.forEach((l, i) => {
+        assert(l.nom === attendusDuGroupe[i].nom,
+          `à ${score} pts, place ${i + 1} : « ${l.nom} » affiché, « ${attendusDuGroupe[i].nom} » attendu`);
+        assert(l.position === String(attendusDuGroupe[i].rang),
+          `${l.nom} : position « ${l.position} », rang attendu ${attendusDuGroupe[i].rang}`);
+      });
       const positions = concernes.map((l) => l.position);
-      assert(new Set(positions).size === positions.length,
-        `positions ${positions} à ${score} pts : des positions identiques sont affichées, ` +
-        `le constat ci-dessus n'est plus à jour — mettre à jour ce test`);
-      console.log(`      à ${score} pts : positions ${positions.join(' et ')} pour ${concernes.map((c) => c.nom).join(', ')}`);
+      const partage = new Set(positions).size < positions.length;
+      console.log(`      à ${score} pts : ${concernes.map((c, i) => `${positions[i]}. ${c.nom}`).join('  |  ')}`
+        + (partage ? '   (rang PARTAGÉ : départage épuisé)' : '   (départagés par la règle)'));
     });
   });
 

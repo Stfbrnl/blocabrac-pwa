@@ -40,7 +40,10 @@ describe('getParticipantScores', () => {
       { user_id: 'alice', boulder_id: 'b2', success: false, attempts: 3 }, // 0 pt, échec
     ];
     const scores = getParticipantScores(results, participants, boulders);
-    expect(scores).toEqual([{ participant: alice, score: 100, boulders: 1 }]);
+    // tieBreak (03/10/2026) : seul le bloc RÉUSSI y figure, avec sa valeur au 1er essai.
+    expect(scores).toEqual([
+      { participant: alice, score: 100, boulders: 1, tieBreak: [{ hardness: 100, attempts: 1 }] },
+    ]);
   });
 
   it('trie du meilleur score au plus faible', () => {
@@ -58,7 +61,7 @@ describe('getParticipantScores', () => {
     const hiddenBoulders = [{ id: 'b1', color: undefined, difficulty: 'bleu' }];
     const results = [{ user_id: 'alice', boulder_id: 'b1', success: true, attempts: 1 }];
     expect(getParticipantScores(results, participants, hiddenBoulders)).toEqual([
-      { participant: alice, score: 100, boulders: 1 },
+      { participant: alice, score: 100, boulders: 1, tieBreak: [{ hardness: 100, attempts: 1 }] },
     ]);
   });
 
@@ -72,14 +75,22 @@ describe('getParticipantScores', () => {
       { user_id: 'alice', boulder_id: 'b2', success: true, attempts: 1 },
     ];
     expect(getParticipantScores(results, participants, valBoulders, 'blocs_valides'))
-      .toEqual([{ participant: alice, score: 1050, boulders: 2 }]);
+      .toEqual([{
+        participant: alice, score: 1050, boulders: 2,
+        // Trié du plus dur au moins dur : ici la « dureté » est le points_value du bloc,
+        // la couleur ne reflétant plus la difficulté dans ce mode.
+        tieBreak: [{ hardness: 900, attempts: 1 }, { hardness: 150, attempts: 4 }],
+      }]);
   });
 
   it('mode "personnalise" : applique le barème par couleur fourni pour cette compétition', () => {
     const results = [{ user_id: 'alice', boulder_id: 'b1', success: true, attempts: 1 }];
     const customScoring = { bleu: { base: 999, deduction: 0 } };
     expect(getParticipantScores(results, participants, boulders, 'personnalise', customScoring))
-      .toEqual([{ participant: alice, score: 999, boulders: 1 }]);
+      .toEqual([{
+        participant: alice, score: 999, boulders: 1,
+        tieBreak: [{ hardness: 999, attempts: 1 }],
+      }]);
   });
 });
 

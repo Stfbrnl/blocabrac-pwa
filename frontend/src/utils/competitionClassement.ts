@@ -36,11 +36,105 @@ export interface BoulderInput {
   points_value?: number;
 }
 
+// ✅ Départage des ex æquo dans les modes à POINTS (règle fixée par l'utilisateur le
+// 03/10/2026, après mesure : une compétition sur dix produit au moins une égalité de
+// points — 40 tirages sur 399 dans competitionSimulation.test.ts).
+//
+// À points égaux, on compare les blocs réussis, du plus dur au moins dur :
+//   1. le bloc le plus dur réussi — le plus dur devant ;
+//   2. à difficulté égale, le nombre d'essais sur ce bloc — le moins d'essais devant ;
+//   3. puis le deuxième bloc le plus dur, puis ses essais, et ainsi de suite ;
+//   4. si une liste s'épuise avant l'autre, celui qui a un bloc de plus passe devant ;
+//   5. si tout est identique, les grimpeurs sont réellement EX ÆQUO et partagent leur rang
+//      (voir rankPointEntries).
+//
+// ⚠️ « Le plus dur » est mesuré par la valeur du bloc réussi AU PREMIER ESSAI dans le barème
+// de la compétition, et non par sa couleur. C'est volontaire : en mode "blocs_valides" la
+// cotation ne reflète plus la difficulté (elle est cachée pendant l'épreuve, l'ouvreur pose
+// un `points_value` à la place), donc une règle fondée sur la couleur y serait fausse. Une
+// seule définition qui reste juste dans les trois modes à points.
+//
+// ⚠️ Ce départage ne s'applique QU'À L'INTÉRIEUR d'un groupe à points égaux, ce qui borne
+// son effet : on ne peut pas y voir un grimpeur ayant réussi un seul bloc dur dépasser
+// quelqu'un ayant réussi ce même bloc PLUS d'autres, puisque le second aurait strictement
+// plus de points et ne serait donc pas à égalité.
+export interface TieBreakBoulder {
+  /** Valeur du bloc réussi au premier essai, dans le barème de la compétition. */
+  hardness: number;
+  attempts: number;
+}
+
 export interface ScoreEntry<P extends ParticipantBase = ParticipantBase> {
   participant: P;
   score: number;
   boulders: number;
+  /** Blocs réussis, triés du plus dur au moins dur (puis du moins d'essais au plus). */
+  tieBreak: TieBreakBoulder[];
 }
+
+/** Ordre interne de la liste de départage : plus dur d'abord, puis moins d'essais. */
+const compareTieBreakBoulders = (a: TieBreakBoulder, b: TieBreakBoulder): number =>
+  b.hardness !== a.hardness ? b.hardness - a.hardness : a.attempts - b.attempts;
+
+/**
+ * Comparaison lexicographique des deux listes de blocs réussis. Négatif si `a` passe devant.
+ * Termine toujours : les listes sont finies.
+ */
+export const compareTieBreak = (a: TieBreakBoulder[], b: TieBreakBoulder[]): number => {
+  const n = Math.max(a.length, b.length);
+  for (let i = 0; i < n; i += 1) {
+    const x = a[i];
+    const y = b[i];
+    // Une liste épuisée : celui qui a encore un bloc passe devant (précision ① du 03/10).
+    if (!x) return 1;
+    if (!y) return -1;
+    const ordre = compareTieBreakBoulders(x, y);
+    if (ordre !== 0) return ordre;
+  }
+  return 0;
+};
+
+/** Ordre complet du classement : points décroissants, puis le départage ci-dessus. */
+export const compareScoreEntries = <P extends ParticipantBase>(
+  a: ScoreEntry<P>,
+  b: ScoreEntry<P>
+): number => (b.score !== a.score ? b.score - a.score : compareTieBreak(a.tieBreak, b.tieBreak));
+
+/**
+ * Rang de compétition standard (1, 1, 3, 4, 4, 6…) pour les modes à POINTS — pendant exact de
+ * `rankOfficialEntries`. Deux grimpeurs que le départage ne sépare pas partagent leur rang,
+ * et le suivant saute les positions occupées.
+ *
+ * ⚠️ Avant le 03/10/2026, les écrans numérotaient avec `index + 1`, donc deux grimpeurs
+ * strictement à égalité recevaient deux positions différentes — départagées par l'ordre
+ * lexicographique des identifiants de documents, c'est-à-dire par des uid Firebase
+ * aléatoires. `entries` doit déjà être triée (sortie de getParticipantScores).
+ */
+export const rankPointEntries = <P extends ParticipantBase>(entries: ScoreEntry<P>[]): number[] => {
+  const ranks: number[] = [];
+  entries.forEach((entry, index) => {
+    if (index === 0 || compareScoreEntries(entries[index - 1], entry) !== 0) {
+      ranks.push(index + 1);
+    } else {
+      ranks.push(ranks[index - 1]);
+    }
+  });
+  return ranks;
+};
+
+/**
+ * Appaire chaque entrée avec son rang, pour un rendu direct dans un tableau.
+ *
+ * Existe pour que les six tableaux des trois écrans de classement (global / âge / genre,
+ * côté admin et côté ouvreur) ne recalculent pas les rangs chacun à leur façon — c'est
+ * exactement le genre d'endroit où deux implémentations divergent en silence.
+ */
+export const rankedEntries = <P extends ParticipantBase>(
+  entries: ScoreEntry<P>[]
+): { entry: ScoreEntry<P>; rank: number }[] => {
+  const ranks = rankPointEntries(entries);
+  return entries.map((entry, index) => ({ entry, rank: ranks[index] }));
+};
 
 // ✅ Regroupement âge/genre générique, indépendant de la forme de l'entrée classée
 // (ScoreEntry pour les modes à points, OfficialScoreEntry pour le mode officiel) —
@@ -84,7 +178,7 @@ export const getParticipantScores = <P extends ParticipantBase>(
   scoringMode: ScoringMode = 'blocabrac',
   customScoring?: CustomScoringTable
 ): ScoreEntry<P>[] => {
-  const scores: Record<string, { score: number; boulders: number }> = {};
+  const scores: Record<string, { score: number; boulders: number; tieBreak: TieBreakBoulder[] }> = {};
 
   results.forEach(result => {
     const participant = participants.find(p => p.user_id === result.user_id);
@@ -97,10 +191,19 @@ export const getParticipantScores = <P extends ParticipantBase>(
     const key = participant.user_id;
 
     if (!scores[key]) {
-      scores[key] = { score: 0, boulders: 0 };
+      scores[key] = { score: 0, boulders: 0, tieBreak: [] };
     }
     scores[key].score += points;
-    scores[key].boulders += result.success ? 1 : 0;
+    if (result.success) {
+      scores[key].boulders += 1;
+      // ✅ Difficulté = ce que vaut le bloc réussi AU PREMIER ESSAI dans le barème de la
+      // compétition (voir le commentaire de TieBreakBoulder). Seuls les blocs RÉUSSIS
+      // comptent dans le départage : un échec n'est pas une performance à comparer.
+      scores[key].tieBreak.push({
+        hardness: calculateCompetitionPoints(boulder, 1, true, scoringMode, customScoring),
+        attempts: result.attempts,
+      });
+    }
   });
 
   return Object.entries(scores).map(([userId, data]) => {
@@ -108,9 +211,10 @@ export const getParticipantScores = <P extends ParticipantBase>(
     return {
       participant,
       score: data.score,
-      boulders: data.boulders
+      boulders: data.boulders,
+      tieBreak: [...data.tieBreak].sort(compareTieBreakBoulders),
     };
-  }).sort((a, b) => b.score - a.score);
+  }).sort(compareScoreEntries);
 };
 
 // ✅ Signatures surchargées : le type de retour dépend de la valeur littérale passée

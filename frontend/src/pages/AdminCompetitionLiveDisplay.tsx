@@ -8,6 +8,7 @@ import {
   getClassementByCategory,
   getOfficialClassementByCategory,
   rankOfficialEntries,
+  rankPointEntries,
   type BoulderInput,
   type CompetitionResultInput,
   type ParticipantBase,
@@ -268,9 +269,13 @@ const LiveCompetitionView: React.FC<{ competition: Competition }> = ({ competiti
   }, [pages.length]);
 
   const currentPage = pages[pageIndex % pages.length] || null;
+  // ✅ Rang de compétition (1, 1, 3) et non `i + 1` : deux grimpeurs que le départage ne
+  // sépare pas sont réellement ex æquo et partagent leur rang (règle du 03/10/2026, voir
+  // rankPointEntries dans competitionClassement.ts). Le mode officiel fait déjà pareil via
+  // rankOfficialEntries — les deux modes se comportent donc enfin de la même façon.
   const currentPageRanks = useMemo(() => {
     if (!currentPage) return [];
-    return currentPage.entries.map((_, i) => i + 1);
+    return rankPointEntries(currentPage.entries);
   }, [currentPage]);
 
   // ✅ Mode "Officiel" (docs/plans/ADDENDUM-mode-ffme-finale-annee.md §1/§2) : pas de rotation, les
