@@ -1,9 +1,16 @@
 # Handoff ClaudeNav — résumé complet de la session du 03/10/2026
 
 > Session Claude Code (PC Windows de l'utilisateur), 03/10/2026, de la matinée à la nuit.
-> **21 commits, quatre chantiers fermés, une version déployée et vérifiée (V2.71.5), un lot
-> commité mais ni bumpé ni déployé.** `npm test` **341/341**, `tsc`, `lint`, audit prod
-> **0 erreur / 0 avertissement**.
+> **Six chantiers fermés et trois versions déployées et vérifiées : V2.71.4, V2.71.5, puis
+> V2.72 et V2.72.1.** `npm test` **341/341**, `tsc`, `lint`, audit prod
+> **0 erreur / 0 avertissement**, quatre e2e navigateur verts.
+>
+> ⚠️ **Ce document a été écrit avant les deux derniers chantiers** (la vérification de
+> l'écran live, puis l'auto-inscription), qui ont occupé la fin de la nuit et ont donné
+> V2.72 et V2.72.1. Ils ont leur propre document, à lire ensuite :
+> **`RETOUR-auto-inscription.md`**, et le **§8** de
+> `RETOUR-competition-audit-et-simulation.md`. Le §5 ci-dessous a été remis à jour ; le
+> reste décrit la journée jusqu'au chantier compétition inclus.
 >
 > Ce document est le résumé d'ensemble. Chaque chantier a son propre document détaillé, cité
 > au passage — **je ne les recopie pas ici**, c'est le piège des mémoires datées qui
@@ -195,13 +202,18 @@ chacun, par ordre d'importance décroissante.
 
 ## §5 — Ce qui reste ouvert
 
-0. 🟠 **Le départage des ex æquo (`9716f72`) et le correctif du mode officiel (`4f0eb5e`) sont
-   commités, poussés, mais NI bumpés NI déployés** — les deux sont visibles des grimpeurs
-   (positions du classement, message d'annonce publié), donc une entrée de changelog et une
-   décision de déploiement. ⚠️ **Et une tâche qui n'est pas du code : annoncer la règle de
-   départage aux grimpeurs AVANT l'épreuve.** Elle s'appuie sur les cotations, **cachées
-   pendant la compétition** : personne ne peut l'anticiper, ce qui est sain, mais celui qui
-   perd dessus sans l'avoir entendue avant croira à une règle inventée après coup.
+0. 🟠 **Une seule tâche, et elle n'est pas du code : annoncer la règle de départage aux
+   grimpeurs AVANT l'épreuve.** Elle s'appuie sur les cotations, **cachées pendant la
+   compétition** : personne ne peut l'anticiper, ce qui est sain, mais celui qui perd dessus
+   sans l'avoir entendue avant croira à une règle inventée après coup. Le texte est prêt —
+   c'est l'entrée de changelog V2.72 — mais **le bandeau « Quoi de neuf ? » ne remplace pas
+   une annonce.** (Le départage et le correctif du mode officiel, qui attendaient une
+   décision de déploiement quand ce document a été écrit, sont déployés depuis : V2.72.)
+0 bis. **La composition des messages d'annonce** (`AdminCompetitionStats`) n'est couverte par
+   aucun test : elle est en ligne dans le composant, hors de portée de `npm test`. C'est là
+   qu'est né le défaut du mode officiel, et le test ajouté verrouille l'assistant, **pas
+   l'appel**. Extraction en fonction pure proposée — voir §7.4 de
+   `RETOUR-competition-audit-et-simulation.md` et §6 de `RETOUR-auto-inscription.md`.
 1. **Contexte unique des rôles** — `Navbar`, `ProtectedRoute` et `Home` décident chacun de leur
    côté (ou pas du tout) quels sont les rôles d'un utilisateur. 🗓️ **À faire AVEC le chantier
    « droits d'accès, rôle ouvreur trop large »**, en attente du gérant. Statut « pas
