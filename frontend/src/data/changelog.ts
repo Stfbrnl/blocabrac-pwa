@@ -13,6 +13,18 @@ export interface ChangelogEntry {
 // les commits git.
 export const changelog: ChangelogEntry[] = [
   {
+    version: '2.72',
+    date: '2026-10-03',
+    title: 'En compétition, les points égaux sont départagés',
+    items: [
+      'En cas d\'égalité de points, le classement regarde d\'abord le bloc le plus dur que vous avez réussi, puis votre nombre d\'essais sur ce bloc, puis le deuxième bloc le plus dur, et ainsi de suite. Celui qui a un bloc de plus passe devant à égalité par ailleurs.',
+      'Si tout est identique, les grimpeurs sont déclarés ex æquo et partagent leur place : le classement affiche alors deux fois la même position, comme dans une compétition officielle.',
+      'Ce départage s\'appuie sur la cotation des blocs, cachée pendant l\'épreuve : il ne se joue pas, il se constate à la fin.',
+      'Vous pouvez désormais vous inscrire à une compétition à venir, et plus seulement à une compétition déjà commencée.',
+      'Sur l\'écran de classement diffusé dans la salle, votre nom et votre catégorie d\'âge s\'affichent correctement quand vous vous êtes inscrit vous-même.',
+    ],
+  },
+  {
     version: '2.71.4',
     date: '2026-10-02',
     title: 'Votre score ne peut plus rester en arrière',
