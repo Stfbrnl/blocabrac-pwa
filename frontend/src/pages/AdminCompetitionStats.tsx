@@ -7,6 +7,7 @@ import {
 } from '@mui/material';
 import { collection, query, where, getDocs, addDoc } from 'firebase/firestore';
 import { db } from '../services/firebaseConfig';
+import { buildPointsAnnouncement, buildOfficialAnnouncement, announcementTitle } from '../utils/competitionAnnouncement';
 import { getSeasonAge, getFfmeCategory, OPEN_CATEGORY } from '../utils/ageCategory';
 // ✅ Extrait dans competitionClassement.ts (docs/plans/CONCEPTION-ecran-live-competition.md §1) :
 // ce calcul existait en double avec Ouvreur/CompetitionBoulders/CompetitionStats.tsx.
@@ -14,7 +15,6 @@ import {
   getClassementByCategory as computeClassementByCategory,
   getOfficialClassementByCategory as computeOfficialClassementByCategory,
   rankOfficialEntries,
-  rankedOfficialEntries,
   rankedEntries,
   type ScoreEntry,
   type OfficialScoreEntry,
@@ -263,63 +263,33 @@ const AdminCompetitionStats: React.FC = () => {
   };
 
   const generateClassementMessage = () => {
-    // ✅ Pas de markdown (**gras**) : ce texte est publié tel quel dans le bandeau
-    // d'annonces (AnnouncementBanner.tsx), qui affiche du texte brut, pas du markdown.
+    // ✅ La composition vit dans `utils/competitionAnnouncement.ts`, et plus ici.
+    //
+    // ⚠️ POURQUOI : ce message est PUBLIÉ aux grimpeurs, et composé en ligne dans ce
+    // composant il était hors de portée de `npm test` (le dépôt n'a pas de harnais React).
+    // C'est exactement là qu'un défaut est né — la branche du mode officiel numérotait
+    // 1, 2, 3 alors que les tableaux à l'écran partageaient déjà les rangs 1, 1, 3 —, et il a
+    // fallu le trouver en lisant. Règle générale, retour de ClaudeNav : **tout artefact
+    // destiné à sortir de l'application se compose dans une fonction pure.**
     const competition = competitions.find(c => c.id === selectedCompetition);
-    let message = `🏆 Classement ${OPEN_CATEGORY} - ${competition?.name} 🏆\n\n`;
-
-    if (isOfficialMode) {
-      // ✅ Mode "Officiel" : pas de points, ligne "tops/zones/essais" à la place.
-      const officialLine = (item: OfficialScoreEntry<Participant>) =>
-        `${item.participant.first_name} ${item.participant.last_name} - ${item.totals.tops} tops, ${item.totals.zones} zones (${item.totals.attemptsToTop} essais top, ${item.totals.attemptsToZone} essais zone)`;
-      // ⚠️ Mêmes rangs partagés que les tableaux à l'écran (1, 1, 3), comme pour les
-      // modes à points juste en dessous : jusqu'au 03/10/2026 cette branche numérotait
-      // en `index + 1` et contredisait donc l'écran — et précisément dans le mode où
-      // une égalité parfaite au rang 1 est un cas prévu, qui déclenche la super-finale.
-      rankedOfficialEntries(getOfficialClassementByCategory('global')).forEach(({ entry: item, rank }) => {
-        message += `${rank}. ${officialLine(item)}\n`;
-      });
-      message += `\n📊 Classement par âge :\n`;
-      getOfficialClassementByCategory('age').forEach(category => {
-        message += `\n${category.category} :\n`;
-        rankedOfficialEntries(category.participants).forEach(({ entry: item, rank }) => {
-          message += `${rank}. ${officialLine(item)}\n`;
-        });
-      });
-      message += `\n📊 Classement par genre :\n`;
-      getOfficialClassementByCategory('gender').forEach(gender => {
-        message += `\n${gender.category} :\n`;
-        rankedOfficialEntries(gender.participants).forEach(({ entry: item, rank }) => {
-          message += `${rank}. ${officialLine(item)}\n`;
-        });
-      });
-    } else {
-      // ⚠️ Les mêmes rangs que les tableaux ci-dessous, départage compris : une annonce
-      // publiée aux grimpeurs qui numéroterait autrement que l'écran serait la pire des
-      // incohérences possibles sur ce sujet.
-      rankedEntries(getClassementByCategory('global')).forEach(({ entry: item, rank }) => {
-        message += `${rank}. ${item.participant.first_name} ${item.participant.last_name} - ${item.score} pts (${item.boulders} blocs validés)\n`;
+    const nomCompetition = competition?.name || '';
+    const message = isOfficialMode
+      ? buildOfficialAnnouncement({
+        competitionName: nomCompetition,
+        openLabel: OPEN_CATEGORY,
+        global: getOfficialClassementByCategory('global'),
+        byAge: getOfficialClassementByCategory('age'),
+        byGender: getOfficialClassementByCategory('gender'),
+      })
+      : buildPointsAnnouncement({
+        competitionName: nomCompetition,
+        openLabel: OPEN_CATEGORY,
+        global: getClassementByCategory('global'),
+        byAge: getClassementByCategory('age'),
+        byGender: getClassementByCategory('gender'),
       });
 
-      // ✅ Ajouter les classements par âge et genre
-      message += `\n📊 Classement par âge :\n`;
-      getClassementByCategory('age').forEach(category => {
-        message += `\n${category.category} :\n`;
-        rankedEntries(category.participants).forEach(({ entry: item, rank }) => {
-          message += `${rank}. ${item.participant.first_name} ${item.participant.last_name} - ${item.score} pts\n`;
-        });
-      });
-
-      message += `\n📊 Classement par genre :\n`;
-      getClassementByCategory('gender').forEach(gender => {
-        message += `\n${gender.category} :\n`;
-        rankedEntries(gender.participants).forEach(({ entry: item, rank }) => {
-          message += `${rank}. ${item.participant.first_name} ${item.participant.last_name} - ${item.score} pts\n`;
-        });
-      });
-    }
-
-    setMessageTitle(`Classement - ${competition?.name}`);
+    setMessageTitle(announcementTitle(nomCompetition));
     setMessageContent(message);
     setOpenPublishDialog(true);
   };
