@@ -74,10 +74,12 @@ async function main() {
     db.collection('boulders').get(),
   ]);
 
-  // Participations de compétition : voir la section « identité dénormalisée » plus bas.
-  const [participantsSnap, competitionsSnap] = await Promise.all([
+  // Participations et résultats de compétition : voir la section « identité dénormalisée »
+  // plus bas.
+  const [participantsSnap, competitionsSnap, compResultsSnap] = await Promise.all([
     db.collection('competition_participants').get(),
     db.collection('competitions').get(),
+    db.collection('competition_results').get(),
   ]);
 
   const badges = badgesSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -243,6 +245,26 @@ async function main() {
     `Participations : ${participantsSnap.size} sur ${competitionsSnap.size} compétition(s)`
     + `${lacunesDeCompte > 0 ? `, dont ${lacunesDeCompte} limitée(s) par une lacune du compte (normal)` : ''}`
   );
+
+  // competition_results -> competitions. Même raisonnement que pour les participations : ce
+  // contrôle n'est ajouté qu'APRÈS nettoyage. Il existait un résultat orphelin en production
+  // (`comp_test_20260521`, un test de mai 2026 : compétition absente, bloc absent, et
+  // l'ancien schéma `participant_id`/`completed_at` d'avant la réindexation), supprimé le
+  // 03/10/2026 sur décision de l'utilisateur — sans quoi ce contrôle serait né rouge.
+  // Un résultat dont la compétition a disparu n'est lu par aucun écran (tous interrogent
+  // `competition_results` par `competition_id`), mais il fausserait tout décompte global et
+  // signale un geste de suppression incomplet.
+  const resultatsOrphelins = compResultsSnap.docs.filter((d) => {
+    const id = d.data().competition_id;
+    return id && !competitionIds.has(id);
+  });
+  for (const d of resultatsOrphelins.slice(0, 10)) {
+    errors.push(`competition_results/${d.id} pointe vers une compétition absente : "${d.data().competition_id}".`);
+  }
+  if (resultatsOrphelins.length > 10) {
+    errors.push(`… et ${resultatsOrphelins.length - 10} autre(s) résultat(s) de compétition orphelin(s).`);
+  }
+  console.log(`Résultats de compétition : ${compResultsSnap.size}, ${resultatsOrphelins.length} orphelin(s)`);
 
   // Fenêtre de saison.
   if (!seasonSnap.exists) {

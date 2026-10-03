@@ -11,6 +11,7 @@ import { Delete as DeleteIcon, Edit as EditIcon, Add as AddIcon, Tune as TuneIco
 import { db } from '../services/firebaseConfig';
 import { collection, addDoc, getDocs, getDoc, doc, setDoc, updateDoc, deleteDoc, deleteField } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
+import { buildCompetitionParticipant, competitionParticipantId } from '../utils/competitionParticipant';
 import { basePoints, deductions, type ScoringMode, type CustomScoringTable } from '../utils/climbingPoints';
 
 type CompetitionStatus = 'à venir' | 'en cours' | 'terminée' | 'annulée';
@@ -334,19 +335,12 @@ const AdminCompetitionManagement: React.FC = () => {
         // (`AdminCompetitionRegistration.tsx`), qui ne s'exécute qu'après un clic sur un
         // utilisateur déjà affiché avec ses champs résolus. `?? null` couvre ce cas
         // et tout autre champ optionnel absent sur un compte plus ancien.
-        await setDoc(doc(db, 'competition_participants', `${uid}_${competition.id}`), {
-          user_id: uid,
-          competition_id: competition.id,
-          email: user.email ?? null,
-          first_name: user.first_name ?? null,
-          last_name: user.last_name ?? null,
-          age: user.age ?? null,
-          dateOfBirth: user.dateOfBirth ?? null,
-          gender: user.gender ?? null,
-          level: user.level ?? null,
-          registered_at: new Date().toISOString(),
-          is_client: user.roles?.includes('client') ?? true,
-        });
+        await setDoc(
+          doc(db, 'competition_participants', competitionParticipantId(uid, competition.id)),
+          // `legacyAge: user.age` : le champ Firestore s'appelle `age`, et le type local de
+          // cet écran le nomme encore ainsi — voir l'en-tête de competitionParticipant.ts.
+          buildCompetitionParticipant({ ...user, uid, legacyAge: user.age }, competition.id)
+        );
         added += 1;
       }
 

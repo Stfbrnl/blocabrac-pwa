@@ -8,6 +8,7 @@ import {
 import { CheckCircle, RadioButtonUnchecked } from '@mui/icons-material';
 import { db } from '../services/firebaseConfig';
 import { collection, doc, getDoc, getDocs, query, where, setDoc, writeBatch } from 'firebase/firestore';
+import { competitionParticipantId } from '../utils/competitionParticipant';
 import { applyCompetitionValidationUpdate, type CompetitionValidationState } from '../utils/competitionValidation';
 
 // ✅ Écran juge (docs/plans/ADDENDUM-mode-ffme-finale-annee.md §3) : pour le format "Finale de
@@ -219,7 +220,10 @@ const CompetitionJudgeEntry: React.FC = () => {
       const batch = writeBatch(db);
       const now = new Date().toISOString();
       participants.forEach(p => {
-        batch.set(doc(db, 'competition_participants', `${p.user_id}_${competitionId}`), {
+        // ✅ Verrouillage seul, en `merge` : aucun champ d'identité touché, donc pas de
+        // passage par `buildCompetitionParticipant` (qui ne sert qu'à la CRÉATION).
+        // L'identifiant, lui, vient de l'assistant partagé : firestore.rules en dépend.
+        batch.set(doc(db, 'competition_participants', competitionParticipantId(p.user_id, competitionId)), {
           submitted: true,
           submitted_at: now,
         }, { merge: true });

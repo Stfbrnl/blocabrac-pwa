@@ -18,6 +18,7 @@ import { calculateCompetitionPoints, type ScoringMode, type CustomScoringTable }
 import { applyCompetitionValidationUpdate } from '../../../utils/competitionValidation';
 import { logoPath } from '../../../config/gymConfig';
 import { getBoulderImageUrl } from '../../../services/imageStorage';
+import { buildCompetitionParticipant, competitionParticipantId } from '../../../utils/competitionParticipant';
 
 const levelColors: Record<string, string> = {
   jaune: '#FFFF00',
@@ -43,6 +44,10 @@ interface ClientUserDoc extends RegistrableUser {
   dateOfBirth?: string;
   age?: number;
   gender?: string;
+  // Fusion `roles` + `role` legacy : `buildCompetitionParticipant` en déduit `is_client`,
+  // et la règle du projet est de ne jamais tester le seul champ scalaire.
+  roles?: string[];
+  role?: string;
 }
 
 interface Competition {
@@ -331,7 +336,7 @@ const ClientCompetitions: React.FC = () => {
   // non supportée dans les règles. Suppose la migration
   // firestore-migration/rekey-competition-participants.js déjà passée.
   const participationDocRef = (competitionId: string) =>
-    doc(db, 'competition_participants', `${user!.uid}_${competitionId}`);
+    doc(db, 'competition_participants', competitionParticipantId(user!.uid, competitionId));
 
   // ✅ 1.3 — Reprise après rechargement : préremplit validationResults à partir
   // des résultats déjà écrits par ce grimpeur pour cette compétition, pour que
@@ -468,25 +473,28 @@ const ClientCompetitions: React.FC = () => {
       //      découpage `displayName.split(' ')` écrivait donc des noms VIDES, et l'écran
       //      live de compétition affichait des lignes sans nom.
       //   ② `dateOfBirth`/`gender`/`level` n'étaient pas écrits du tout, alors que
-      //      `AdminCompetitionLiveDisplay` les lit UNIQUEMENT ici, sans repli sur `users` :
-      //      tout grimpeur inscrit par lui-même atterrissait dans la catégorie « Inconnu »
-      //      sur la télévision, et la rotation par catégorie d'âge dégénérait en une page.
+      //      `AdminCompetitionLiveDisplay` les lit en priorité ici : tout grimpeur inscrit
+      //      par lui-même atterrissait dans la catégorie « Inconnu » sur la télévision, et
+      //      la rotation par catégorie d'âge dégénérait en une page.
       //
-      // Mêmes champs, et même `?? null` que « Générer le roster » : Firestore refuse
-      // `undefined` dans un setDoc, et un compte ancien peut n'avoir ni date ni genre.
-      await setDoc(participationRef, {
-        user_id: user.uid,
-        competition_id: competition.id,
-        email: currentUserDoc?.email ?? user.email ?? null,
-        first_name: currentUserDoc?.first_name ?? null,
-        last_name: currentUserDoc?.last_name ?? null,
-        age: currentUserDoc?.age ?? null,
-        dateOfBirth: currentUserDoc?.dateOfBirth ?? null,
-        gender: currentUserDoc?.gender ?? null,
-        level: currentUserDoc?.level ?? null,
-        registered_at: new Date().toISOString(),
-        is_client: true
-      });
+      // La composition passe par `buildCompetitionParticipant`, le SEUL endroit où ce
+      // document s'écrit — voir son en-tête : trois chemins d'inscription avaient trois
+      // contrats différents, et c'est la troisième fois que ce projet paie ce motif.
+      await setDoc(participationRef, buildCompetitionParticipant(
+        {
+          uid: user.uid,
+          email: currentUserDoc?.email ?? user.email,
+          first_name: currentUserDoc?.first_name,
+          last_name: currentUserDoc?.last_name,
+          dateOfBirth: currentUserDoc?.dateOfBirth,
+          legacyAge: currentUserDoc?.age,
+          gender: currentUserDoc?.gender,
+          level: currentUserDoc?.level,
+          roles: currentUserDoc?.roles,
+          role: currentUserDoc?.role,
+        },
+        competition.id
+      ));
 
       await updateDoc(doc(db, 'competitions', competition.id), {
         // ✅ increment() plutôt qu'une lecture-puis-écriture côté client : évite une

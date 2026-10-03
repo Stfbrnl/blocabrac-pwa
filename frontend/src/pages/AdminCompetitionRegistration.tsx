@@ -8,6 +8,7 @@ import {
 import { db } from '../services/firebaseConfig';
 import { collection, getDocs, doc, setDoc, deleteDoc, query, where, updateDoc } from 'firebase/firestore';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { buildCompetitionParticipant, competitionParticipantId } from '../utils/competitionParticipant';
 import { type Level, canUserRegister } from '../utils/competitionEligibility';
 import { getSeasonAge } from '../utils/ageCategory';
 
@@ -257,19 +258,10 @@ const AdminCompetitionRegistration: React.FC = () => {
       // bug trouvé par l'e2e dans AdminCompetitionManagement.tsx) : un `users.age`
       // absent produit `undefined`, que Firestore refuse dans un `setDoc` — l'échec se
       // manifeste au moment d'inscrire quelqu'un, donc en salle.
-      await setDoc(doc(db, 'competition_participants', `${user.uid}_${selectedCompetition.id}`), {
-        user_id: user.uid,
-        competition_id: selectedCompetition.id,
-        email: user.email ?? null,
-        first_name: user.first_name ?? null,
-        last_name: user.last_name ?? null,
-        age: user.legacyAge ?? null,
-        dateOfBirth: user.dateOfBirth ?? null,
-        gender: user.gender ?? null,
-        level: user.level ?? null,
-        registered_at: new Date().toISOString(),
-        is_client: user.roles?.includes('client') ?? true
-      });
+      await setDoc(
+        doc(db, 'competition_participants', competitionParticipantId(user.uid, selectedCompetition.id)),
+        buildCompetitionParticipant({ ...user, uid: user.uid }, selectedCompetition.id)
+      );
 
       await updateDoc(doc(db, 'competitions', selectedCompetition.id), {
         registered_count: selectedCompetition.registered_count + 1
