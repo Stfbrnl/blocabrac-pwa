@@ -41,9 +41,18 @@ async function main() {
   const boulder = await db.collection('boulders').add({
     type: 'daily', is_active: true, wall: 'Dalle', color: 'bleu', number: 42,
   });
+  // ⚠️ DEUX blocs, et le second existe pour une raison précise : il fait rendre le Select
+  // « Nombre d'essais » de ClientCourseSession.tsx DEUX FOIS sur le même écran. C'est la
+  // seule façon de donner un sujet à la vérification des identifiants dupliqués de
+  // test/assertNoOrphanLabels.mjs — avec un seul bloc, un identifiant figé dans la boucle de
+  // rendu ne produirait aucun doublon et le filet resterait vert sans rien avoir vérifié.
+  // Voir docs/handoffs/RETOUR-labels-apres-dom.md §4.
+  const boulder2 = await db.collection('boulders').add({
+    type: 'daily', is_active: true, wall: 'Dalle', color: 'rouge', number: 43,
+  });
 
   const miniCompetition = await db.collection('mini_competitions').add({
-    name: 'Mini-compét E2E', boulderIds: [boulder.id],
+    name: 'Mini-compét E2E', boulderIds: [boulder.id, boulder2.id],
   });
 
   console.log('SEED_OK', JSON.stringify({

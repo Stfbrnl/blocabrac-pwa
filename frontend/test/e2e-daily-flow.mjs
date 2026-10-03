@@ -12,6 +12,7 @@ import { chromium } from 'playwright';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import admin from 'firebase-admin';
+import { assertNoOrphanLabels } from './assertNoOrphanLabels.mjs';
 
 process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8080';
 process.env.FIREBASE_AUTH_EMULATOR_HOST = 'localhost:9099';
@@ -214,6 +215,25 @@ async function main() {
     await ouvreurP.waitForTimeout(1000);
     const resolvedChip = row.getByText('resolved', { exact: false });
     assert(await resolvedChip.isVisible().catch(() => false), 'Le signalement doit passer au statut "resolved"');
+  });
+
+  // ✅ PLAN-labels-non-associes.md §4.1 : le filet contre les libellés non associés, posé sur
+  // le rendu réel et non sur les sources — MUI génère le balisage, un balayage statique ne le
+  // montre pas. Spécification dans test/assertNoOrphanLabels.mjs (elle accepte
+  // `aria-labelledby`, sans quoi elle serait rouge sur les 73 libellés corrects du dépôt).
+  // À reproduire dans les autres e2e, sur chaque écran visité.
+  await step('Filet libellés : aucun libellé orphelin sur les écrans parcourus', async () => {
+    await assertNoOrphanLabels(ouvreurP, 'Ouvreur — blocs quotidiens, onglet Signalements');
+    await ouvreurP.goto(`${BASE_URL}/ouvreur/daily-boulders/${encodeURIComponent(WALL)}`);
+    await ouvreurP.getByRole('heading', { name: 'Créer un bloc quotidien' }).waitFor({ timeout: 10000 });
+    await assertNoOrphanLabels(ouvreurP, 'Ouvreur — formulaire de création de bloc');
+
+    await assertNoOrphanLabels(clientP, 'Client — écran courant');
+    // ClientProfile porte les deux libellés corrigés ce jour (« Genre », « Niveau en salle »).
+    await gotoAndWait(clientP, '/client/profile', 'Modifier mes informations');
+    await assertNoOrphanLabels(clientP, 'Client — modifier mes informations');
+    await gotoAndWait(clientP, '/client/daily', 'Mon Blocabrac quotidien');
+    await assertNoOrphanLabels(clientP, 'Client — Blocabrac quotidien');
   });
 
   await browser.close();

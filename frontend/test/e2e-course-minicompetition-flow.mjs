@@ -6,6 +6,7 @@
 // émulateurs locaux, jamais la production. Prérequis : seed-course-minicompetition.mjs.
 import { chromium } from 'playwright';
 import admin from 'firebase-admin';
+import { assertNoOrphanLabels } from './assertNoOrphanLabels.mjs';
 
 process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8080';
 process.env.FIREBASE_AUTH_EMULATOR_HOST = 'localhost:9099';
@@ -97,6 +98,13 @@ async function main() {
     // "Réussi" ci-dessus, toujours immédiat).
     await boulderCard.locator('div[role="combobox"]', { hasText: /essai/ }).click();
     await client.getByRole('option', { name: '3 essais', exact: true }).click();
+
+    // ✅ PLAN-labels-non-associes.md §4.1 — posé ICI précisément : cet écran rend ses Select
+    // d'essais À L'INTÉRIEUR de boucles (une par exercice, une par bloc de mini-compétition),
+    // donc c'est le seul où la vérification des identifiants dupliqués de l'assertion a un
+    // sujet. Un identifiant figé dans ces boucles passerait les deux signalements de Chrome
+    // sans être vu. Voir docs/handoffs/RETOUR-labels-apres-dom.md §4.
+    await assertNoOrphanLabels(client, 'Client — séance de cours (exercices + mini-compétition)');
   });
 
   await step('Backend : le résultat du bloc de mini-compétition est bien écrit (file "blocs", pas seulement "exercices")', async () => {
