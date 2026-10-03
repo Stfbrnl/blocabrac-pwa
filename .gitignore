@@ -43,3 +43,4 @@ scripts/serviceAccountKey.json
 
 # Attendu calculé par test/seed-competition-simulation.mjs, relu par son e2e (jamais versionné)
 frontend/test/.simulation-attendu.json
+frontend/test/.inscription-attendu.json
