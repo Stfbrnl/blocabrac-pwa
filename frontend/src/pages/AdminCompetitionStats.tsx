@@ -14,6 +14,7 @@ import {
   getClassementByCategory as computeClassementByCategory,
   getOfficialClassementByCategory as computeOfficialClassementByCategory,
   rankOfficialEntries,
+  rankedOfficialEntries,
   rankedEntries,
   type ScoreEntry,
   type OfficialScoreEntry,
@@ -271,21 +272,25 @@ const AdminCompetitionStats: React.FC = () => {
       // ✅ Mode "Officiel" : pas de points, ligne "tops/zones/essais" à la place.
       const officialLine = (item: OfficialScoreEntry<Participant>) =>
         `${item.participant.first_name} ${item.participant.last_name} - ${item.totals.tops} tops, ${item.totals.zones} zones (${item.totals.attemptsToTop} essais top, ${item.totals.attemptsToZone} essais zone)`;
-      getOfficialClassementByCategory('global').forEach((item, index) => {
-        message += `${index + 1}. ${officialLine(item)}\n`;
+      // ⚠️ Mêmes rangs partagés que les tableaux à l'écran (1, 1, 3), comme pour les
+      // modes à points juste en dessous : jusqu'au 03/10/2026 cette branche numérotait
+      // en `index + 1` et contredisait donc l'écran — et précisément dans le mode où
+      // une égalité parfaite au rang 1 est un cas prévu, qui déclenche la super-finale.
+      rankedOfficialEntries(getOfficialClassementByCategory('global')).forEach(({ entry: item, rank }) => {
+        message += `${rank}. ${officialLine(item)}\n`;
       });
       message += `\n📊 Classement par âge :\n`;
       getOfficialClassementByCategory('age').forEach(category => {
         message += `\n${category.category} :\n`;
-        category.participants.forEach((item, index) => {
-          message += `${index + 1}. ${officialLine(item)}\n`;
+        rankedOfficialEntries(category.participants).forEach(({ entry: item, rank }) => {
+          message += `${rank}. ${officialLine(item)}\n`;
         });
       });
       message += `\n📊 Classement par genre :\n`;
       getOfficialClassementByCategory('gender').forEach(gender => {
         message += `\n${gender.category} :\n`;
-        gender.participants.forEach((item, index) => {
-          message += `${index + 1}. ${officialLine(item)}\n`;
+        rankedOfficialEntries(gender.participants).forEach(({ entry: item, rank }) => {
+          message += `${rank}. ${officialLine(item)}\n`;
         });
       });
     } else {

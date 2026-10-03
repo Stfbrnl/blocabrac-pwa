@@ -388,6 +388,38 @@ describe('Départage des ex æquo à points égaux', () => {
     expect(open[0].tieBreak[0].hardness).toBe(fort.points_value);
   });
 
+  it('mode "personnalisé" : la difficulté est la base du barème de la compétition, pas l\'ordre des couleurs', () => {
+    // Le seul des trois modes à points où la dureté peut s'inverser par rapport à l'ordre
+    // habituel des couleurs : la salle fixe librement une base par couleur. Ici un bleu
+    // vaut plus qu'un blanc. Le départage doit suivre le barème, jamais `levelOrder`.
+    const bareme = {
+      blanc: { base: 100, deduction: 0 },
+      bleu: { base: 900, deduction: 0 },
+    };
+    const open = getClassementByCategory(
+      [res('u0', unBloc('blanc'), 1), res('u1', unBloc('bleu'), 1)],
+      participants, blocs, 'global', 'personnalise', bareme
+    );
+    expect(open[0].participant.user_id, 'le bleu à 900 devant le blanc à 100').toBe('u1');
+    expect(open[0].tieBreak[0].hardness).toBe(900);
+    expect(open[1].tieBreak[0].hardness).toBe(100);
+  });
+
+  it('mode "personnalisé" : une couleur absente du barème pèse 0 dans le départage, comme dans le score', () => {
+    // `calculateCompetitionPoints` renvoie 0 pour une couleur absente du barème. Le départage
+    // hérite donc de la même valeur : deux blocs hors barème sont indistinguables en dureté
+    // et c'est le nombre d'essais qui tranche. Conséquence assumée, pas un cas oublié — et
+    // c'est pourquoi `defaultCustomScoring()` préremplit les huit couleurs.
+    const bareme = { violet: { base: 500, deduction: 0 } };
+    const open = getClassementByCategory(
+      [res('u0', unBloc('blanc'), 3), res('u1', unBloc('noir'), 2)],
+      participants, blocs, 'global', 'personnalise', bareme
+    );
+    expect(open.map((e) => e.score), 'hors barème : 0 point de part et d\'autre').toEqual([0, 0]);
+    expect(open.map((e) => e.tieBreak[0].hardness)).toEqual([0, 0]);
+    expect(open[0].participant.user_id, 'à dureté nulle égale, le moins d\'essais devant').toBe('u1');
+  });
+
   it('⚠️ le rang d\'un grimpeur ne dépend plus de l\'ordre d\'écriture des résultats', () => {
     // C'est LA propriété que ce chantier apporte : avant le 03/10/2026, à points égaux,
     // l'ordre affiché venait de l'ordre lexicographique des identifiants de documents, donc

@@ -5,6 +5,7 @@ import {
   getOfficialParticipantTotals,
   getOfficialClassementByCategory,
   rankOfficialEntries,
+  rankedOfficialEntries,
   type ParticipantBase,
 } from './competitionClassement';
 
@@ -258,6 +259,25 @@ describe('rankOfficialEntries (§B.4 : égalités massives sur l\'écran live)',
     ];
     const totals = getOfficialParticipantTotals(results, [alice, bob, carol]);
     expect(rankOfficialEntries(totals)).toEqual([1, 1, 3]);
+  });
+
+  // ⚠️ Le message d'annonce publié aux grimpeurs numérotait le mode officiel en
+  // `index + 1` jusqu'au 03/10/2026 : il annonçait donc 1, 2, 3 là où l'écran affichait
+  // 1, 1, 3. Trouvé en vérifiant que le départage des modes à points couvrait bien les
+  // quatre formats. `rankedOfficialEntries` est désormais la seule source des rangs
+  // annoncés, et elle doit donner exactement ceux de `rankOfficialEntries`.
+  it('rankedOfficialEntries apparie les mêmes rangs partagés que rankOfficialEntries', () => {
+    const results = [
+      { user_id: 'alice', boulder_id: 'b1', success: true, attempts: 1, zone: true, attempts_to_zone: 1 },
+      { user_id: 'bob', boulder_id: 'b1', success: true, attempts: 1, zone: true, attempts_to_zone: 1 },
+      { user_id: 'carol', boulder_id: 'b1', success: false, attempts: 5, zone: true, attempts_to_zone: 3 },
+    ];
+    const totals = getOfficialParticipantTotals(results, [alice, bob, carol]);
+    const apparie = rankedOfficialEntries(totals);
+    expect(apparie.map((r) => r.rank)).toEqual(rankOfficialEntries(totals));
+    expect(apparie.map((r) => r.rank), 'un ex æquo annoncé 1, 2 serait un démenti de l\'écran')
+      .toEqual([1, 1, 3]);
+    expect(apparie.map((r) => r.entry.participant.user_id)).toEqual(['alice', 'bob', 'carol']);
   });
 });
 

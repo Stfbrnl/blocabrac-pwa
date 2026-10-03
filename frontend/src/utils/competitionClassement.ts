@@ -307,6 +307,23 @@ export const rankOfficialEntries = <P extends ParticipantBase>(entries: Official
   return ranks;
 };
 
+/**
+ * Pendant officiel de `rankedEntries`, et pour la même raison.
+ *
+ * Ajouté le 03/10/2026 : le message d'annonce publié aux grimpeurs numérotait encore
+ * le mode officiel en `index + 1` alors que les tableaux à l'écran partageaient déjà
+ * les rangs (1, 1, 3). L'annonce contredisait donc l'écran exactement là où une
+ * égalité parfaite au rang 1 est un cas prévu — c'est elle qui déclenche la
+ * super-finale. Tout affichage d'un rang en mode officiel passe par cet assistant
+ * ou par `rankOfficialEntries`, jamais par `index + 1`.
+ */
+export const rankedOfficialEntries = <P extends ParticipantBase>(
+  entries: OfficialScoreEntry<P>[]
+): { entry: OfficialScoreEntry<P>; rank: number }[] => {
+  const ranks = rankOfficialEntries(entries);
+  return entries.map((entry, index) => ({ entry, rank: ranks[index] }));
+};
+
 export const getOfficialParticipantTotals = <P extends ParticipantBase>(
   results: CompetitionResultInput[],
   participants: P[]
