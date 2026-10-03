@@ -215,8 +215,10 @@ const ClientProfile: React.FC = () => {
           />
 
           <FormControl fullWidth margin="normal">
-            <InputLabel>Genre</InputLabel>
+            <InputLabel id="profil-genre-select-label">Genre</InputLabel>
             <Select
+              labelId="profil-genre-select-label"
+              id="profil-genre-select"
               value={userData.gender || ''}
               onChange={(e) => setUserData({ ...userData, gender: e.target.value })}
               label="Genre"
@@ -228,8 +230,10 @@ const ClientProfile: React.FC = () => {
           </FormControl>
 
           <FormControl fullWidth margin="normal">
-            <InputLabel>Niveau en salle</InputLabel>
+            <InputLabel id="profil-niveau-select-label">Niveau en salle</InputLabel>
             <Select
+              labelId="profil-niveau-select-label"
+              id="profil-niveau-select"
               value={userData.level || ''}
               onChange={(e) => setUserData({ ...userData, level: e.target.value })}
               label="Niveau en salle"

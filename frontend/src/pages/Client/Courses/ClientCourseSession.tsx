@@ -582,8 +582,16 @@ const ClientCourseSession: React.FC = () => {
                               </Button>
                             </Box>
                             <FormControl fullWidth sx={{ mb: 1 }}>
-                              <InputLabel>Nombre d'essais</InputLabel>
+                              {/* ⚠️ L'identifiant est dérivé d'`exercise.id` et non codé en
+                                  dur : ce bloc est rendu une fois PAR EXERCICE, donc un
+                                  identifiant fixe produirait N doublons et `aria-labelledby`
+                                  pointerait vers le premier pour toutes les lignes — un
+                                  défaut à la place d'un autre. Voir
+                                  docs/handoffs/RETOUR-labels-apres-dom.md §4. */}
+                              <InputLabel id={`essais-exercice-${exercise.id}-select-label`}>Nombre d'essais</InputLabel>
                               <Select
+                                labelId={`essais-exercice-${exercise.id}-select-label`}
+                                id={`essais-exercice-${exercise.id}-select`}
                                 value={result.attempts || 1}
                                 onChange={(e) => handleValidateExercise(exercise.id, 'attempts', e.target.value as number)}
                                 label="Nombre d'essais"
@@ -704,8 +712,14 @@ const ClientCourseSession: React.FC = () => {
                               </Button>
                             </Box>
                             <FormControl fullWidth sx={{ mb: 1 }}>
-                              <InputLabel>Nombre d'essais</InputLabel>
+                              {/* ⚠️ Même raison que pour les exercices : rendu une fois par
+                                  bloc, l'identifiant doit être unique. Il porte les deux
+                                  identifiants, un même bloc pouvant figurer dans deux
+                                  mini-compétitions de la même séance. */}
+                              <InputLabel id={`essais-bloc-${miniCompetition.id}-${boulder.id}-select-label`}>Nombre d'essais</InputLabel>
                               <Select
+                                labelId={`essais-bloc-${miniCompetition.id}-${boulder.id}-select-label`}
+                                id={`essais-bloc-${miniCompetition.id}-${boulder.id}-select`}
                                 value={result.attempts || 1}
                                 onChange={(e) => handleValidateBoulder(boulder.id, miniCompetition.id, boulder.color || '', 'attempts', e.target.value as number)}
                                 label="Nombre d'essais"
