@@ -58,6 +58,50 @@ le chantier reste justifié pour le multi-salles mais descend en priorité.
 
 ---
 
+### ✅ Mesures effectives (03/10/2026, 61 comptes — le plan en annonçait 28)
+
+⚠️ **La mesure « avant » n'a jamais été prise au moment prévu**, et la purge a été exécutée
+le 03/10 avant qu'on y pense. Elle n'était donc plus observable dans un navigateur. Elle a
+été **reconstituée au byte près** depuis `firestore-migration/dump-ludic-legacy-2026-10-02.json`,
+qui porte les valeurs exactes des champs supprimés. Script : `scripts/measure-users-collection.js`
+(lecture seule, `--avant <dump>`), sur le modèle de `measure-boulder-images.js` du chantier
+images. La leçon est celle du plan lui-même, prise à l'envers : **mesurer d'abord**.
+
+| Mesure | Valeur |
+|---|---|
+| Transfert réseau de la requête `users` (après) | **~10 Ko** pour 61 comptes |
+| Collection `users` en JSON côté serveur (après) | 19,29 Ko — 0,32 Ko/compte |
+| Idem, reconstitué avant la purge | 21,06 Ko — 0,35 Ko/compte |
+| Gain sur les copies figées | 1,76 Ko, soit **8,4 %** |
+| État ludique **vivant** (30 comptes sur 61) | 4,56 Ko — `wallCounts` 2,53 / `rouletteRecentChallenges` 1,89 |
+| Part qu'il représenterait aujourd'hui dans `users` | **19,1 %** |
+
+**Conclusion : le critère du §7 est rempli, et le seuil des 10 % du §1 n'est franchi que si
+l'on regarde le bon chiffre.** Les 8,4 % ne portent que sur des copies gelées depuis la
+passe C (12/09) ; le contrefactuel — ce que les quatre champs peseraient *aujourd'hui* s'ils
+étaient restés — donne 19,1 %, et c'est lui qui répond à la question posée. 30 comptes
+portent de l'état ludique vivant contre 16 qui portaient encore les copies legacy : la part
+supprimée est celle qui **croît avec l'usage**, pas avec le nombre de comptes. À 600 comptes,
+la part identité monterait mécaniquement vers 100 Ko par ouverture d'écran staff, et l'état
+ludique s'y serait ajouté par-dessus, sans plafond.
+
+**Sur l'instrument** (à relire avant toute mesure Firestore ultérieure) : DevTools est un
+mauvais instrument ici, parce que Firestore maintient **une connexion WebChannel longue
+durée** ouverte au démarrage — les documents arrivent sur ce flux déjà établi. Deux
+conséquences vérifiées en direct : il n'existe aucune ligne « requête users » à lire, et
+**vider le journal réseau avant de naviguer fait disparaître la ligne à observer** (relevé
+obtenu ainsi : 0,2 Ko, un artefact). La seule méthode qui fonctionne est le **delta du total
+transféré** avant/après navigation, journal non vidé. Le relevé à journal vide a néanmoins
+servi à écarter un doute : 0,2 Ko sur 14 requêtes prouve que le chunk `AdminUsers-*.js`
+(23,8 Ko brut) est servi par le service worker et non par le réseau — les 10 Ko sont donc
+bien du Firestore.
+
+Mesure 2 du §1 (taille d'un document dans la console Firebase) non faite : la répartition
+par champ du script la remplace, avec l'avantage de porter sur les 61 comptes et non sur un
+seul.
+
+---
+
 ## §2 — La cible
 
 ### Collection `user_ludic_state/{uid}`

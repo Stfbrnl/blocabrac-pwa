@@ -128,13 +128,38 @@ mois sans filet, qui était le risque de la V2.71.2.
 
 ---
 
-## §5 — Ce qui reste ouvert
+## §4 bis — La mesure du §7 est faite, et le bandeau de mise à jour est validé
 
-- 🟠 **La mesure du poids de la requête `users` dans `AdminUsers.tsx`.** C'était la
-  justification chiffrée de toute la migration ludique, et sans elle le gain est argumenté
-  mais pas démontré. L'utilisateur seul peut la faire, dans son navigateur, connecté en
-  admin. **Le chantier n'est pas « terminé » tant qu'elle manque** — c'est ta formulation et
-  elle reste juste, même maintenant que les champs sont partis.
+**Mesure.** Faite dans la journée, chiffres et méthode consignés dans
+`PLAN-etat-ludique-hors-users.md` §1. En résumé : **~10 Ko** de transfert réseau pour la
+requête `users` (61 comptes), 19,29 Ko de JSON côté serveur, et l'état ludique vivant
+représenterait **19,1 %** de cette charge s'il y était resté. Le gain mesuré sur les copies
+figées (8,4 %) passait sous le seuil des 10 % du plan, mais il ne portait que sur des valeurs
+gelées depuis la passe C — le contrefactuel est le bon chiffre, et il franchit le seuil.
+
+🔴 **Deux erreurs de méthode de ma part, qui valent plus que le résultat :**
+
+1. **La mesure « avant » n'a pas été prise avant la purge.** Le §1 du plan la demandait
+   explicitement et je l'ai lue après avoir purgé. Récupérée au byte près depuis la
+   sauvegarde — donc pas de perte — mais c'est de la chance, pas de la méthode.
+   `scripts/measure-users-collection.js` existe maintenant pour que ça ne se reproduise pas.
+2. **J'ai fait vider le journal réseau avant de naviguer**, ce qui supprime exactement la
+   ligne à observer : Firestore maintient une connexion WebChannel longue durée ouverte au
+   démarrage, et les documents arrivent sur ce flux déjà établi. Relevé obtenu : 0,2 Ko, un
+   artefact que j'ai failli prendre pour une mesure. La bonne méthode est le **delta du total
+   transféré**, journal non vidé. À retenir pour toute mesure Firestore future.
+
+**Bandeau de mise à jour (`registerType: 'prompt'`) : vérifié sur deux appareils.**
+L'utilisateur a fait la bascule 2.71.3 → 2.71.4 **par le bandeau**, sur son téléphone *et*
+sur son navigateur PC. C'est la vérification que `CLAUDE.md` attendait depuis V2.62 : le mode
+`prompt` avait été adopté parce que, sous `autoUpdate`, l'événement se déclenchait avant le
+montage du composant et le bandeau ne s'affichait jamais sur Android. La mention « jamais vu
+sur un vrai téléphone » peut tomber. Le compromis assumé s'est aussi vérifié dans l'autre
+sens : la mise à jour **avait attendu** — rien ne la force, elle a patienté jusqu'au clic.
+
+---
+
+## §5 — Ce qui reste ouvert
 - Le chemin d'échec de `useDebouncedFlushQueue` (§1), sans couverture.
 - `challenges.progress` : compteur incrémental avec ni filet ni remontée d'erreur, les deux
   à la fois depuis le 02/10. Ta réserve du `RETOUR-v2714` tient toujours.
