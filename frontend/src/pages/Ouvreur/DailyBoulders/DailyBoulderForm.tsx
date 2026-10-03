@@ -544,7 +544,16 @@ export default function DailyBoulderForm(): JSX.Element {
               sx={{ minWidth: 150 }}
             />
             <FormControl fullWidth disabled={isUploading} sx={{ minWidth: 200 }}>
-              <InputLabel id="cotation-select-label">Cotation</InputLabel>
+              {/* ⚠️ CONTRÔLE EN COURS (03/10/2026) — ne pas généraliser aux 76 autres
+                  `InputLabel` du dépôt avant que ce seul champ ait été vérifié dans un
+                  navigateur : le compte « No label associated » de cet écran doit passer de
+                  4 à 3. Voir docs/handoffs/ADDENDUM-labels-verifier-le-correctif.md §1.
+                  `htmlFor` est la quatrième propriété nécessaire : `labelId` ne pose
+                  qu'`aria-labelledby`, jamais l'attribut `for` que Chrome vérifie. Il pointe
+                  vers l'`id` du `Select`, lequel atterrit sur l'`<input>` caché (élément
+                  étiquetable) et non sur la div d'affichage — lu dans
+                  @mui/material v9.1.1, Select/SelectInput.js ligne 756. */}
+              <InputLabel id="cotation-select-label" htmlFor="cotation-select">Cotation</InputLabel>
               <Select
                 labelId="cotation-select-label" id="cotation-select"
                 value={formData.color}

@@ -7,8 +7,9 @@
 > **Cette inégalité est le diagnostic.** Le §1 explique pourquoi il ne faut surtout pas
 > inspecter les occurrences une à une.
 >
-> Priorité : **après** V2.71.4 et la purge. C'est de l'hygiène, avec un seul effet visible
-> (le §3.4). Mais c'est un bon candidat pour le même lot.
+> Priorité : **après** V2.71.4 et la purge. C'est de l'hygiène, **sans aucun effet visible**
+> pour l'utilisateur (le §3.4, qui en annonçait un, a été supprimé le 03/10). Mais c'est un
+> bon candidat pour le même lot.
 
 ---
 
@@ -73,8 +74,23 @@ Blocs quotidiens de la page Ouvreur. C'est lui que le §1 désigne.
   <Select labelId="couleur-label" id="couleur" label="Couleur">
 ```
 
-Les trois propriétés vont ensemble. `label` sur le `Select` est ce qui fait **découper
-l'encoche** du contour — c'est elle qui rend la rustine du §3.4 inutile.
+⚠️ **CES TROIS PROPRIÉTÉS NE SUFFISENT PAS, et elles sont déjà présentes partout dans ce
+dépôt** (voir `RETOUR-labels-non-associes.md` §6.1). `labelId` ne pose qu'`aria-labelledby` ;
+il ne produit **aucun attribut `for`** sur le `<label>`, et `for` est exactement ce que Chrome
+vérifie. Il faut une **quatrième** propriété, `htmlFor` sur l'`InputLabel`, pointant vers
+l'`id` du `Select` :
+
+```tsx
+<InputLabel id="couleur-label" htmlFor="couleur">Couleur</InputLabel>
+<Select labelId="couleur-label" id="couleur" label="Couleur">
+```
+
+Vérifié dans la source MUI installée (v9.1.1, `Select/SelectInput.js` ligne 756) plutôt que
+dans la documentation : l'`id` passé au `Select` atterrit sur l'`<input>` caché, qui est un
+élément étiquetable — donc `for` résout. L'élément d'affichage (ligne 735) ne prend son `id`
+que de `SelectDisplayProps.id` ou du `name`.
+
+`label` sur le `Select` reste ce qui fait **découper l'encoche** du contour.
 
 ### 3.2 — `InputLabel` + `OutlinedInput` / `Input`
 
@@ -87,15 +103,18 @@ l'encoche** du contour — c'est elle qui rend la rustine du §3.4 inutile.
 
 Soit `htmlFor` pointant vers l'`id` du champ, soit le champ imbriqué dans le libellé.
 
-### 3.4 — ⚠️ Et retirer les fonds blancs dans le même geste
+### 3.4 — ~~Retirer les fonds blancs~~ — **SUPPRIMÉ le 03/10/2026**
 
-Les deux `InputLabel` repérés hier portent `background-color: rgb(255,255,255)` **en dur**.
-La valeur calculée reste blanche **en thème sombre** : un rectangle blanc s'affiche derrière le
-texte du libellé. C'est le seul effet réellement visible de tout ce lot.
+Cette section demandait de retirer un `background-color: rgb(255,255,255)` codé en dur sur
+deux `InputLabel`, et la présentait comme le seul effet visible du lot. **Elle reposait sur un
+relevé mal identifié : il n'existe aucun fond blanc sur aucun libellé du dépôt** (0 occurrence
+sur l'ensemble des `.tsx`), et la rustine n'y a structurellement aucune raison d'exister
+puisque tous les `Select` portent déjà la prop `label`, donc que l'encoche est découpée
+partout. Retirée à la demande de ClaudeNav (`ADDENDUM-labels-verifier-le-correctif.md` §0),
+constat dans `RETOUR-labels-non-associes.md` §3.
 
-Une fois le câblage correct, l'encoche se découpe et **la rustine n'a plus d'objet** : la
-supprimer fait disparaître le rectangle. Ne pas se contenter de corriger le câblage en
-laissant le fond — il resterait visible.
+⚠️ **Conséquence : ce lot n'a aucun effet visible pour l'utilisateur.** C'est de l'hygiène et
+un filet, pas une amélioration perceptible — à dire avant, plutôt qu'à constater après.
 
 ### 3.5 — Les champs sans `id`/`name`
 
@@ -157,9 +176,14 @@ qu'elle signale bien les cas connus. Si elle n'en voit aucun, l'abandonner et s'
 1. L'assertion du §4.1 est **rouge** avant correction, sur le mur le plus fourni.
 2. Corrections appliquées.
 3. L'assertion passe au vert, et `npm test` / `npm run lint` restent verts.
-4. **Contrôle visuel en thème sombre** sur le formulaire concerné : plus de rectangle blanc.
-5. Rouvrir l'onglet Issues sur l'espace Blocs quotidiens, **sur le mur qui en comptait le
-   plus** : zéro signalement de libellé. C'est le contrôle qui parle à l'utilisateur.
+4. ~~Contrôle visuel en thème sombre~~ — **SUPPRIMÉ le 03/10/2026** avec le §3.4 : il n'y a
+   aucun rectangle blanc, donc rien à constater.
+5. Rouvrir l'onglet Issues sur l'espace Blocs quotidiens : **zéro signalement de type « No
+   label associated with a form field »**. Les signalements « should have an id or name »
+   restent, au nombre de deux : ils viennent du textarea fantôme de `TextareaAutosize`, rendu
+   par MUI en `aria-hidden`, hors de portée du dépôt — **déviation connue et documentée**,
+   même doctrine que les `KNOWN_EXCEPTIONS` de `audit-prod-catalog.js`. Viser zéro tout court
+   ferait échouer un chantier réussi.
 
 ---
 
