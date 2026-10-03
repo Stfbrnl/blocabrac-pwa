@@ -125,8 +125,20 @@ async function main() {
   const attendu = {};
   let nbResultats = 0;
   for (const g of grimpeurs) {
+    // ⚠️ Ces champs sont DÉNORMALISÉS sur le document de participation, et il faut les
+    // écrire ici : l'écran live (AdminCompetitionLiveDisplay) lit le nom, la date de
+    // naissance et le genre **uniquement** depuis ce document, sans repli sur `users` —
+    // contrairement aux deux écrans de classement, qui relisent `users`. Sans eux, l'écran
+    // live rangeait les dix grimpeurs dans une seule catégorie « Inconnu » avec des noms
+    // vides, et ce jeu d'essai était donc **physiquement incapable d'exprimer** la rotation
+    // par catégorie d'âge, qui est pourtant le contenu principal de cet écran.
+    // Mêmes champs que le flux d'inscription de production (AdminCompetitionRegistration /
+    // « Générer le roster » dans AdminCompetitionManagement).
     await db.collection('competition_participants').doc(`${g.uid}_${competition.id}`).set({
       competition_id: competition.id, user_id: g.uid, submitted: false,
+      email: `grimpeur${grimpeurs.indexOf(g)}.simu@blocabrac.test`,
+      first_name: `Prenom${grimpeurs.indexOf(g)}`, last_name: `Nom${grimpeurs.indexOf(g)}`,
+      dateOfBirth: g.dateOfBirth, gender: g.gender, level: 'rouge', is_client: true,
       registered_at: new Date().toISOString(),
     });
     attendu[g.uid] = { nom: g.nom, score: 0, blocs: 0, departage: [], categorie: categoriePour(g.age), genre: g.gender };
