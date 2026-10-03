@@ -74,6 +74,12 @@ async function main() {
     db.collection('boulders').get(),
   ]);
 
+  // Participations de compétition : voir la section « identité dénormalisée » plus bas.
+  const [participantsSnap, competitionsSnap] = await Promise.all([
+    db.collection('competition_participants').get(),
+    db.collection('competitions').get(),
+  ]);
+
   const badges = badgesSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
   const byType = (t) => badges.filter((b) => b.type === t);
   console.log(`Catalogue badges : ${badges.length} (automatic ${byType('automatic').length}, mission ${byType('mission').length}, autres ${badges.filter((b) => b.type !== 'automatic' && b.type !== 'mission').length})`);
@@ -186,6 +192,57 @@ async function main() {
       errors.push(`challenges/${d.id} (${c.structure}) désigne un bloc absent : "${c.boulder_id}".`);
     }
   }
+
+  // ─── Identité dénormalisée sur une participation de compétition ────────────────────────
+  //
+  // `AdminCompetitionLiveDisplay` affiche le nom et la catégorie d'âge d'un participant
+  // depuis `competition_participants` (avec, depuis V2.72, un repli sur `users`). Jusqu'en
+  // V2.72, l'auto-inscription du grimpeur n'y écrivait ni nom, ni date de naissance, ni
+  // genre : les lignes apparaissaient sans nom et en catégorie « Inconnu ». Voir
+  // docs/handoffs/RETOUR-auto-inscription.md.
+  //
+  // ⚠️ CE CONTRÔLE N'EXISTE QUE PARCE QUE LE TERRAIN A ÉTÉ NETTOYÉ D'ABORD (retour
+  // ClaudeNav, RETOUR-auto-inscription-reponses.md §2) : ajouté avant le rattrapage de
+  // `scripts/backfill-competition-participants.js`, il serait né ROUGE en permanence sur
+  // tout l'héritage de l'ancien code — soit exactement le travers que KNOWN_EXCEPTIONS
+  // existe pour éviter. Le rattrapage a tourné le 03/10/2026 (2 participations). À partir
+  // de là, **toute occurrence est une régression réelle**, et c'est ce qui donne à ce
+  // contrôle sa valeur de signal.
+  //
+  // ⚠️ Et la distinction qui le rend utilisable : un champ absent de la participation ALORS
+  // QUE le compte le porte est un défaut d'inscription (❌). Absent des deux est une lacune
+  // du COMPTE (ℹ️ silencieux) — sans cette distinction, les comptes sans date de naissance
+  // repeupleraient le rapport à chaque exécution.
+  const CHAMPS_PARTICIPATION = ['first_name', 'last_name', 'dateOfBirth', 'gender'];
+  const estVide = (v) => v === undefined || v === null || (typeof v === 'string' && v.trim() === '');
+  const competitionIds = new Set(competitionsSnap.docs.map((d) => d.id));
+  const usersById = new Map(usersSnap.docs.map((d) => [d.id, d.data()]));
+  let lacunesDeCompte = 0;
+  for (const d of participantsSnap.docs) {
+    const p = d.data();
+    const c = usersById.get(p.user_id);
+    if (!c) {
+      warnings.push(`competition_participants/${d.id} appartient à un compte absent de "users" : ${p.user_id}.`);
+      continue;
+    }
+    const manquants = CHAMPS_PARTICIPATION.filter((f) => estVide(p[f]) && !estVide(c[f]));
+    const lacunes = CHAMPS_PARTICIPATION.filter((f) => estVide(p[f]) && estVide(c[f]));
+    if (manquants.length > 0) {
+      errors.push(
+        `competition_participants/${d.id} : ${manquants.join(', ')} absent(s) alors que le compte les porte `
+        + '— l\'écran live afficherait une ligne incomplète. Lancer scripts/backfill-competition-participants.js.'
+      );
+    }
+    if (lacunes.length > 0) lacunesDeCompte += 1;
+    // La participation doit aussi pointer vers une compétition qui existe.
+    if (p.competition_id && !competitionIds.has(p.competition_id)) {
+      errors.push(`competition_participants/${d.id} pointe vers une compétition absente : "${p.competition_id}".`);
+    }
+  }
+  console.log(
+    `Participations : ${participantsSnap.size} sur ${competitionsSnap.size} compétition(s)`
+    + `${lacunesDeCompte > 0 ? `, dont ${lacunesDeCompte} limitée(s) par une lacune du compte (normal)` : ''}`
+  );
 
   // Fenêtre de saison.
   if (!seasonSnap.exists) {

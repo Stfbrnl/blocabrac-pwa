@@ -93,8 +93,54 @@ const faux = lancer(['--competition', 'competition-qui-nexiste-pas']);
 verifier(faux.status !== 0, `un identifiant inconnu fait échouer le script (code ${faux.status})`);
 
 // ─── 3. L'écriture
+// ─── 2 bis. Le contrôle d'audit doit VOIR le défaut avant le rattrapage.
+//
+// ⚠️ C'est l'autre moitié du retour de ClaudeNav (§2) : le contrôle ajouté à
+// `audit-prod-catalog.js` naît vert en production parce que le terrain a été nettoyé
+// d'abord — et un contrôle né vert sur un terrain propre ne prouve RIEN par lui-même. On
+// vérifie donc ici qu'il rougit sur le défaut, et qu'il se taise une fois rattrapé.
+//
+// On n'assertionne pas le code de sortie : contre l'émulateur, l'audit signale aussi
+// l'absence du catalogue de badges. Seul le message qui nous concerne est examiné.
+const AUDIT = join(__dirname, '../../scripts/audit-prod-catalog.js');
+const auditer = () => {
+  const r = spawnSync('node', [AUDIT], {
+    encoding: 'utf8',
+    env: { ...process.env, FIRESTORE_EMULATOR_HOST: 'localhost:8080' },
+  });
+  return `${r.stdout || ''}\n${r.stderr || ''}`;
+};
+const auditAvant = auditer();
+verifier(
+  new RegExp(`competition_participants/uid-A_${COMP}`).test(auditAvant),
+  'audit : la participation incomplète de A est signalée AVANT le rattrapage'
+);
+// ⚠️ La distinction défaut/lacune est PAR CHAMP, pas par participation — ma première version
+// de cette assertion exigeait que C soit entièrement silencieuse, et rougissait donc sur un
+// audit correct. C a bien un défaut (son nom, que le compte porte) ET une lacune (sa date,
+// que le compte n'a pas) : la ligne doit nommer le premier et taire la seconde.
+const ligneC = auditAvant.split('\n').find((l) => l.includes(`competition_participants/uid-C_${COMP}`)) || '';
+verifier(
+  /first_name/.test(ligneC) && /last_name/.test(ligneC),
+  'audit : le nom manquant de C est signalé (le compte le porte)'
+);
+verifier(
+  ligneC !== '' && !/dateOfBirth/.test(ligneC) && !/gender/.test(ligneC),
+  'audit : la date et le genre de C ne sont PAS signalés — lacune du compte, pas de l\'inscription'
+);
+
 const fix = lancer(['--competition', COMP, '--fix']);
 verifier(fix.status === 0, `l'écriture se termine normalement (code ${fix.status})`);
+
+const auditApres = auditer();
+verifier(
+  !new RegExp(`competition_participants/uid-A_${COMP}`).test(auditApres),
+  'audit : A n\'est plus signalée APRÈS le rattrapage'
+);
+verifier(
+  !new RegExp(`competition_participants/uid-C_${COMP}`).test(auditApres),
+  'audit : C n\'est plus signalée non plus — sa seule lacune restante est celle du compte'
+);
 
 const [a, b, c, d] = await Promise.all(['uid-A', 'uid-B', 'uid-C', 'uid-D'].map(
   (u) => db.collection('competition_participants').doc(`${u}_${COMP}`).get()
