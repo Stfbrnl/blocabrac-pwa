@@ -132,3 +132,85 @@ une vérification à la main sur un cas unique, choisi au hasard dans la liste.
 
 À verser au §6 de ton plan, qui parle de la méthode : **un inventaire automatique se vérifie
 sur un échantillon lu à la main, sinon il mesure son propre défaut.**
+
+---
+
+## §6 — 🟢 Résolu : le libellé exact des signalements, et les deux vraies causes
+
+L'utilisateur a fourni les messages Chrome depuis l'espace Ouvreur / Blocs quotidiens /
+Réta Adultes : **6 problèmes, 2 d'un type et 4 de l'autre**. Les deux sont identifiés au
+compte près, et **aucune des deux causes ne varie avec le nombre de blocs**.
+
+### 6.1 — Les 4 « No label associated with a form field » : `htmlFor` manquant
+
+Les styles calculés fournis (`position: absolute`, `transform: translate(14px, 16px) scale(1)`,
+`transform-origin: left top`, `pointer-events: none`, plus `label { cursor: default }` de la
+feuille user-agent) identifient un **`InputLabel` MUI** flottant dans un champ contouré.
+`DailyBoulderForm.tsx` en compte exactement **4** (Cotation, Difficulté dans le niveau,
+Ouvert par, Types de difficulté). Le compte tombe juste.
+
+🔴 **Et c'est ton §3.1 qu'il faut corriger, parce qu'il est incomplet — il aurait laissé les
+quatre signalements en place.** Tu écris que `InputLabel id` + `Select labelId` + `label`
+« vont ensemble ». C'est vrai pour l'accessibilité et pour l'encoche, et ces trois propriétés
+**sont déjà présentes partout** dans ce dépôt (§1). Mais `labelId` ne câble que
+`aria-labelledby` ; il ne produit **aucun attribut `for`** sur le `<label>`. Or `for` est
+exactement ce que Chrome vérifie. Il faut donc une **quatrième** propriété :
+
+```tsx
+<InputLabel id="cotation-select-label" htmlFor="cotation-select">Cotation</InputLabel>
+<Select labelId="cotation-select-label" id="cotation-select" label="Cotation">
+```
+
+**C'est un défaut de classe, à l'échelle du dépôt : 77 `InputLabel`, dont `htmlFor` : 0.**
+Le `TextField` n'est pas concerné (tu avais raison de l'exclure) parce qu'il génère lui-même
+l'`id` *et* le `htmlFor` ; c'est la composition manuelle `FormControl` + `InputLabel` +
+`Select` qui laisse le câblage à la charge de l'appelant, et personne ne l'a jamais fait.
+
+Ton §6 est donc vérifié dans sa formulation, au prix d'une correction : le défaut est bien
+unique et de classe, mais sa multiplicité vient du **nombre d'écrans et de champs**, pas du
+nombre de blocs affichés.
+
+### 6.2 — Les 2 « should have an id or name » : un élément interne de MUI, non corrigeable
+
+Les styles en ligne fournis (`visibility: hidden`, `position: absolute`, `height: 0px`,
+`width: 1004px`, `resize: none`) sont ceux du **textarea fantôme** que `TextareaAutosize`
+crée pour mesurer la hauteur d'un champ multiligne.
+
+Vérifié dans la source installée plutôt que supposé — `@mui/material` v9.1.1,
+`node_modules/@mui/material/InputBase/InputBase.js` lignes 449-467 : dès que `multiline` est
+posé, `InputComponent = TextareaAutosize` **systématiquement**, et un `rows={n}` est
+simplement traduit en `minRows: n, maxRows: n`. Il n'existe donc aucune façon d'avoir un
+champ multiligne MUI sans textarea fantôme.
+
+`TextareaAutosize.js` lignes 214-220 : ce fantôme porte `aria-hidden: true`, `readOnly: true`,
+`tabIndex: -1`. **Il est inaccessible et invisible, et son `id` n'est pas à notre portée** —
+c'est MUI qui le rend, sans exposer de prop pour l'atteindre.
+
+`DailyBoulderForm.tsx` a deux champs multilignes (lignes 618 et 649 : « Anecdote d'ouvreur »
+et « Consignes ») → **2 fantômes → 2 signalements**. Le compte tombe juste également.
+Le dépôt en compte 17 au total.
+
+⚠️ **Conséquence sur ton §5, point 5** : *« zéro signalement de libellé »* comme critère de
+sortie est **inatteignable**, et le viser ferait échouer un chantier par ailleurs réussi. Le
+critère réaliste est : **zéro signalement de type « No label associated »**, les deux autres
+étant une déviation connue et documentée, imputable à la bibliothèque.
+
+C'est précisément la doctrine des `KNOWN_EXCEPTIONS` de `audit-prod-catalog.js` : une
+déviation acceptée se consigne avec sa raison, parce qu'un avertissement permanent apprend à
+ignorer les avertissements.
+
+### 6.3 — Ce que ça impose à l'assertion du §4.1
+
+Elle doit **exclure les éléments `aria-hidden`** de la vérification « tout champ porte un `id`
+ou un `name` ». Sans cette exclusion, elle serait rouge en permanence sur 17 champs que
+personne ne peut corriger — soit exactement le filet qui ne sert plus à rien, contre lequel
+ton §4.1 met en garde en parlant du badge inexistant.
+
+### 6.4 — La seule chose qui reste inexpliquée
+
+Le compte est de **6 sur le Réta Adultes**, et les deux causes sont constantes : il devrait
+être de 6 sur tous les murs. L'observation initiale d'une inégalité entre murs n'est donc pas
+reproduite par l'analyse. Hypothèse la plus simple : la comparaison portait sur le total de la
+catégorie « améliorations », qui agrège d'autres natures de signalements. À vérifier sur un
+second mur avant d'en faire quoi que ce soit — mais ça ne bloque plus le chantier, puisque les
+six signalements de cet écran sont intégralement attribués.
