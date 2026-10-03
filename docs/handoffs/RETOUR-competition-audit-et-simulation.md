@@ -435,3 +435,106 @@ grimpeurs** et contredit silencieusement l'écran quand il dérive. Je ne l'ai p
 un refactor à part entière, et le chantier était déjà à son terme. Ton avis sur l'opportunité.
 
 Vérifications après le §7 : `npm test` **341/341** (338 + 3), `tsc`, `lint`.
+
+---
+
+## §8 — « Ces éléments risquent-ils de casser l'écran live ? » — non, mais j'y ai trouvé autre chose
+
+Dernière question de l'utilisateur avant le déploiement. Elle visait juste : l'écran live est
+**le seul des trois écrans de classement à paginer**, et c'est celui où j'avais changé la
+numérotation.
+
+### 8.1 — Réponse : il est touché en un seul endroit, et il ne casse pas
+
+Le départage ne change qu'une ligne sur cet écran : `currentPageRanks`, qui passe de
+`index + 1` à `rankPointEntries`. Trois vérifications, parce que cet écran tourne **sans
+surveillance** sur une télévision et que le dépôt n'a **aucun ErrorBoundary** (vérifié, pas
+supposé) — une exception y serait un écran blanc que personne ne voit tomber :
+
+- **La pagination ne renumérote pas.** Les rangs de la première page sont calculés sur une
+  **tranche** (`globalClassement.slice(0, 10)`). C'est correct parce que c'est un *préfixe*,
+  donc les rangs de la tranche sont les rangs globaux — mais c'est fragile : une pagination
+  en 11–20 les ferait repartir à 1 sur chaque page.
+- **Rien ne peut lever d'exception.** `ScoreEntry` n'est jamais construit à la main hors de
+  `competitionClassement.ts` (donc `tieBreak` existe toujours), et **aucun écran ne retrie un
+  classement après coup** — la condition d'entrée de `rankPointEntries` (liste déjà triée)
+  tient donc partout. Les deux vérifiés par grep, pas supposés.
+- **Un changement visible, voulu.** Au début de l'épreuve, plusieurs grimpeurs n'ont que des
+  échecs : 0 point, départage vide, donc **strictement** ex æquo. L'écran affiche désormais le
+  rang 1 pour tous, là où il affichait 1, 2, 3… dans un ordre venu des uid. C'est la même
+  décision que pour le mode officiel, où « les égalités sont l'état normal, pas un cas limite ».
+
+### 8.2 — Le filet : `test/e2e-live-display-flow.mjs`, 8 pas
+
+Il mute Firestore **pendant que la page est ouverte** plutôt que de recharger : c'est le
+chemin que la télévision emprunte réellement un soir de compétition (deux `onSnapshot`).
+
+Les deux propriétés, **chacune vue rouge séparément** :
+
+| pas | propriété | vue rouge en |
+|---|---|---|
+| 4 | les rangs de la tranche sont les rangs globaux | paginant `slice(1, 11)` |
+| 6 | des grimpeurs strictement à égalité partagent le rang 1 | remettant `index + 1` |
+
+⚠️ **Et ces deux pas ne se remplacent pas** : avec `index + 1`, le pas 4 reste **vert**, parce
+que ce tirage n'a aucune égalité dans le top 10. Un seul des deux aurait donné une fausse
+assurance.
+
+### 8.3 — Trois défauts de mon propre test, dont un qui est ta règle
+
+- Le lecteur de cellules filtrait sur « n'a pas d'enfant p/h5 » et renvoyait des cellules
+  vides : les Typography de cet écran sont des `<h5>` qui ne s'imbriquent pas.
+- Je comparais au **nom complet**, alors que cet écran — seul des trois — **abrège**
+  (« Prenom N. », pour la lisibilité à distance). L'écran avait raison, le test avait tort.
+- 🔴 **Le pas 6 est passé À VIDE la première fois.** La rotation tournait pendant le test, et
+  il a lu « la page courante » : une page de catégorie à **UNE** ligne, où « tous les rangs
+  valent 1 » est vrai **sans rien prouver**. C'est exactement ta règle du jour — *quels
+  défauts ce jeu de données est-il physiquement incapable d'exprimer ?* — rencontrée cette
+  fois non pas sur le seed, mais sur **la page observée**. Elle se généralise donc : ce n'est
+  pas « le jeu de données », c'est **tout ce que l'assertion regarde**. Le pas lit maintenant
+  la page « Top 10 » explicitement, et exige au moins deux lignes.
+
+### 8.4 — Et le jeu d'essai était incapable d'exprimer la rotation par catégorie
+
+`seed-competition-simulation.mjs` n'écrivait sur le document de participation que
+`competition_id`, `user_id`, `submitted`, `registered_at`. L'écran live rangeait donc les dix
+grimpeurs dans une seule catégorie **« Inconnu »**, avec des **noms vides** — et la rotation
+par catégorie d'âge, qui est le contenu principal de cet écran, n'était pas testable du tout.
+Corrigé en écrivant les mêmes champs que les flux d'inscription de production.
+
+### 8.5 — 🟠 Le défaut antérieur trouvé en chemin, non corrigé, en attente de décision
+
+C'est ce qui rend le §8.4 plus qu'une correction de test. **L'écran live lit le nom, la date
+de naissance et le genre *uniquement* sur `competition_participants`, sans repli sur `users`.**
+Les deux écrans de classement, eux, relisent `users` — avec les commentaires
+« ✅ Prendre age depuis users » / « ✅ Prendre gender depuis users », signe que quelqu'un a
+déjà rencontré le problème et ne l'a corrigé **que là**.
+
+Or les trois chemins d'inscription ne se valent pas :
+
+| chemin | date de naissance / genre écrits ? |
+|---|---|
+| `AdminCompetitionRegistration` (ajout manuel) | oui |
+| « Générer le roster » (`AdminCompetitionManagement`) | oui, avec `?? null` |
+| **auto-inscription du grimpeur** (`ClientCompetitions`, « S'inscrire ») | **non** |
+
+Conséquence un soir de compétition : **tout grimpeur inscrit par lui-même atterrit dans la
+catégorie « Inconnu » sur la télévision**, alors que les écrans de classement l'affichent dans
+sa vraie catégorie — deux écrans qui se contredisent sur le même grimpeur, pendant l'épreuve.
+Et la rotation dégénère en une page unique : exactement les « 90 lignes » qu'elle avait été
+conçue pour éviter.
+
+**C'est antérieur au départage et indépendant de lui.** Reproduit sur l'émulateur (dix
+grimpeurs en « Inconnu », noms vides) — mais par un seed qui omettait ces champs, pas en
+pilotant le vrai parcours d'auto-inscription : je le donne donc comme une **lecture de code
+confirmée par une reproduction**, pas comme une observation du parcours réel.
+
+Correctif de quelques lignes (résoudre les participants contre `users`, comme les deux autres
+écrans). **Non fait** : ça change la source de données d'un écran qui tournera pendant
+l'épreuve, et ça mérite une décision plutôt qu'un ajout glissé dans un lot de déploiement.
+**À vérifier d'abord : comment les participants seront réellement inscrits** — si l'admin les
+inscrit tous, le défaut ne se manifeste pas.
+
+Vérifications du §8 : `e2e-live-display-flow` **8/8**, `npm test` **341/341**, `tsc`, `lint`.
+Composant de production **inchangé** (restauré à l'identique après les deux mises en rouge,
+`git diff` vide).
