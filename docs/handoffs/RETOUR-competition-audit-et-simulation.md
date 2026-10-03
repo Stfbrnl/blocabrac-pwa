@@ -9,6 +9,10 @@
 > l'affichage et le départage des ex æquo — a été **arbitrée par l'utilisateur le soir même,
 > puis implémentée, testée et vue à l'écran : voir le §6**, qui est la partie à lire si tu n'en
 > lis qu'une.
+>
+> Puis l'utilisateur a demandé : **« tout ça vaut-il pour les quatre modes de comptage ? »** —
+> non, et la question a trouvé un défaut antérieur, dans le mode officiel, que ce chantier
+> avait dénoncé par commentaire sans le voir : **§7**.
 
 ---
 
@@ -336,3 +340,98 @@ après coup.
 
 Vérifications : `npm test` **338/338**, `tsc`, `lint`, `e2e-competition-simulation` 10/10 sur
 les deux graines (avec et sans ex æquo forcé), `e2e-competition-flow` 16/16.
+
+---
+
+## §7 — « Tout ça vaut-il pour les quatre modes de comptage ? » — non, et la question a trouvé un défaut
+
+L'utilisateur a posé cette question juste après l'implémentation du §6, et c'était la bonne :
+les trois livrables de la soirée n'ont pas la même portée, et l'un des quatre modes était
+resté hors de vue.
+
+Rappel des quatre modes (`competitions.scoring_mode`) : **barème par couleur (essais
+comptabilisés)** `blocabrac`, **blocs validés** `blocs_valides`, **personnalisé**
+`personnalise`, **officiel (FFME)** `officiel`.
+
+### 7.1 — Les trois livrables, mode par mode
+
+| | barème couleur | blocs validés | personnalisé | officiel |
+|---|---|---|---|---|
+| **§1 Audit du défaut du 02/10** | immunisé | immunisé | immunisé | immunisé |
+| **§6 Départage** | la règle | la règle | la règle | son propre départage, à ne pas remplacer |
+| **§2 Simulation / tests** | e2e + 60 tirages | 2 tests | ❌ **rien** → corrigé | jeu « Finale » à la main |
+
+**L'audit vaut pour les quatre, et pour une raison qui ne dépend pas du mode** : aucun des
+quatre n'a de compteur incrémental. Les quatre relisent `competition_results` et recalculent à
+l'affichage. C'est le §1.5, et il était déjà écrit de façon mode-indépendante — par chance
+plutôt que par méthode, puisque la question ne s'était pas posée.
+
+**Le départage couvre les quatre, mais par deux mécanismes**, et c'est volontaire. Les trois
+modes à points utilisent la règle de l'utilisateur, et la définition de « le plus dur » est
+consciente du mode **par construction** — c'est la précision ② du §6.2 : la dureté est
+`calculateCompetitionPoints(bloc, 1, true, mode, baremePersonnalise)`, donc la base de la
+couleur en mode barème, le `points_value` de l'ouvreur en mode blocs validés, la base
+personnalisée en mode personnalisé. Le mode officiel **n'utilise pas la règle et ne doit pas** :
+ce n'est pas une somme de points, il a déjà son départage à quatre critères (tops, zones,
+essais au top, essais à la zone) et partageait déjà les rangs via `rankOfficialEntries`. Une
+égalité parfaite s'y résout par la super-finale, comme décidé en août.
+
+### 7.2 — Le trou de couverture : le mode personnalisé
+
+Il n'était exercé **nulle part** pour le départage. Or c'est le seul mode à points où **la
+dureté peut s'inverser par rapport à l'ordre des couleurs** : la salle fixe librement une base
+par couleur, donc un bleu peut valoir plus qu'un blanc. Un départage qui aurait trié sur
+`levelOrder` au lieu du barème serait passé inaperçu.
+
+Deux tests ajoutés, **vus rouges d'abord** (en forçant la dureté à ignorer le mode — les deux
+tombent, et le test « blocs validés » avec eux) :
+
+- la dureté suit le barème de la compétition, pas l'ordre des couleurs ;
+- **une couleur absente du barème pèse 0 en dureté comme en points**, donc deux blocs hors
+  barème sont indistinguables et ce sont les essais qui tranchent. Conséquence assumée de
+  `calculateCompetitionPoints` (`if (!entry) return 0`), désormais écrite au lieu d'être
+  découverte un soir de compétition. L'écran de réglage préremplit les huit couleurs
+  (`defaultCustomScoring()`), donc il faut un effacement à la main pour y arriver.
+
+### 7.3 — 🔴 Le défaut trouvé : en mode officiel, l'annonce démentait l'écran
+
+**Le message d'annonce publié aux grimpeurs numérotait la branche « officiel » en
+`index + 1`** — donc 1, 2, 3 — alors que les trois tableaux à l'écran partageaient déjà les
+rangs via `rankOfficialEntries` — donc 1, 1, 3.
+
+Trois choses rendent ce défaut intéressant, au-delà de sa taille :
+
+1. **C'est exactement l'incohérence que mon propre commentaire, écrit la veille trois lignes
+   plus bas, déclare « la pire possible sur ce sujet ».** J'ai écrit la règle pour la branche
+   des modes à points et je ne suis pas remonté de trois lignes pour vérifier la branche d'à
+   côté. Le défaut est antérieur au chantier du §6 ; ce chantier a posé le commentaire qui le
+   dénonce sans le voir.
+2. **Il frappe le mode de la Finale, le seul où une égalité parfaite au rang 1 est un cas
+   prévu** — c'est elle qui déclenche la super-finale. Le mode le plus susceptible d'exposer
+   le défaut était celui qui n'avait pas été regardé.
+3. **Aucun test ne pouvait l'attraper** : la composition du message est en ligne dans
+   `AdminCompetitionStats.tsx`, hors de portée de `npm test` (pas de harnais React dans le
+   dépôt). Il a été trouvé **en lisant**, à partir d'une question posée par l'utilisateur. Le
+   test que j'ai ajouté verrouille l'assistant (`rankedOfficialEntries` doit rendre les rangs
+   de l'écran), **pas l'appel** — honnêteté sur ce que le filet couvre : si quelqu'un remet un
+   `index + 1` dans ce message, rien ne rougira.
+
+Correctif : `rankedOfficialEntries` (pendant officiel de `rankedEntries`) devient la seule
+source des rangs annoncés en mode officiel. Commit `4f0eb5e`.
+
+### 7.4 — Ce que j'en retiens, et une question pour toi
+
+L'acquis de méthode, qui prolonge celui du §4 : **une règle appliquée à une branche d'un
+`if/else` doit être vérifiée sur l'autre branche, même — surtout — quand l'autre branche était
+déjà considérée comme correcte.** Le mode officiel l'était : il avait son départage, ses rangs
+partagés, son jeu d'essai calculé à la main. C'est cette correction partielle qui a masqué la
+dernière zone.
+
+Et la question que je te pose : **il reste au moins un chemin d'affichage non couvert par un
+test, celui de la composition des messages d'annonce.** Extraire cette composition dans une
+fonction pure (`buildClassementAnnouncement(mode, groupes)`) la rendrait testable au même titre
+que le reste, et c'est le genre de code qui mérite un test puisqu'il est **publié aux
+grimpeurs** et contredit silencieusement l'écran quand il dérive. Je ne l'ai pas fait : c'est
+un refactor à part entière, et le chantier était déjà à son terme. Ton avis sur l'opportunité.
+
+Vérifications après le §7 : `npm test` **341/341** (338 + 3), `tsc`, `lint`.
