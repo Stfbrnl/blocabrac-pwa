@@ -3,8 +3,15 @@
 // valide -> Admin/Ouvreur consultent les stats et publient le classement)
 // contre l'app + les émulateurs locaux. Jamais la production.
 import { chromium } from 'playwright';
+import { assertNoOrphanLabels } from './assertNoOrphanLabels.mjs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import admin from 'firebase-admin';
+
+process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8080';
+process.env.FIREBASE_AUTH_EMULATOR_HOST = 'localhost:9099';
+admin.initializeApp({ projectId: 'blocabrac' });
+const adminDb = admin.firestore();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const BASE_URL = 'http://localhost:5174';
@@ -117,6 +124,30 @@ async function main() {
     await ouvreurP.screenshot({ path: '/tmp/comp-03-ouvreur-list.png', fullPage: true });
   });
 
+  // ⚠️ UN SECOND BLOC, et il existe pour une raison précise : il fait rendre DEUX FOIS les
+  // Select du dialogue de validation client, qui vivent dans une boucle sur les blocs de la
+  // compétition. C'est la seule façon de donner un sujet à la vérification ③ de
+  // test/assertNoOrphanLabels.mjs (identifiants dupliqués) — avec un seul bloc, les trois
+  // identifiants FIGÉS qu'il y avait avant le 03/10/2026 ne produisaient aucun doublon et le
+  // filet restait vert sans rien vérifier. Vérifié : en restaurant les identifiants figés, le
+  // filet passe au rouge avec deux blocs, et restait vert avec un seul.
+  // Créé en base plutôt que par le formulaire : ce chantier vérifie le rendu du dialogue
+  // client, pas une seconde fois le parcours canvas de l'ouvreur (déjà couvert ci-dessus).
+  await step('Un second bloc est ajouté à la compétition (sujet pour la vérification des doublons)', async () => {
+    const snap = await adminDb.collection('boulders').where('type', '==', 'competition').get();
+    const premier = snap.docs.find((d) => d.data().number === 1 || d.data().number === '1');
+    assert(premier, 'le bloc de compétition n°1 doit exister en base');
+    const data = premier.data();
+    await adminDb.collection('boulders').add({
+      ...data,
+      number: 2,
+      image_public_id: data.image_public_id ?? null,
+    });
+    const apres = await adminDb.collection('boulders')
+      .where('competition_id', '==', data.competition_id).get();
+    assert(apres.size >= 2, `la compétition doit porter au moins 2 blocs, elle en a ${apres.size}`);
+  });
+
   await step('Client : voit la compétition en cours et s\'inscrit', async () => {
     await gotoAndWait(clientP, '/client/competitions', 'Mes Compétitions');
     await clientP.getByText(COMPETITION_NAME).waitFor({ timeout: 10000 });
@@ -134,6 +165,15 @@ async function main() {
     await clientP.getByText('Validation des blocs', { exact: false }).waitFor({ timeout: 10000 });
     await clientP.screenshot({ path: '/tmp/comp-05-client-validation-dialog.png', fullPage: true });
     await clientP.getByRole('button', { name: '✅ Réussi' }).first().click();
+
+    // ✅ PLAN-labels-non-associes.md §4.1 — priorité recommandée par ClaudeNav, et elle a
+    // payé immédiatement : ce dialogue rend ses Select d'essais/cotation À L'INTÉRIEUR d'une
+    // boucle sur les blocs de la compétition, et les trois portaient un identifiant FIGÉ
+    // (corrigé le 03/10/2026). Autant de doublons que de blocs, et `aria-labelledby` pointant
+    // vers le premier pour toutes les cartes — invisible des deux signalements de Chrome.
+    // C'est la vérification ③ de test/assertNoOrphanLabels.mjs qui garde ce cas fermé.
+    await assertNoOrphanLabels(clientP, 'Client — dialogue de validation des blocs de compétition');
+
     // ✅ Laisser le temps à l'écriture immédiate de partir avant de fermer/recharger,
     // pour tester la reprise (1.3) sans dépendre du bouton "Soumettre".
     await clientP.waitForTimeout(1000);

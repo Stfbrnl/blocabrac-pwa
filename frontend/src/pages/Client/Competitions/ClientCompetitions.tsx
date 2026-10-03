@@ -780,9 +780,17 @@ const ClientCompetitions: React.FC = () => {
                           </Box>
                         )}
                         <FormControl fullWidth sx={{ mt: 1 }} disabled={isLocked}>
-                          <InputLabel id="nombre-d-essais-select-label">Nombre d'essais (top)</InputLabel>
+                          {/* ⚠️ Identifiant dérivé de `boulder.id`, comme le `name` du Rating
+                              juste en dessous : ce bloc est rendu une fois PAR BLOC de la
+                              compétition. Un identifiant figé y produisait autant de doublons
+                              que de blocs (constaté le 03/10/2026 : trois identifiants gelés
+                              dans cette boucle), et `aria-labelledby` pointait alors vers le
+                              premier pour toutes les cartes. Invisible des deux signalements
+                              de Chrome — c'est la vérification ③ de
+                              test/assertNoOrphanLabels.mjs qui couvre ce cas. */}
+                          <InputLabel id={`essais-top-${boulder.id}-select-label`}>Nombre d'essais (top)</InputLabel>
                           <Select
-                            labelId="nombre-d-essais-select-label" id="nombre-d-essais-select"
+                            labelId={`essais-top-${boulder.id}-select-label`} id={`essais-top-${boulder.id}-select`}
                             value={result.attempts}
                             disabled={isLocked}
                             onChange={(e) => handleValidateBoulder(boulder.id, { attempts: e.target.value as number })}
@@ -795,9 +803,9 @@ const ClientCompetitions: React.FC = () => {
                         </FormControl>
                         {isOfficialMode && result.zone && (
                           <FormControl fullWidth sx={{ mt: 1 }} disabled={isLocked}>
-                            <InputLabel id="essais-zone-select-label">Nombre d'essais (zone)</InputLabel>
+                            <InputLabel id={`essais-zone-${boulder.id}-select-label`}>Nombre d'essais (zone)</InputLabel>
                             <Select
-                              labelId="essais-zone-select-label" id="essais-zone-select"
+                              labelId={`essais-zone-${boulder.id}-select-label`} id={`essais-zone-${boulder.id}-select`}
                               value={result.attemptsToZone}
                               disabled={isLocked}
                               onChange={(e) => handleValidateBoulder(boulder.id, { attemptsToZone: e.target.value as number })}
@@ -823,9 +831,9 @@ const ClientCompetitions: React.FC = () => {
                           />
                         </Box>
                         <FormControl fullWidth sx={{ mt: 1 }} disabled={isLocked}>
-                          <InputLabel id="cotation-proposee-select-label">Cotation proposée</InputLabel>
+                          <InputLabel id={`cotation-proposee-${boulder.id}-select-label`}>Cotation proposée</InputLabel>
                           <Select
-                            labelId="cotation-proposee-select-label" id="cotation-proposee-select"
+                            labelId={`cotation-proposee-${boulder.id}-select-label`} id={`cotation-proposee-${boulder.id}-select`}
                             value={result.proposedDifficulty}
                             disabled={isLocked}
                             onChange={(e) => handleValidateBoulder(boulder.id, { proposedDifficulty: e.target.value })}
