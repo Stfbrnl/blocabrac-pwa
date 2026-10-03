@@ -3,12 +3,25 @@
 // rouletteChallengesCompleted, rouletteRecentChallenges). Ne touche jamais `users` — ce
 // script prépare la passe C (retrait), il ne la fait pas.
 //
+// 🔴 OBSOLÈTE DEPUIS LE 02/10/2026 — NE PLUS LANCER `--fix`, NI "POUR ÊTRE SÛR", NI SUR UN
+// SEUL COMPTE. La passe C est déployée en production depuis V2.61 (12/09/2026) : il n'y a
+// plus rien à rattraper, et ce script est devenu une MENACE pour les données, pas un filet.
+// Raison précise (constatée sur un compte réel le 02/10, voir
+// docs/handoffs/HANDOFF-purge-etat-ludique-2026-10-02.md §4) : le garde-fou ci-dessous ne
+// comble qu'une ABSENCE — or une absence dans `user_ludic_state` ne veut plus dire "jamais
+// migré", elle peut vouloir dire "SUPPRIMÉ DÉLIBÉRÉMENT PAR LE GRIMPEUR". `ClientScreen.tsx`
+// appelle `updateLudicState(uid, { weeklyGoalItems: deleteField() })` quand le grimpeur
+// retire ses objectifs de la semaine. Il n'existe aucune pierre tombale : une suppression et
+// un défaut de migration ont exactement la même tête. Relancer `--fix` rendrait donc à un
+// grimpeur des objectifs qu'il vient d'effacer. `weeklyGoalItems` est le seul des quatre
+// champs concerné (les trois autres ne sont jamais que lus, incrémentés ou complétés).
+// Pour un champ absent d'un seul côté, la vérité est désormais du côté de
+// `user_ludic_state` : c'est `purge-legacy-ludic-fields.js` (et sa dérogation explicite
+// `--purge-unmigrated`) qu'il faut utiliser, jamais ce script.
+//
 // ⚠️ OUTIL DE FENÊTRE DE DÉPLOIEMENT, PAS UN SCRIPT À RELANCER PAR RÉFLEXE. Sa seule
-// raison d'être est de rattraper les comptes touchés par l'ANCIEN code (qui n'écrivait que
-// sur `users`) pendant la bascule vers la passe C. Une fois la passe C confirmée stable en
-// production (voir CLAUDE.md § "Ludic-state migration"), il n'y a plus rien à rattraper —
-// ne pas le relancer avec `--fix` "pour être sûr" des mois plus tard sans relire ce
-// commentaire ET sans repasser par une simulation d'abord.
+// raison d'être ÉTAIT de rattraper les comptes touchés par l'ANCIEN code (qui n'écrivait que
+// sur `users`) pendant la bascule vers la passe C. Cette fenêtre est fermée.
 //
 //   node backfill-ludic-state.js            → mode simulation (par défaut, n'écrit rien)
 //   node backfill-ludic-state.js --fix      → écrit user_ludic_state pour chaque compte
