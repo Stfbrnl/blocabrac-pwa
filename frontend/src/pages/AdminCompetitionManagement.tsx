@@ -13,7 +13,7 @@ import { collection, addDoc, getDocs, getDoc, doc, setDoc, updateDoc, deleteDoc,
 import { useNavigate } from 'react-router-dom';
 import { buildCompetitionParticipant, competitionParticipantId } from '../utils/competitionParticipant';
 import { buildLevelAtStartSnapshot, type ParticipationForSnapshot, type SnapshotSourceUser } from '../utils/competitionLevelSnapshot';
-import { buildFrozenRankings, type FrozenRankings, type RankingParticipant } from '../utils/competitionRankings';
+import { buildFrozenRankings, isScoringModeGelable, type FrozenRankings, type RankingParticipant } from '../utils/competitionRankings';
 import { basePoints, deductions, type ScoringMode, type CustomScoringTable } from '../utils/climbingPoints';
 
 type CompetitionStatus = 'à venir' | 'en cours' | 'terminée' | 'annulée';
@@ -292,6 +292,18 @@ const AdminCompetitionManagement: React.FC = () => {
   // publication se fait ici plutôt que dans un script : un script aurait dû réimplémenter le
   // classement, c'est-à-dire fabriquer la cinquième divergence de ce projet.
   const handlePreparerPalmares = async (competition: Competition) => {
+    // ⚠️ Mode « Officiel » : refus explicite plutôt qu'un palmarès à zéro partout, et immuable
+    // (voir isScoringModeGelable). Ce mode ne sert qu'à la Finale, dont l'annonce est elle-même
+    // suspendue.
+    if (!isScoringModeGelable(competition.scoring_mode)) {
+      setSnackbarMessage(
+        'Le mode de comptage « Officiel » ne se gèle pas encore : son classement est un tri '
+        + 'tops/zones/essais, pas une somme de points. Publier donnerait un palmarès vide et '
+        + 'définitif. À implémenter le jour où la Finale est confirmée.'
+      );
+      setOpenSnackbar(true);
+      return;
+    }
     try {
       const [participantsSnap, resultsSnap, bouldersSnap] = await Promise.all([
         getDocs(query(collection(db, 'competition_participants'), where('competition_id', '==', competition.id))),

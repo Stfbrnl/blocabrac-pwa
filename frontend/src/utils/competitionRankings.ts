@@ -109,6 +109,25 @@ export interface FrozenRankings {
   client_level_max: FrozenGroup[];
 }
 
+/**
+ * ⚠️ LE MODE « OFFICIEL » N'EST PAS GELABLE EN L'ÉTAT, et il vaut mieux le refuser que publier
+ * un document faux.
+ *
+ * `calculateCompetitionPoints` renvoie **0** pour ce mode, volontairement (voir
+ * climbingPoints.ts : « plutôt que de laisser cette fonction faire semblant ») — un classement
+ * officiel n'est pas une somme de points mais un tri sur tops/zones/essais, calculé par
+ * `getOfficialParticipantTotals`, d'une forme différente (`OfficialScoreEntry`, pas de champ
+ * `score`). Geler via `buildFrozenRankings` produirait donc un palmarès à zéro partout, avec
+ * des rangs arbitraires — et il serait IMMUABLE.
+ *
+ * Ce mode ne sert qu'à la « Finale de l'année », dont l'annonce aux grimpeurs est elle-même
+ * suspendue jusqu'à confirmation de sa faisabilité (décision du 25/09/2026). Le jour où la
+ * Finale est confirmée, c'est ici qu'il faudra ajouter la forme officielle du gel — pas
+ * l'inventer dans l'écran d'administration.
+ */
+export const isScoringModeGelable = (mode?: ScoringMode): boolean =>
+  (mode ?? 'blocabrac') !== 'officiel';
+
 export interface BuildFrozenRankingsInput {
   competition: {
     id: string;

@@ -19,6 +19,8 @@ import { applyCompetitionValidationUpdate } from '../../../utils/competitionVali
 import { logoPath } from '../../../config/gymConfig';
 import { getBoulderImageUrl } from '../../../services/imageStorage';
 import { buildCompetitionParticipant, competitionParticipantId } from '../../../utils/competitionParticipant';
+import { CompetitionRankingsView } from '../../../components/CompetitionRankingsView';
+import type { FrozenRankings } from '../../../utils/competitionRankings';
 
 const levelColors: Record<string, string> = {
   jaune: '#FFFF00',
@@ -112,6 +114,8 @@ interface Boulder {
 const ClientCompetitions: React.FC = () => {
   const [user, loadingAuth] = useAuthState(auth);
   const [competitions, setCompetitions] = useState<Competition[]>([]);
+  const [palmares, setPalmares] = useState<FrozenRankings[]>([]);
+  const [palmaresOuvert, setPalmaresOuvert] = useState<string | null>(null);
   const [selectedCompetition, setSelectedCompetition] = useState<Competition | null>(null);
   const [boulders, setBoulders] = useState<Boulder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -270,6 +274,39 @@ const ClientCompetitions: React.FC = () => {
     };
 
     fetchCompetitions();
+  }, [user, loadingAuth]);
+
+  // ✅ Palmarès officiels gelés (§2 du plan du 5 novembre). Un document par compétition
+  // publiée, lu tel quel : aucun calcul ici, et aucune lecture des résultats ni des
+  // participations des autres grimpeurs — les règles l'interdisent, et c'est pour cela que
+  // le gel existe (voir CompetitionRankingsView).
+  //
+  // ⚠️ LECTURE DIRECTE, PAS `getDocsCacheFirst` (§4.4) : un appareil qui a ouvert cette page
+  // AVANT la publication a mis en cache l'absence de palmarès, et un cache-first le lui
+  // resservirait indéfiniment — le même mécanisme que l'identifiant de défi supprimé qui a
+  // survécu dans IndexedDB le 02/10/2026. Le reste de cet écran utilise le cache-first à bon
+  // droit (des blocs, qui ne changent pas) ; ce cas-ci est l'exception.
+  useEffect(() => {
+    if (!user || loadingAuth) return;
+
+    const fetchPalmares = async () => {
+      try {
+        const snapshot = await getDocs(collection(db, 'competition_rankings'));
+        const docs = snapshot.docs
+          .map(d => d.data() as FrozenRankings)
+          // Le plus récent d'abord : un grimpeur cherche le palmarès de la dernière épreuve.
+          .sort((a, b) => (b.competition_date || '').localeCompare(a.competition_date || ''));
+        setPalmares(docs);
+      } catch (err: unknown) {
+        // Un palmarès absent est l'état NORMAL (aucune compétition publiée) et ne passe pas
+        // par ici : les règles ne refusent pas la lecture d'un document inexistant. Une vraie
+        // erreur est donc anormale, et elle est dite — pas seulement journalisée.
+        console.error('Erreur de lecture des palmarès :', err);
+        setError('Les palmarès officiels n\'ont pas pu être chargés.');
+      }
+    };
+
+    fetchPalmares();
   }, [user, loadingAuth]);
 
   const mapBoulderDoc = (docSnap: { id: string; data: () => Record<string, unknown> }): Boulder => ({
@@ -734,6 +771,46 @@ const ClientCompetitions: React.FC = () => {
           })}
         </Grid>
       )}
+
+      {/* ✅ Palmarès officiels (§2 du plan du 5 novembre). Un palmarès n'apparaît ici qu'une
+          fois PUBLIÉ par l'administration : avant, un grimpeur ne peut pas voir de classement
+          de compétition du tout, parce qu'il n'a pas le droit de lire les résultats des
+          autres — et c'est précisément pour cela que le gel existe. Le libellé le dit, pour
+          que l'absence ne passe pas pour une panne. */}
+      <Box sx={{ mt: 5, mb: 4 }}>
+        <Typography variant="h6" sx={{ mb: 1 }}>Palmarès officiels</Typography>
+        {palmares.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">
+            Aucun palmarès publié pour l'instant. Le classement d'une compétition devient
+            visible ici une fois l'épreuve terminée et le palmarès publié — il est alors
+            définitif.
+          </Typography>
+        ) : (
+          palmares.map((p) => (
+            <Box key={p.competition_id} sx={{ mb: 2 }}>
+              <Button
+                variant={palmaresOuvert === p.competition_id ? 'contained' : 'outlined'}
+                onClick={() => setPalmaresOuvert(
+                  palmaresOuvert === p.competition_id ? null : p.competition_id
+                )}
+                sx={{ mb: 1 }}
+              >
+                {p.competition_name} — {new Date(p.competition_date).toLocaleDateString()}
+              </Button>
+              {palmaresOuvert === p.competition_id && (
+                <Card variant="outlined">
+                  <CardContent>
+                    <CompetitionRankingsView
+                      rankings={p}
+                      label={`Palmarès officiel — publié le ${new Date(p.published_at).toLocaleDateString()}`}
+                    />
+                  </CardContent>
+                </Card>
+              )}
+            </Box>
+          ))
+        )}
+      </Box>
 
       {/* Modale 1: Inscription à une compétition — plein écran sur mobile */}
       <Dialog
