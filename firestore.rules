@@ -271,6 +271,38 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // ✅ Palmarès officiel GELÉ d'une compétition (docs/plans/
+    // PLAN-classements-competition-5-novembre.md §2). Identifiant du document = identifiant de
+    // la compétition : un palmarès par compétition, et pas deux.
+    //
+    // « Un palmarès est un fait daté, pas une requête » : il est calculé une fois, à la
+    // clôture, et ne doit plus jamais bouger — une recotation de bloc ultérieure (le gérant en
+    // a fait une le 02/10/2026) changerait sinon le podium un mois après l'épreuve. D'où :
+    //
+    //   - `create` : réservé à l'admin, qui publie depuis l'écran de gestion. Un seul calcul
+    //     sert l'affichage provisoire et le gel (§2.4), et il vit dans l'application — c'est
+    //     pour cela que l'écriture s'y fait, plutôt que dans un script qui aurait dû
+    //     réimplémenter le classement, c'est-à-dire fabriquer la divergence que ce projet a
+    //     déjà payée quatre fois.
+    //   - `update` et `delete` : INTERDITS À TOUT LE MONDE. L'immuabilité est donc une
+    //     propriété du serveur, pas une convention d'outil. Corriger un palmarès publié par
+    //     erreur exige la clé de service (scripts/unpublish-competition-rankings.js), qui
+    //     passe hors des règles : publier est facile, dépublier ne l'est pas. Asymétrie
+    //     voulue.
+    //
+    // ⚠️ Aucune de ces règles ne lit `resource.data` : lire un palmarès qui n'existe pas —
+    // l'état NORMAL de toute compétition non encore publiée — renvoie « absent », jamais
+    // `permission-denied`. C'est exactement le piège du 02/10/2026 (`resource.data.x` sur un
+    // document supprimé fait PLANTER la règle, et un plantage de règle remonte au client en
+    // permission-denied, ce qui avait fait perdre des validations). Un test le verrouille.
+    match /competition_rankings/{competitionId} {
+      allow read: if request.auth != null;
+      allow create: if isUserRole("admin") &&
+                       request.resource.data.competition_id == competitionId &&
+                       request.resource.data.published_at is string;
+      allow update, delete: if false;
+    }
+
     // ✅ Annuaire public admin/moniteur/ouvreur (nom + rôles, rien d'autre), lu par
     // ClientMessages.tsx (choix du destinataire) et ClientDaily.tsx ("Créé par" un
     // bloc) : un client ne peut pas lister/lire la collection "users" d'un autre

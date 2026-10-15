@@ -13,6 +13,7 @@ import { collection, addDoc, getDocs, getDoc, doc, setDoc, updateDoc, deleteDoc,
 import { useNavigate } from 'react-router-dom';
 import { buildCompetitionParticipant, competitionParticipantId } from '../utils/competitionParticipant';
 import { buildLevelAtStartSnapshot, type ParticipationForSnapshot, type SnapshotSourceUser } from '../utils/competitionLevelSnapshot';
+import { buildFrozenRankings, type FrozenRankings, type RankingParticipant } from '../utils/competitionRankings';
 import { basePoints, deductions, type ScoringMode, type CustomScoringTable } from '../utils/climbingPoints';
 
 type CompetitionStatus = 'à venir' | 'en cours' | 'terminée' | 'annulée';
@@ -84,6 +85,12 @@ const AdminCompetitionManagement: React.FC = () => {
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [selectedCompetition, setSelectedCompetition] = useState<Competition | null>(null);
   const [openScoringDialog, setOpenScoringDialog] = useState<'create' | 'edit' | null>(null);
+  // ✅ Palmarès officiel gelé (§2 du plan du 5 novembre). `palmaresPublies` évite de proposer
+  // une publication déjà faite — la règle la refuserait de toute façon (`update: if false`),
+  // mais un bouton qui ne peut qu'échouer n'a pas à être affiché.
+  const [palmaresPublies, setPalmaresPublies] = useState<Map<string, string>>(new Map());
+  const [palmaresApercu, setPalmaresApercu] = useState<{ competition: Competition; payload: FrozenRankings } | null>(null);
+  const [publicationEnCours, setPublicationEnCours] = useState(false);
   const [createForm, setCreateForm] = useState<Omit<Competition, 'id' | 'registered_count'>>({
     name: '',
     date: new Date().toISOString().split('T')[0],
@@ -130,6 +137,11 @@ const AdminCompetitionManagement: React.FC = () => {
           custom_scoring: doc.data().custom_scoring // ✅ Nouveau
         }));
         setCompetitions(competitionsData);
+        // Un document par compétition publiée, et il y en aura autant que de compétitions
+        // closes : une lecture de collection entière reste négligeable ici, contrairement à
+        // ce qu'elle serait sur `users`.
+        const palmaresSnap = await getDocs(collection(db, 'competition_rankings'));
+        setPalmaresPublies(new Map(palmaresSnap.docs.map(d => [d.id, d.data().published_at || ''])));
       } catch (error: unknown) {
         console.error("Erreur :", error);
         setSnackbarMessage("Erreur lors du chargement des compétitions.");
@@ -265,6 +277,111 @@ const AdminCompetitionManagement: React.FC = () => {
     });
     await batch.commit();
     return writes.length;
+  };
+
+  // ═══ PALMARÈS OFFICIEL GELÉ (§2 du plan du 5 novembre) ═══════════════════════════════
+  //
+  // Deux gestes séparés, et c'est essentiel : préparer un APERÇU, puis publier. Le document
+  // est IMMUABLE côté serveur (`update, delete: if false`) — publier est donc irréversible
+  // sans la clé de service. L'aperçu est la seule occasion de voir ce qu'on gèle, et c'est à
+  // ça qu'il sert : y lire « 0 participant » ou un podium manifestement incomplet, c'est
+  // découvrir qu'une saisie manque AVANT que le palmarès ne devienne définitif.
+  //
+  // Le calcul est celui de l'application — `buildFrozenRankings` n'a aucun classement propre,
+  // il appelle les mêmes fonctions que les écrans (§2.4). C'est la raison pour laquelle la
+  // publication se fait ici plutôt que dans un script : un script aurait dû réimplémenter le
+  // classement, c'est-à-dire fabriquer la cinquième divergence de ce projet.
+  const handlePreparerPalmares = async (competition: Competition) => {
+    try {
+      const [participantsSnap, resultsSnap, bouldersSnap] = await Promise.all([
+        getDocs(query(collection(db, 'competition_participants'), where('competition_id', '==', competition.id))),
+        getDocs(query(collection(db, 'competition_results'), where('competition_id', '==', competition.id))),
+        getDocs(query(collection(db, 'boulders'), where('competition_id', '==', competition.id))),
+      ]);
+
+      // ⚠️ Pas de filtre sur `type` pour les blocs : une compétition régulière réutilise des
+      // blocs `type: 'daily'`, et « Terminer la compétition » reconvertit les blocs de
+      // compétition en `daily`. `competition_id` seul est le périmètre, comme partout
+      // ailleurs dans ce projet.
+      const participants: RankingParticipant[] = participantsSnap.docs.map(d => ({
+        user_id: d.data().user_id,
+        first_name: d.data().first_name,
+        last_name: d.data().last_name,
+        gender: d.data().gender,
+        dateOfBirth: d.data().dateOfBirth,
+        legacyAge: d.data().age,
+        level: d.data().level,
+        level_at_start: d.data().level_at_start,
+        is_client: d.data().is_client,
+      }));
+      const results = resultsSnap.docs.map(d => ({
+        user_id: d.data().user_id,
+        boulder_id: d.data().boulder_id,
+        success: d.data().success === true,
+        attempts: d.data().attempts ?? 0,
+        zone: d.data().zone,
+        attempts_to_zone: d.data().attempts_to_zone,
+      }));
+      const boulders = bouldersSnap.docs.map(d => ({
+        id: d.id,
+        color: d.data().color,
+        difficulty: d.data().difficulty,
+        points_value: d.data().points_value,
+      }));
+
+      const payload = buildFrozenRankings({
+        competition: {
+          id: competition.id,
+          name: competition.name,
+          date: competition.date,
+          scoring_mode: competition.scoring_mode ?? 'blocabrac',
+          custom_scoring: competition.custom_scoring,
+        },
+        participants,
+        results,
+        boulders,
+        publishedAt: new Date().toISOString(),
+      });
+      setPalmaresApercu({ competition, payload });
+    } catch (error: unknown) {
+      console.error('Erreur lors de la préparation du palmarès :', error);
+      setSnackbarMessage("Erreur lors de la préparation du palmarès. Rien n'a été publié.");
+      setOpenSnackbar(true);
+    }
+  };
+
+  const handlePublierPalmares = async () => {
+    if (!palmaresApercu) return;
+    setPublicationEnCours(true);
+    try {
+      // Identifiant du document = identifiant de la compétition (contrôlé aussi par les
+      // règles) : un palmarès par épreuve, et pas deux palmarès concurrents dont aucun ne
+      // serait « le » palmarès.
+      await setDoc(
+        doc(db, 'competition_rankings', palmaresApercu.competition.id),
+        palmaresApercu.payload
+      );
+      setPalmaresPublies(prev => new Map(prev).set(
+        palmaresApercu.competition.id,
+        palmaresApercu.payload.published_at
+      ));
+      setPalmaresApercu(null);
+      setSnackbarMessage('Palmarès officiel publié. Il est désormais définitif.');
+      setOpenSnackbar(true);
+    } catch (error: unknown) {
+      console.error('Erreur lors de la publication du palmarès :', error);
+      // Le cas le plus probable d'échec : un palmarès existe déjà (les règles refusent tout
+      // `update`). Le dire explicitement plutôt que « erreur », parce que la conduite à tenir
+      // en découle — il faut la clé de service pour dépublier.
+      setSnackbarMessage(
+        "Publication refusée. Si un palmarès existe déjà pour cette compétition, il est "
+        + "définitif : seul scripts/unpublish-competition-rankings.js, avec la clé de service, "
+        + "peut le retirer."
+      );
+      setOpenSnackbar(true);
+    } finally {
+      setPublicationEnCours(false);
+    }
   };
 
   const handleUpdateCompetition = async () => {
@@ -565,12 +682,101 @@ const AdminCompetitionManagement: React.FC = () => {
                         Générer le roster
                       </Button>
                     )}
+                    {/* ✅ Palmarès officiel (§2 du plan du 5 novembre) : seulement une fois
+                        l'épreuve TERMINÉE — avant, les classements sont provisoires par
+                        nature, et geler en cours d'épreuve serait figer un résultat partiel.
+                        Une fois publié, le document est immuable : on affiche la date au lieu
+                        d'un bouton qui ne pourrait qu'échouer. */}
+                    {competition.status === 'terminée' && (
+                      palmaresPublies.has(competition.id) ? (
+                        <Chip
+                          label={`Palmarès publié le ${new Date(palmaresPublies.get(competition.id) || '').toLocaleDateString()}`}
+                          color="success"
+                          size="small"
+                          sx={{ ml: 1 }}
+                        />
+                      ) : (
+                        <Button
+                          variant="contained"
+                          size="small"
+                          sx={{ ml: 1 }}
+                          onClick={() => handlePreparerPalmares(competition)}
+                        >
+                          Publier le palmarès
+                        </Button>
+                      )
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </TableContainer>
+
+        {/* ✅ Aperçu avant gel — la seule occasion de voir ce qu'on rend définitif. */}
+        <Dialog
+          open={palmaresApercu !== null}
+          onClose={() => setPalmaresApercu(null)}
+          fullWidth
+          maxWidth="sm"
+          fullScreen={isMobile}
+        >
+          <DialogTitle>Publier le palmarès officiel</DialogTitle>
+          <DialogContent>
+            {palmaresApercu && (
+              <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <Alert severity="warning">
+                  Cette publication est <strong>définitive</strong>. Le palmarès ne pourra plus
+                  être modifié ni republié : une recotation de bloc ultérieure ne changera pas
+                  le podium. Vérifiez que toutes les saisies sont faites avant de publier.
+                </Alert>
+
+                <Typography variant="subtitle1">
+                  {palmaresApercu.competition.name} — {new Date(palmaresApercu.competition.date).toLocaleDateString()}
+                </Typography>
+
+                {palmaresApercu.payload.general_open.length === 0 ? (
+                  <Alert severity="error">
+                    Aucun participant classé : aucun résultat n'a été saisi pour cette
+                    compétition. Publier maintenant gèlerait un palmarès vide.
+                  </Alert>
+                ) : (
+                  <>
+                    <Typography variant="body2">
+                      <strong>{palmaresApercu.payload.general_open.length}</strong> participant(s) au
+                      classement général, dont <strong>{palmaresApercu.payload.client_open.length}</strong> client(s).
+                    </Typography>
+                    <Box>
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>Tête du classement général :</Typography>
+                      {palmaresApercu.payload.general_open.slice(0, 3).map((e) => (
+                        <Typography key={e.user_id} variant="body2">
+                          {e.rank}. {e.display_name} — {e.score} pts
+                        </Typography>
+                      ))}
+                    </Box>
+                    <Typography variant="body2">
+                      Groupes : {palmaresApercu.payload.client_gender.length} genre(s),{' '}
+                      {palmaresApercu.payload.client_age.length} catégorie(s) d'âge,{' '}
+                      {palmaresApercu.payload.client_level_max.length} paquet(s) de niveau
+                      ({palmaresApercu.payload.client_level_max.map(g => `${g.category} : ${g.entries.length}`).join(', ')}).
+                    </Typography>
+                  </>
+                )}
+              </Box>
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setPalmaresApercu(null)}>Annuler</Button>
+            <Button
+              variant="contained"
+              color="primary"
+              disabled={publicationEnCours || (palmaresApercu?.payload.general_open.length ?? 0) === 0}
+              onClick={handlePublierPalmares}
+            >
+              Publier définitivement
+            </Button>
+          </DialogActions>
+        </Dialog>
 
         {/* Dialogue de création */}
         <Dialog open={openCreateDialog} onClose={() => setOpenCreateDialog(false)} fullWidth maxWidth="sm" fullScreen={isMobile}>
