@@ -31,6 +31,37 @@ const ADMIN_EMAIL = 'admin.simu@blocabrac.test';
 const COMPETITION_NAME = 'Simulation 3 murs';
 const GRAINE = Number(process.env.SIMU_GRAINE || 20261003);
 
+// ⚠️ NOMS DE FAMILLE LONGS ET DISTINCTIFS, et c'est une exigence du jeu d'essai, pas de la
+// couleur locale (docs/plans/PLAN-classements-competition-5-novembre.md §3.2 : « des noms assez
+// longs pour que la troncature soit détectable — Dupont-Lachaise, pas Li »).
+//
+// Ils étaient `Nom0`, `Nom1`… jusqu'au 15/10/2026, et c'était doublement inexploitable pour
+// vérifier l'anonymat de l'écran live :
+//   - un nom de deux à quatre caractères tronqué en « N. » ne se distingue pas d'un nom non
+//     tronqué : l'assertion aurait été verte sans rien prouver ;
+//   - et surtout, le prénom `Prenom0` **contient** la sous-chaîne `nom0`. Une recherche de
+//     « nom de famille complet dans le DOM » y était à une différence de casse près de se
+//     tromper, dans un sens ou dans l'autre.
+// Aucun de ces noms n'est une sous-chaîne d'un prénom du jeu, et chacun fait au moins
+// huit caractères.
+//
+// ⚠️ La dernière entrée est VIDE volontairement : un participant sans nom de famille est un
+// cas réel (le compte rattrapé le 03/10/2026 n'a ni nom ni date de naissance), et c'est celui
+// où la troncature peut produire « Prenom9 . » ou une cellule vide sur un écran projeté.
+// Ne pas le « compléter ».
+const NOMS_DE_FAMILLE = [
+  'Dupont-Lachaise',
+  'Vandenberghe',
+  'Kowalczyk',
+  'Tartanpion',
+  'Beaumont-Riviere',
+  'Szczepanski',
+  'Delacroix-Mallet',
+  'Grandmaison',
+  'Charpentier',
+  null,
+];
+
 const MURS = ['Grande Face', 'Dévers 30°', 'Dalle'];
 const COULEURS = ['bleu', 'violet', 'rouge', 'noir', 'blanc'];
 
@@ -76,13 +107,19 @@ async function main() {
     const u = await auth.createUser({ email, password: PASSWORD });
     const dateOfBirth = `${annees[i]}-06-15`;
     const gender = i % 2 === 0 ? 'Homme' : 'Femme';
+    const lastName = NOMS_DE_FAMILLE[i];
     await db.collection('users').doc(u.uid).set({
-      email, first_name: `Prenom${i}`, last_name: `Nom${i}`,
+      email, first_name: `Prenom${i}`, last_name: lastName,
       roles: ['client'], dateOfBirth, gender, level: 'rouge',
       classementOptIn: true, inscritAuxCompetitions: true,
     });
     grimpeurs.push({
-      uid: u.uid, nom: `Prenom${i} Nom${i}`, dateOfBirth, gender,
+      uid: u.uid,
+      // L'oracle porte le nom COMPLET : c'est ce que montrent les écrans de classement
+      // admin/ouvreur, qui ne sont pas publics. L'écran live, lui, tronque — et son e2e
+      // retronque de son côté, avec sa propre implémentation.
+      nom: lastName ? `Prenom${i} ${lastName}` : `Prenom${i}`,
+      dateOfBirth, gender,
       age: anneeCourante - annees[i],
     });
   }
@@ -137,7 +174,8 @@ async function main() {
     await db.collection('competition_participants').doc(`${g.uid}_${competition.id}`).set({
       competition_id: competition.id, user_id: g.uid, submitted: false,
       email: `grimpeur${grimpeurs.indexOf(g)}.simu@blocabrac.test`,
-      first_name: `Prenom${grimpeurs.indexOf(g)}`, last_name: `Nom${grimpeurs.indexOf(g)}`,
+      first_name: `Prenom${grimpeurs.indexOf(g)}`,
+      last_name: NOMS_DE_FAMILLE[grimpeurs.indexOf(g)],
       dateOfBirth: g.dateOfBirth, gender: g.gender, level: 'rouge', is_client: true,
       registered_at: new Date().toISOString(),
     });

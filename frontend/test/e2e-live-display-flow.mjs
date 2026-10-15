@@ -20,6 +20,7 @@
 // Prérequis : émulateurs Auth/Firestore + `vite --port 5174` + `node test/seed-competition-simulation.mjs`.
 import { chromium } from 'playwright';
 import admin from 'firebase-admin';
+import { assertNoFullLastName } from './assertNoFullLastName.mjs';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -34,6 +35,14 @@ const RECOMPUTE_WAIT_MS = 4000; // debounce de 1,5 s + marge
 const ROTATION_WAIT_MS = 22000; // rotation à 18 s + marge
 
 const attendu = JSON.parse(readFileSync(join(__dirname, '.simulation-attendu.json'), 'utf8'));
+
+// Les noms de famille COMPLETS du jeu d'essai, derives de l'oracle plutot que recopies :
+// une seule source, donc impossible de verifier l'anonymat contre une liste perimee.
+// Le grimpeur sans nom de famille n'y apparait pas (son 'nom' n'a pas d'espace), et le
+// filet ignore de toute facon les valeurs trop courtes.
+const NOMS_DE_FAMILLE = [...new Set(
+  attendu.open.map((e) => e.nom.split(' ').slice(1).join(' ')).filter((n) => n.length > 0)
+)];
 
 admin.initializeApp({ projectId: 'blocabrac' });
 const db = admin.firestore();
@@ -153,6 +162,66 @@ try {
     await page.locator('h4').first().waitFor({ timeout: 20000 });
     const titre = await titreCourant(page);
     assert(/Top 10/i.test(titre), `première page inattendue : « ${titre} »`);
+  });
+
+  // ═══ ANONYMAT DE L'ÉCRAN PUBLIC (§3 du plan du 5 novembre) ═══════════════════════════
+  //
+  // ⚠️ IL Y A DEUX SITES DE RENDU DU NOM dans AdminCompetitionLiveDisplay.tsx, et ils
+  // appartiennent à DEUX MODES MUTUELLEMENT EXCLUSIFS :
+  //   - les pages en rotation (`currentPage.entries`) pour les trois modes à POINTS ;
+  //   - les deux colonnes par genre (`group.participants`) pour le mode OFFICIEL.
+  // Un seul pas, sur le seul mode du jeu d'essai, n'en couvrirait donc qu'un — et l'autre
+  // pourrait divulguer un nom complet sans que rien ne rougisse. C'est pour cela qu'il y a
+  // ci-dessous un pas par mode, le second obtenu en basculant `scoring_mode` puis en
+  // rechargeant (ce champ est lu une seule fois au montage, pas écouté).
+  await step('Anonymat, mode à points : aucun nom de famille complet sur la page affichée', async () => {
+    // Taille d'abord : une page vide ne divulgue aucun nom, et l'assertion serait verte sans
+    // rien vérifier. On exige les 10 lignes attendues avant d'affirmer quoi que ce soit.
+    const lignes = await lireLignes(page);
+    assert(lignes.length === 10, `${lignes.length} lignes au lieu de 10 — rien à inspecter`);
+    await assertNoFullLastName(page, NOMS_DE_FAMILLE, 'écran live (mode à points)');
+  });
+
+  await step('Anonymat : un nom de famille absent ne produit ni « Prenom . » ni cellule vide', async () => {
+    // Le cas réel du compte rattrapé le 03/10/2026 (ni nom, ni date de naissance). Le jeu
+    // d'essai porte volontairement un grimpeur sans nom de famille.
+    const lignes = await lireLignes(page);
+    const sansNom = lignes.filter((l) => /\s\.$/.test(l.nom) || l.nom.trim() === '');
+    assert(
+      sansNom.length === 0,
+      `${sansNom.length} ligne(s) affichant un nom tronqué à vide : ${JSON.stringify(sansNom.map((l) => l.nom))}`
+    );
+    // Et le grimpeur concerné est bien là, nommé par son seul prénom.
+    assert(
+      lignes.some((l) => l.nom === 'Prenom9'),
+      `le grimpeur sans nom de famille n'apparaît pas tel quel : ${JSON.stringify(lignes.map((l) => l.nom))}`
+    );
+  });
+
+  await step('Anonymat, mode OFFICIEL : le second site de rendu est couvert lui aussi', async () => {
+    // `scoring_mode` est lu une seule fois au montage (getDoc, pas onSnapshot) : on bascule
+    // en base puis on recharge. L'écriture passe par l'Admin SDK, donc hors des règles —
+    // qui verrouillent ce champ dès que la compétition quitte « à venir ».
+    await db.collection('competitions').doc(attendu.competitionId).update({ scoring_mode: 'officiel' });
+    await page.reload();
+    await page.locator('h4').first().waitFor({ timeout: 20000 });
+
+    // En mode officiel l'écran rend les deux groupes de genre côte à côte, chacun filtré aux
+    // participants ayant au moins un top ou une zone. On exige donc qu'il reste des lignes :
+    // un écran filtré à vide ne divulguerait rien, et le pas serait vert pour rien.
+    const nbLignes = await page.evaluate(() => {
+      // Les lignes de ce rendu sont les Box filles des conteneurs de groupe ; on compte les
+      // nœuds qui contiennent à la fois un rang et un nom (deux Typography h5 au moins).
+      return [...document.querySelectorAll('div')].filter((d) => d.querySelectorAll(':scope > h5').length >= 2).length;
+    });
+    assert(nbLignes >= 2, `mode officiel : ${nbLignes} ligne(s) de classement, trop peu pour vérifier`);
+
+    await assertNoFullLastName(page, NOMS_DE_FAMILLE, 'écran live (mode officiel)');
+
+    // Remise en état : les pas suivants raisonnent sur le mode à points.
+    await db.collection('competitions').doc(attendu.competitionId).update({ scoring_mode: 'blocabrac' });
+    await page.reload();
+    await page.locator('h4').first().waitFor({ timeout: 20000 });
   });
 
   // ⚠️ LE PAS QUI COMPTE : les rangs de la première page sont calculés sur une TRANCHE.

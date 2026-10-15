@@ -4,6 +4,7 @@ import { useParams } from 'react-router-dom';
 import { collection, doc, getDoc, getDocs, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '../services/firebaseConfig';
 import { formattedAppVersion } from '../config/appVersion';
+import { shortParticipantName } from '../utils/participantDisplayName';
 import {
   getClassementByCategory,
   getOfficialClassementByCategory,
@@ -73,10 +74,18 @@ interface LivePage {
 
 // ✅ Prénom + initiale (§7, "Format d'affichage") : les catégories FFME impliquent des
 // mineurs, le nom complet n'est pas affiché sur un écran public.
-const displayName = (p: LiveParticipant): string => {
-  const initial = p.last_name?.trim().charAt(0).toUpperCase();
-  return initial ? `${p.first_name} ${initial}.` : p.first_name;
-};
+//
+// ⚠️ 15/10/2026 — la troncature vit désormais dans `utils/participantDisplayName.ts`, partagée
+// avec le palmarès officiel gelé (`competition_rankings`, lisible par tout compte
+// authentifié). Elle était ici en propre, et c'était un quatrième « même règle, plusieurs
+// implémentations » en attente : deux endroits auraient fini par ne plus tronquer de la même
+// façon. La fonction partagée corrige en outre un cas que celle-ci rendait VIDE — un
+// participant sans aucun nom produisait une cellule vide sur l'écran projeté, elle affiche
+// maintenant un libellé explicite.
+//
+// ⚠️ L'oracle de `e2e-live-display-flow.mjs` garde SA PROPRE troncature, délibérément : un
+// test qui réutiliserait cette fonction ne prouverait plus rien sur elle.
+const displayName = (p: LiveParticipant): string => shortParticipantName(p);
 
 // ✅ Aucune interaction prévue sur cet écran (§5 : "il se regarde, il ne s'utilise
 // pas") : le composant Wake Lock est isolé dans ce hook plutôt que dispersé dans le

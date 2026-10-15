@@ -149,6 +149,18 @@ export const compareScoreEntries = <P extends ParticipantBase>(
   if (b.score !== a.score) return b.score - a.score;
   const parBlocs = compareTieBreak(a.tieBreak, b.tieBreak);
   if (parBlocs !== 0) return parBlocs;
+  // ⚠️ AUCUN BLOC RÉUSSI DES DEUX CÔTÉS : ils restent ex æquo, et le critère des essais NE
+  // S'APPLIQUE PAS. Trouvé le 15/10/2026 par e2e-live-display-flow.mjs, dont un pas existant
+  // a rougi : en début d'épreuve, où tout le monde est à 0 point, compter les essais des
+  // ÉCHECS classait les grimpeurs — et dans le pire sens possible, celui qui n'avait rien
+  // tenté passant devant celui qui avait essayé et échoué. Sur l'écran projeté dans la salle,
+  // devant les intéressés.
+  //
+  // Le critère existe pour séparer deux grimpeurs dont les PERFORMANCES sont identiques. Sans
+  // performance, il n'y a rien à séparer. (Le cas « un seul des deux a réussi quelque chose »
+  // ne descend jamais jusqu'ici : `compareTieBreak` fait déjà passer devant celui qui a un
+  // bloc de plus.)
+  if (a.tieBreak.length === 0 && b.tieBreak.length === 0) return 0;
   return a.totalAttempts - b.totalAttempts;
 };
 

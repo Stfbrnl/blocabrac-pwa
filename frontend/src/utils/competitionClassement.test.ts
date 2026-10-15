@@ -820,3 +820,82 @@ describe('Partition par niveau max : paquets, ordre et effectifs (§1.4)', () =>
     expect(ordre.map(g => g.category)).toEqual(['Niveau bleu', LEVEL_MAX_UNKNOWN_CATEGORY]);
   });
 });
+
+// ⚠️ DÉFAUT RÉEL DE CE CHANTIER, trouvé le 15/10/2026 par un pas EXISTANT de
+// e2e-live-display-flow.mjs qui a rougi — pas par un test écrit pour l'occasion.
+//
+// Le critère « le moins d'essais au total, échecs compris » comptait les essais des échecs
+// même quand personne n'avait rien réussi. En début d'épreuve, où tout le monde est à 0 point,
+// il classait donc les grimpeurs — et dans le pire sens possible : **celui qui n'avait rien
+// tenté passait devant celui qui avait essayé et échoué**, sur l'écran projeté dans la salle.
+//
+// Le critère existe pour séparer deux grimpeurs dont les PERFORMANCES sont identiques. Sans
+// performance, il n'y a rien à séparer.
+describe('Début d\'épreuve : aucun bloc réussi, donc rien à départager', () => {
+  interface G extends ParticipantBase { first_name: string }
+  const blocs = [
+    { id: 'r', color: 'rouge', difficulty: 'rouge' },
+    { id: 'b', color: 'bleu', difficulty: 'bleu' },
+  ];
+
+  it('deux grimpeurs n\'ayant que des échecs partagent le rang 1, quels que soient leurs essais', () => {
+    const prudent: G = { user_id: 'prudent', first_name: 'Prudent' };
+    const acharne: G = { user_id: 'acharne', first_name: 'Acharne' };
+    const resultats = [
+      // Acharné a tenté beaucoup et échoué ; Prudent a à peine touché le mur.
+      { user_id: 'acharne', boulder_id: 'r', success: false, attempts: 9 },
+      { user_id: 'acharne', boulder_id: 'b', success: false, attempts: 7 },
+      { user_id: 'prudent', boulder_id: 'r', success: false, attempts: 1 },
+    ];
+    const open = getClassementByCategory(resultats, [prudent, acharne], blocs, 'global');
+
+    expect(open).toHaveLength(2);
+    expect(open.map(e => e.score)).toEqual([0, 0]);
+    // Les totaux d'essais DIFFÈRENT — c'est bien ce cas-là qu'on refuse d'exploiter.
+    expect(new Set(open.map(e => e.totalAttempts)).size).toBe(2);
+    expect(rankPointEntries(open)).toEqual([1, 1]);
+  });
+
+  it('tout le monde à zéro : un seul rang pour tous, pas une numérotation 1..N', () => {
+    // Le cas de l'ouverture d'épreuve sur l'écran live, à dix grimpeurs.
+    const dix = Array.from({ length: 10 }, (_, i) => ({ user_id: `g${i}`, first_name: `G${i}` }));
+    const resultats = dix.map((g, i) => ({
+      user_id: g.user_id, boulder_id: 'r', success: false, attempts: i + 1,
+    }));
+    const open = getClassementByCategory(resultats, dix, blocs, 'global');
+
+    expect(open).toHaveLength(10);
+    expect(rankPointEntries(open)).toEqual([1, 1, 1, 1, 1, 1, 1, 1, 1, 1]);
+  });
+
+  it('mais dès qu\'UN SEUL a réussi quelque chose, il passe devant — sans l\'aide du critère', () => {
+    // Ce cas ne descend jamais jusqu'au critère des essais : `compareTieBreak` fait déjà
+    // passer devant celui qui a un bloc de plus. On le fixe pour que la garde ajoutée ne
+    // soit pas élargie par erreur à ce cas-là.
+    const reussi: G = { user_id: 'reussi', first_name: 'Reussi' };
+    const echoue: G = { user_id: 'echoue', first_name: 'Echoue' };
+    const resultats = [
+      { user_id: 'echoue', boulder_id: 'r', success: false, attempts: 1 },
+      { user_id: 'reussi', boulder_id: 'b', success: true, attempts: 8 },
+    ];
+    const open = getClassementByCategory(resultats, [reussi, echoue], blocs, 'global');
+    expect(open.map(e => e.participant.user_id)).toEqual(['reussi', 'echoue']);
+    expect(rankPointEntries(open)).toEqual([1, 2]);
+  });
+
+  it('et le critère s\'applique toujours quand les deux ont réussi la même chose', () => {
+    // La garde ne doit pas désarmer le critère dans son cas d'usage : performances
+    // identiques, échecs différents.
+    const soigneux: G = { user_id: 'soigneux', first_name: 'Soigneux' };
+    const brouillon: G = { user_id: 'brouillon', first_name: 'Brouillon' };
+    const resultats = [
+      { user_id: 'brouillon', boulder_id: 'b', success: true, attempts: 1 },
+      { user_id: 'brouillon', boulder_id: 'r', success: false, attempts: 6 },
+      { user_id: 'soigneux', boulder_id: 'b', success: true, attempts: 1 },
+      { user_id: 'soigneux', boulder_id: 'r', success: false, attempts: 2 },
+    ];
+    const open = getClassementByCategory(resultats, [soigneux, brouillon], blocs, 'global');
+    expect(open.map(e => e.participant.user_id)).toEqual(['soigneux', 'brouillon']);
+    expect(rankPointEntries(open)).toEqual([1, 2]);
+  });
+});
