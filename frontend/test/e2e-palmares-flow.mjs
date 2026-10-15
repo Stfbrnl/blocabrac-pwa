@@ -159,7 +159,25 @@ async function main() {
     for (const nom of ['Dupont-Lachaise', 'Vandenberghe', 'Visiteur']) {
       assert(!serialise.includes(nom), `le document contient le nom complet « ${nom} »`);
     }
-    assert(!serialise.includes('1996-'), 'le document contient une date de naissance');
+    // ⚠️ GARDE DE FORME, PAS DE VALEUR (retour ClaudeNav, RETOUR-avant-deploiement-cloture.md
+    // §2, et il a raison : ma propre règle était appliquée de façon inégale dans ce test).
+    // Les noms sont dérivés du jeu d'essai, donc ils ne périment pas ; la date était écrite en
+    // dur (`1996-`), donc le jour où le jeu d'essai naît en 2003, l'assertion restait verte en
+    // laissant passer une date de naissance.
+    //
+    // On interdit donc TOUTE chaîne de forme AAAA-MM-JJ, sauf les deux champs où une date est
+    // légitime et attendue — `competition_date` et `published_at`. Les nommer est ce qui rend
+    // la garde exacte : sans l'exclusion, elle rougirait sur le document correct.
+    const sansDatesLegitimes = JSON.stringify({
+      ...(await lirePalmaresEnBase()),
+      competition_date: null,
+      published_at: null,
+    });
+    const datesTrouvees = sansDatesLegitimes.match(/\d{4}-\d{2}-\d{2}/g) || [];
+    assert(
+      datesTrouvees.length === 0,
+      `le document contient ${datesTrouvees.length} date(s) hors des deux champs légitimes : ${datesTrouvees.join(', ')}`
+    );
     assert(serialise.includes('Amandine D.'), 'le nom tronqué attendu est absent');
   });
 

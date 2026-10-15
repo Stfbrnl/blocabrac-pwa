@@ -98,6 +98,13 @@ const AdminCompetitionManagement: React.FC = () => {
     coupDEnvoiInconnu: boolean;
   } | null>(null);
   const [publicationEnCours, setPublicationEnCours] = useState(false);
+  // ✅ Retour ClaudeNav (RETOUR-avant-deploiement-cloture.md §3) : quand des niveaux de départ
+  // manquent, un AVERTISSEMENT ne suffit pas — il se laisse ne pas lire, et le palmarès publié
+  // est IMMUABLE (`update, delete: if false`), donc le seul recours est la clé de service.
+  // Une confirmation, elle, force la décision à être prise. Et son argument décisif : celui qui
+  // clique le 5 novembre au soir n'aura lu aucun de ces documents, et il sera en fin de contest,
+  // entouré. Un clic survit à ce contexte, une bannière non.
+  const [risqueAssume, setRisqueAssume] = useState(false);
   const [createForm, setCreateForm] = useState<Omit<Competition, 'id' | 'registered_count'>>({
     name: '',
     date: new Date().toISOString().split('T')[0],
@@ -299,6 +306,10 @@ const AdminCompetitionManagement: React.FC = () => {
   // publication se fait ici plutôt que dans un script : un script aurait dû réimplémenter le
   // classement, c'est-à-dire fabriquer la cinquième divergence de ce projet.
   const handlePreparerPalmares = async (competition: Competition) => {
+    // ⚠️ Remise à zéro à CHAQUE ouverture : sans elle, un risque assumé sur une compétition se
+    // reporterait silencieusement sur la suivante — le bouton serait déjà actif, et la
+    // confirmation ne confirmerait plus rien.
+    setRisqueAssume(false);
     // ⚠️ Mode « Officiel » : refus explicite plutôt qu'un palmarès à zéro partout, et immuable
     // (voir isScoringModeGelable). Ce mode ne sert qu'à la Finale, dont l'annonce est elle-même
     // suspendue.
@@ -801,8 +812,23 @@ const AdminCompetitionManagement: React.FC = () => {
                       : 'Ils étaient inscrits AVANT le coup d\'envoi : leur niveau de départ aurait dû être figé.'}{' '}
                     Le classement par niveau max les rangera sur leur niveau <strong>à l'inscription</strong>,
                     qui peut dater de plusieurs semaines. Cette information est perdue et ne peut pas être
-                    reconstituée — publiez en connaissance de cause.
+                    reconstituée.
                   </Alert>
+                )}
+
+                {palmaresApercu.niveauxNonFiges > 0 && (
+                  <FormControlLabel
+                    control={(
+                      <Switch
+                        checked={risqueAssume}
+                        onChange={(e) => setRisqueAssume(e.target.checked)}
+                      />
+                    )}
+                    label={
+                      `Je publie quand même : ${palmaresApercu.niveauxNonFiges} participant(s) `
+                      + 'seront classés sur leur niveau à l\'inscription, et le palmarès sera définitif.'
+                    }
+                  />
                 )}
 
                 {palmaresApercu.payload.general_open.length === 0 ? (
@@ -840,7 +866,13 @@ const AdminCompetitionManagement: React.FC = () => {
             <Button
               variant="contained"
               color="primary"
-              disabled={publicationEnCours || (palmaresApercu?.payload.general_open.length ?? 0) === 0}
+              disabled={
+                publicationEnCours
+                || (palmaresApercu?.payload.general_open.length ?? 0) === 0
+                // Niveaux de départ manquants : le bouton reste inerte tant que la décision
+                // n'est pas prise explicitement. Voir le commentaire de `risqueAssume`.
+                || ((palmaresApercu?.niveauxNonFiges ?? 0) > 0 && !risqueAssume)
+              }
               onClick={handlePublierPalmares}
             >
               Publier définitivement
