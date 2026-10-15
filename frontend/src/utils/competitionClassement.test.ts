@@ -6,6 +6,7 @@ import {
   getOfficialClassementByCategory,
   rankOfficialEntries,
   rankedOfficialEntries,
+  rankPointEntries,
   type ParticipantBase,
 } from './competitionClassement';
 
@@ -383,5 +384,147 @@ describe('Finale de l\'année — jeu de test calculé à la main (10 grimpeurs 
     expect(rankById.heidi).toBe(8);
     expect(rankById.ivan).toBe(9);
     expect(rankById.judy).toBe(10);
+  });
+});
+
+// ============================================================================================
+// ÉPINGLAGE des trois classements existants (open / genre / âge)
+//
+// docs/plans/PLAN-classements-competition-5-novembre.md §4.1 : avant d'ajouter un quatrième
+// classement (par niveau max) et un critère de départage supplémentaire, ce test fixe l'ORDRE
+// COMPLET, les RANGS et les EX ÆQUO des trois classements actuels sur un jeu figé. Il doit
+// rester vert À L'IDENTIQUE après le chantier : s'il bouge, c'est qu'on a changé un résultat
+// déjà visible par les grimpeurs, ce que la consigne interdit.
+//
+// ⚠️ Ce que ce jeu de données est capable d'exprimer, et c'est délibéré (règle du 03/10 :
+// « quels défauts ce jeu est-il physiquement incapable d'exprimer ? ») :
+//   - deux participants au moins dans chaque partition non singleton (genre Homme : 5,
+//     Femme : 3 ; âge Séniors : 4, U14 : 2) — un groupe à un seul grimpeur ne peut exhiber
+//     aucun défaut d'ordre ni de rang partagé ;
+//   - un EX ÆQUO RÉEL (gus / hugo : mêmes points, même liste de blocs réussis, mêmes essais),
+//     visible simultanément dans les trois classements, puisqu'ils partagent genre et
+//     catégorie d'âge ;
+//   - des groupes singletons (U16, Vétérans 1) à côté, pour que l'ordre des groupes soit lui
+//     aussi épinglé ;
+//   - des ÉCHECS avec des essais (eli, dan), que le barème doit ignorer.
+//
+// ⚠️ gus et hugo ont aussi le MÊME nombre total d'essais, échecs compris (3 sur le bloc
+// échoué). C'est volontaire : le critère de départage secondaire ajouté par ce chantier
+// (« le moins d'essais au total ») doit donc les laisser ex æquo, et ce test reste vrai mot
+// pour mot avant et après. La capacité du nouveau critère à départager est prouvée ailleurs,
+// sur une paire faite pour ça — sinon ce test-ci mélangerait l'épinglage et la nouveauté.
+describe('Épinglage des classements existants (§4.1 — doit rester identique après le chantier)', () => {
+  interface Grimpeur extends ParticipantBase {
+    first_name: string;
+  }
+
+  const ana: Grimpeur = { user_id: 'ana', first_name: 'Ana', gender: 'Femme', legacyAge: 12 };
+  const bea: Grimpeur = { user_id: 'bea', first_name: 'Bea', gender: 'Femme', legacyAge: 30 };
+  const cleo: Grimpeur = { user_id: 'cleo', first_name: 'Cleo', gender: 'Femme', legacyAge: 14 };
+  const dan: Grimpeur = { user_id: 'dan', first_name: 'Dan', gender: 'Homme', legacyAge: 30 };
+  const eli: Grimpeur = { user_id: 'eli', first_name: 'Eli', gender: 'Homme', legacyAge: 12 };
+  const fab: Grimpeur = { user_id: 'fab', first_name: 'Fab', gender: 'Homme', legacyAge: 45 };
+  const gus: Grimpeur = { user_id: 'gus', first_name: 'Gus', gender: 'Homme', legacyAge: 30 };
+  const hugo: Grimpeur = { user_id: 'hugo', first_name: 'Hugo', gender: 'Homme', legacyAge: 30 };
+  const contestants = [ana, bea, cleo, dan, eli, fab, gus, hugo];
+
+  // Barème "blocabrac" (celui du Contest Haloween du 5 novembre) :
+  // bleu 100/-10, violet 200/-10, rouge 400/-20, noir 600/-20, blanc 800/-50.
+  const blocs = [
+    { id: 'c1', color: 'bleu', difficulty: 'bleu' },
+    { id: 'c2', color: 'violet', difficulty: 'violet' },
+    { id: 'c3', color: 'rouge', difficulty: 'rouge' },
+    { id: 'c4', color: 'noir', difficulty: 'noir' },
+    { id: 'c5', color: 'blanc', difficulty: 'blanc' },
+  ];
+
+  const resultats = [
+    // fab : noir en 3 (560) + rouge en 5 (320) = 880
+    { user_id: 'fab', boulder_id: 'c4', success: true, attempts: 3 },
+    { user_id: 'fab', boulder_id: 'c3', success: true, attempts: 5 },
+    // bea : blanc en 2 (750) = 750
+    { user_id: 'bea', boulder_id: 'c5', success: true, attempts: 2 },
+    // ana : noir en 1 (600) + bleu en 1 (100) = 700
+    { user_id: 'ana', boulder_id: 'c4', success: true, attempts: 1 },
+    { user_id: 'ana', boulder_id: 'c1', success: true, attempts: 1 },
+    // dan : rouge en 1 (400) + violet en 1 (200) = 600, et un échec à 2 essais (0)
+    { user_id: 'dan', boulder_id: 'c3', success: true, attempts: 1 },
+    { user_id: 'dan', boulder_id: 'c2', success: true, attempts: 1 },
+    { user_id: 'dan', boulder_id: 'c4', success: false, attempts: 2 },
+    // gus et hugo : rouge en 2 (380) + bleu en 1 (100) = 480, et le MÊME échec à 3 essais
+    { user_id: 'gus', boulder_id: 'c3', success: true, attempts: 2 },
+    { user_id: 'gus', boulder_id: 'c1', success: true, attempts: 1 },
+    { user_id: 'gus', boulder_id: 'c2', success: false, attempts: 3 },
+    { user_id: 'hugo', boulder_id: 'c3', success: true, attempts: 2 },
+    { user_id: 'hugo', boulder_id: 'c1', success: true, attempts: 1 },
+    { user_id: 'hugo', boulder_id: 'c2', success: false, attempts: 3 },
+    // cleo : violet en 1 (200) + bleu en 2 (90) = 290
+    { user_id: 'cleo', boulder_id: 'c2', success: true, attempts: 1 },
+    { user_id: 'cleo', boulder_id: 'c1', success: true, attempts: 2 },
+    // eli : bleu en 3 (80) = 80, et un échec à 4 essais (0)
+    { user_id: 'eli', boulder_id: 'c1', success: true, attempts: 3 },
+    { user_id: 'eli', boulder_id: 'c2', success: false, attempts: 4 },
+  ];
+
+  const rangsParId = <T extends { participant: Grimpeur }>(
+    entries: T[],
+    ranks: number[]
+  ): Record<string, number> =>
+    Object.fromEntries(entries.map((e, i) => [e.participant.user_id, ranks[i]]));
+
+  it('classement open : ordre, scores et rang partagé de l\'ex æquo', () => {
+    const open = getClassementByCategory(resultats, contestants, blocs, 'global');
+
+    expect(open.map(e => e.participant.user_id)).toEqual([
+      'fab', 'bea', 'ana', 'dan', 'gus', 'hugo', 'cleo', 'eli',
+    ]);
+    expect(open.map(e => e.score)).toEqual([880, 750, 700, 600, 480, 480, 290, 80]);
+    // Les échecs ne rapportent rien : dan reste à 600 malgré 2 essais sur le noir.
+    expect(open.map(e => e.boulders)).toEqual([2, 1, 2, 2, 2, 2, 2, 1]);
+
+    // Rang de compétition : gus et hugo partagent le 5, cleo saute au 7.
+    expect(rangsParId(open, rankPointEntries(open))).toEqual({
+      fab: 1, bea: 2, ana: 3, dan: 4, gus: 5, hugo: 5, cleo: 7, eli: 8,
+    });
+  });
+
+  it('classement par genre : groupes, ordre interne et rangs', () => {
+    const parGenre = getClassementByCategory(resultats, contestants, blocs, 'gender');
+
+    // L'ordre des groupes suit la première apparition dans le classement open
+    // (fab est Homme et premier, bea est Femme et deuxième).
+    expect(parGenre.map(g => g.category)).toEqual(['Homme', 'Femme']);
+
+    const hommes = parGenre[0].participants;
+    expect(hommes.map(e => e.participant.user_id)).toEqual(['fab', 'dan', 'gus', 'hugo', 'eli']);
+    expect(rangsParId(hommes, rankPointEntries(hommes))).toEqual({
+      fab: 1, dan: 2, gus: 3, hugo: 3, eli: 5,
+    });
+
+    const femmes = parGenre[1].participants;
+    expect(femmes.map(e => e.participant.user_id)).toEqual(['bea', 'ana', 'cleo']);
+    expect(rangsParId(femmes, rankPointEntries(femmes))).toEqual({ bea: 1, ana: 2, cleo: 3 });
+  });
+
+  it('classement par catégorie d\'âge : groupes FFME, ordre interne et rangs', () => {
+    const parAge = getClassementByCategory(resultats, contestants, blocs, 'age');
+
+    expect(parAge.map(g => g.category)).toEqual([
+      'Vétérans 1 (40-49 ans)', 'Séniors (20-39 ans)', 'U14 (12-13 ans)', 'U16 (14-15 ans)',
+    ]);
+
+    const seniors = parAge[1].participants;
+    expect(seniors.map(e => e.participant.user_id)).toEqual(['bea', 'dan', 'gus', 'hugo']);
+    expect(rangsParId(seniors, rankPointEntries(seniors))).toEqual({
+      bea: 1, dan: 2, gus: 3, hugo: 3,
+    });
+
+    const u14 = parAge[2].participants;
+    expect(u14.map(e => e.participant.user_id)).toEqual(['ana', 'eli']);
+    expect(rangsParId(u14, rankPointEntries(u14))).toEqual({ ana: 1, eli: 2 });
+
+    // Les groupes à un seul grimpeur existent et s'affichent (§1.4) : on les épingle aussi.
+    expect(parAge[0].participants.map(e => e.participant.user_id)).toEqual(['fab']);
+    expect(parAge[3].participants.map(e => e.participant.user_id)).toEqual(['cleo']);
   });
 });
