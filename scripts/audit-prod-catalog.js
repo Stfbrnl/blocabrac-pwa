@@ -236,6 +236,33 @@ async function main() {
       );
     }
     if (lacunes.length > 0) lacunesDeCompte += 1;
+    // ─── `is_client` cohérent avec les rôles du compte ───────────────────────────────
+    //
+    // Quatrième divergence trouvée le 03/10/2026 en centralisant dans
+    // `utils/competitionParticipant.ts` : l'auto-inscription codait `is_client: true` en dur
+    // là où les deux chemins d'administration testaient `roles`. Le constructeur unique
+    // corrige l'écriture future ; le rattrapage du 03/10 ne portait PAS sur ce champ (ses
+    // `FIELDS` sont nom/date de naissance/genre/niveau).
+    //
+    // Ce contrôle devient structurant avec les classements de clôture du 5 novembre
+    // (docs/plans/PLAN-classements-competition-5-novembre.md §2.1) : `is_client` y filtre
+    // quatre classements sur cinq, et le palmarès est GELÉ — un `is_client` faux n'est plus
+    // une donnée inexacte que personne ne lit, il met un visiteur dans le classement des
+    // clients, définitivement.
+    //
+    // ⚠️ Né VERT, et vérifié tel : mesuré le 15/10/2026 sur les 3 participations existantes,
+    // 0 écart (les deux comptes concernés portent `client`, donc le `true` codé en dur était
+    // accidentellement juste). Rien à rattraper, donc pas d'avertissement permanent à sa
+    // naissance — et à partir de là toute occurrence est une régression réelle.
+    const rolesDuCompte = new Set([...(c.roles || []), ...(c.role ? [c.role] : [])]);
+    const clientAttendu = rolesDuCompte.size > 0 ? rolesDuCompte.has('client') : true;
+    if (p.is_client !== undefined && p.is_client !== clientAttendu) {
+      errors.push(
+        `competition_participants/${d.id} : is_client=${JSON.stringify(p.is_client)} alors que les rôles du `
+        + `compte donnent ${clientAttendu} (roles=[${[...rolesDuCompte].join(', ')}]) — ce champ filtre les `
+        + 'classements clients, qui sont gelés à la clôture.'
+      );
+    }
     // La participation doit aussi pointer vers une compétition qui existe.
     if (p.competition_id && !competitionIds.has(p.competition_id)) {
       errors.push(`competition_participants/${d.id} pointe vers une compétition absente : "${p.competition_id}".`);

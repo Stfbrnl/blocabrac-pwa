@@ -80,8 +80,18 @@ export default function Register() {
         // écrire aussi "role" ici était justement à l'origine de la double
         // convention role/roles qui a causé plusieurs bugs de droits dans l'app.
         roles: ['client'],
-        inscritAuxCours: false, // ✅ NOUVEAU CHAMP : Créé automatiquement à false
-        inscritAuxCompetitions: false, // ✅ NOUVEAU CHAMP : Créé automatiquement à false
+        // `inscritAuxCours` reste à false : une inscription aux cours est un acte
+        // commercial, pas une autorisation. Ne pas aligner les deux champs.
+        inscritAuxCours: false,
+        // ✅ 15/10/2026 — créé à `true`, et non plus à `false`. `ClientCompetitions.tsx`
+        // (`canUserRegister`) refuse l'auto-inscription tant que ce champ n'est pas vrai, et
+        // l'auto-inscription est le chemin NORMAL de cette salle : avec `false` par défaut,
+        // tout nouveau grimpeur se voyait répondre « Vous n'êtes pas autorisé à participer aux
+        // compétitions » — 53 comptes sur 61 étaient dans cet état à trois semaines du contest
+        // du 5 novembre. Le curseur de l'écran d'administration devient donc un outil
+        // d'EXCLUSION (retirer quelqu'un) et non d'inclusion (autoriser un par un).
+        // L'existant a été basculé par scripts/backfill-inscription-competitions.js.
+        inscritAuxCompetitions: true,
         classementOptIn: false,
         createdAt: new Date().toISOString()
       });

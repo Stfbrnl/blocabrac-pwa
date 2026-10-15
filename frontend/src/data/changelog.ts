@@ -13,6 +13,15 @@ export interface ChangelogEntry {
 // les commits git.
 export const changelog: ChangelogEntry[] = [
   {
+    version: '2.73',
+    date: '2026-10-15',
+    title: 'Les inscriptions aux compétitions sont ouvertes à tous',
+    items: [
+      'L\'accès aux compétitions était désactivé par défaut sur la plupart des comptes : en voulant vous inscrire, vous receviez « Vous n\'êtes pas autorisé à participer aux compétitions ». C\'est corrigé — tout grimpeur peut désormais s\'inscrire lui-même, et les nouveaux comptes le peuvent dès leur création.',
+      'Le Contest Haloween du 5 novembre est ouvert aux inscriptions dans l\'onglet Compétitions.',
+    ],
+  },
+  {
     version: '2.72.1',
     date: '2026-10-03',
     title: 'Le bouton d\'inscription dit à nouveau la vérité',
