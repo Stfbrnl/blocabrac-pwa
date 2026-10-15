@@ -7,6 +7,8 @@ import {
   rankOfficialEntries,
   rankedOfficialEntries,
   rankPointEntries,
+  resolveClassementLevel,
+  LEVEL_MAX_UNKNOWN_CATEGORY,
   type ParticipantBase,
 } from './competitionClassement';
 
@@ -43,8 +45,15 @@ describe('getParticipantScores', () => {
     ];
     const scores = getParticipantScores(results, participants, boulders);
     // tieBreak (03/10/2026) : seul le bloc RÉUSSI y figure, avec sa valeur au 1er essai.
+    // totalAttempts (15/10/2026) : l'échec compte ses 3 essais, lui — c'est la différence
+    // entre ce champ et tieBreak, et tout l'objet du critère de départage ultime.
     expect(scores).toEqual([
-      { participant: alice, score: 100, boulders: 1, tieBreak: [{ hardness: 100, attempts: 1 }] },
+      {
+        participant: alice, score: 100, boulders: 1,
+        tieBreak: [{ hardness: 100, attempts: 1 }],
+        totalAttempts: 4,
+        bestColorSucceeded: 'bleu',
+      },
     ]);
   });
 
@@ -63,7 +72,14 @@ describe('getParticipantScores', () => {
     const hiddenBoulders = [{ id: 'b1', color: undefined, difficulty: 'bleu' }];
     const results = [{ user_id: 'alice', boulder_id: 'b1', success: true, attempts: 1 }];
     expect(getParticipantScores(results, participants, hiddenBoulders)).toEqual([
-      { participant: alice, score: 100, boulders: 1, tieBreak: [{ hardness: 100, attempts: 1 }] },
+      {
+        participant: alice, score: 100, boulders: 1,
+        tieBreak: [{ hardness: 100, attempts: 1 }],
+        totalAttempts: 1,
+        // Même repli que le barème : sans `color`, c'est la cotation cachée qui donne la
+        // couleur du paquet (boulderColorKey, une seule lecture pour les deux usages).
+        bestColorSucceeded: 'bleu',
+      },
     ]);
   });
 
@@ -82,6 +98,11 @@ describe('getParticipantScores', () => {
         // Trié du plus dur au moins dur : ici la « dureté » est le points_value du bloc,
         // la couleur ne reflétant plus la difficulté dans ce mode.
         tieBreak: [{ hardness: 900, attempts: 1 }, { hardness: 150, attempts: 4 }],
+        totalAttempts: 5,
+        // ⚠️ Même en mode "blocs_valides", où la couleur ne porte plus la difficulté, le
+        // paquet de niveau reste fondé sur la COULEUR — c'est le niveau du grimpeur dans les
+        // couleurs de la salle qu'il désigne, pas la valeur en points de son bloc.
+        bestColorSucceeded: 'rose',
       }]);
   });
 
@@ -92,6 +113,8 @@ describe('getParticipantScores', () => {
       .toEqual([{
         participant: alice, score: 999, boulders: 1,
         tieBreak: [{ hardness: 999, attempts: 1 }],
+        totalAttempts: 1,
+        bestColorSucceeded: 'bleu',
       }]);
   });
 });
@@ -526,5 +549,274 @@ describe('Épinglage des classements existants (§4.1 — doit rester identique 
     // Les groupes à un seul grimpeur existent et s'affichent (§1.4) : on les épingle aussi.
     expect(parAge[0].participants.map(e => e.participant.user_id)).toEqual(['fab']);
     expect(parAge[3].participants.map(e => e.participant.user_id)).toEqual(['cleo']);
+  });
+});
+
+// ============================================================================================
+// Classement par NIVEAU MAX et critère de départage ultime
+// docs/plans/PLAN-classements-competition-5-novembre.md §1
+// ============================================================================================
+describe('resolveClassementLevel (§1.1 — la règle écrite comme un maximum)', () => {
+  it('prend le niveau de départ quand aucun bloc n\'a été réussi', () => {
+    expect(resolveClassementLevel({ user_id: 'x', level: 'rouge' }, undefined)).toBe('rouge');
+  });
+
+  it('prend la couleur réussie quand elle est plus haute — la règle anti-sandbagging', () => {
+    // Un grimpeur déclaré bleu qui réussit un noir est classé parmi les noirs : c'est l'effet
+    // utile de la règle, sans elle on aurait intérêt à sous-déclarer son niveau.
+    expect(resolveClassementLevel({ user_id: 'x', level: 'bleu' }, 'noir')).toBe('noir');
+  });
+
+  it('ne descend JAMAIS : réussir en dessous de son niveau ne fait pas changer de paquet', () => {
+    // La monotonie de la règle (V2.56 : on ne perd pas ce qui est acquis). C'est ce qui rend
+    // l'ordre d'application indifférent.
+    expect(resolveClassementLevel({ user_id: 'x', level: 'noir' }, 'bleu')).toBe('noir');
+  });
+
+  it('`level_at_start` a la priorité sur `level` : le niveau du DÉBUT, pas celui de l\'inscription', () => {
+    // Un grimpeur inscrit trois semaines avant en bleu, passé violet entre-temps dans la
+    // salle : c'est violet qui le range, parce que c'est son niveau au coup d'envoi.
+    expect(resolveClassementLevel({ user_id: 'x', level: 'bleu', level_at_start: 'violet' }, undefined))
+      .toBe('violet');
+  });
+
+  it('se replie sur `level` quand `level_at_start` est absent (inscrit tardif)', () => {
+    expect(resolveClassementLevel({ user_id: 'x', level: 'bleu' }, undefined)).toBe('bleu');
+  });
+
+  it('renvoie null quand ni le niveau ni une réussite ne sont connus', () => {
+    expect(resolveClassementLevel({ user_id: 'x' }, undefined)).toBeNull();
+  });
+
+  it('ignore un niveau de départ qui n\'est pas une couleur connue', () => {
+    expect(resolveClassementLevel({ user_id: 'x', level: 'turquoise' }, 'bleu')).toBe('bleu');
+    expect(resolveClassementLevel({ user_id: 'x', level: 'turquoise' }, undefined)).toBeNull();
+  });
+});
+
+describe('Critère de départage ultime : le moins d\'essais au total, échecs compris', () => {
+  interface G extends ParticipantBase { first_name: string }
+  const blocs = [
+    { id: 'r', color: 'rouge', difficulty: 'rouge' },
+    { id: 'b', color: 'bleu', difficulty: 'bleu' },
+    { id: 'v', color: 'violet', difficulty: 'violet' },
+  ];
+
+  it('sépare deux grimpeurs que tout le départage précédent laissait ex æquo', () => {
+    const ima: G = { user_id: 'ima', first_name: 'Ima', level: 'rouge' };
+    const jo: G = { user_id: 'jo', first_name: 'Jo', level: 'rouge' };
+    // Mêmes points (380 + 100 = 480), même liste de blocs réussis avec les mêmes essais :
+    // l'ancien départage s'épuisait ici. Seul l'échec les distingue.
+    const resultats = [
+      { user_id: 'jo', boulder_id: 'r', success: true, attempts: 2 },
+      { user_id: 'jo', boulder_id: 'b', success: true, attempts: 1 },
+      { user_id: 'jo', boulder_id: 'v', success: false, attempts: 5 },
+      { user_id: 'ima', boulder_id: 'r', success: true, attempts: 2 },
+      { user_id: 'ima', boulder_id: 'b', success: true, attempts: 1 },
+      { user_id: 'ima', boulder_id: 'v', success: false, attempts: 1 },
+    ];
+    const open = getClassementByCategory(resultats, [ima, jo], blocs, 'global');
+
+    expect(open.map(e => e.score)).toEqual([480, 480]);
+    expect(open.map(e => e.totalAttempts)).toEqual([4, 8]);
+    // Ima passe devant malgré un classement par points identique : 4 essais contre 8.
+    expect(open.map(e => e.participant.user_id)).toEqual(['ima', 'jo']);
+    expect(rankPointEntries(open)).toEqual([1, 2]);
+  });
+
+  it('laisse ex æquo deux grimpeurs dont même le total d\'essais est identique', () => {
+    const kim: G = { user_id: 'kim', first_name: 'Kim', level: 'rouge' };
+    const lou: G = { user_id: 'lou', first_name: 'Lou', level: 'rouge' };
+    const resultats = [
+      { user_id: 'kim', boulder_id: 'r', success: true, attempts: 2 },
+      { user_id: 'kim', boulder_id: 'b', success: true, attempts: 1 },
+      { user_id: 'lou', boulder_id: 'r', success: true, attempts: 2 },
+      { user_id: 'lou', boulder_id: 'b', success: true, attempts: 1 },
+    ];
+    const open = getClassementByCategory(resultats, [kim, lou], blocs, 'global');
+
+    expect(open.map(e => e.totalAttempts)).toEqual([3, 3]);
+    // Le critère ne tranche pas, donc le rang est PARTAGÉ — un ex æquo annoncé est un
+    // résultat, pas un échec du départage.
+    expect(rankPointEntries(open)).toEqual([1, 1]);
+  });
+
+  it('un échec non déclaré avantage son auteur — limite connue et assumée', () => {
+    // Ce test ne décrit pas un défaut à corriger : il FIXE la limite du critère, pour que
+    // personne ne la découvre le jour de l'épreuve. Elle se traite par l'annonce de début de
+    // contest (« déclarez vos échecs »), l'application ne pouvant pas constater un essai
+    // qu'on ne lui dit pas.
+    const mia: G = { user_id: 'mia', first_name: 'Mia', level: 'rouge' };
+    const noa: G = { user_id: 'noa', first_name: 'Noa', level: 'rouge' };
+    const resultats = [
+      { user_id: 'mia', boulder_id: 'r', success: true, attempts: 2 },
+      { user_id: 'mia', boulder_id: 'b', success: true, attempts: 1 },
+      // Mia déclare honnêtement son échec, Noa ne saisit rien sur ce bloc.
+      { user_id: 'mia', boulder_id: 'v', success: false, attempts: 4 },
+      { user_id: 'noa', boulder_id: 'r', success: true, attempts: 2 },
+      { user_id: 'noa', boulder_id: 'b', success: true, attempts: 1 },
+    ];
+    const open = getClassementByCategory(resultats, [mia, noa], blocs, 'global');
+
+    expect(open.map(e => e.participant.user_id)).toEqual(['noa', 'mia']);
+    expect(open.map(e => e.totalAttempts)).toEqual([3, 7]);
+  });
+});
+
+// ⚠️ LE CAS QUE LE §1.6 DEMANDE, ET QU'AUCUN TEST N'EXERÇAIT.
+//
+// Le classement par niveau max partitionne par la plus haute couleur réussie — c'est-à-dire
+// par la grandeur même dont le PREMIER critère de départage est fonction. À l'intérieur d'un
+// paquet constitué par la performance, ce critère est donc constant par construction et ne
+// discrimine plus rien. Aucun des trois classements existants n'avait cette propriété : open,
+// genre et âge sont tous orthogonaux à la couleur.
+//
+// Ce que ce test établit :
+//   1. le départage dégrade bien sur son critère suivant, et il en a un ;
+//   2. ce critère suivant (les essais) n'est PAS fonction de la couleur, donc il tranche —
+//      la règle n'est pas neutralisée, seulement affaiblie d'un cran ;
+//   3. quand il ne tranche pas non plus, l'ex æquo est affiché honnêtement.
+//
+// ⚠️ Et une nuance que le plan surestimait : la clé de paquet est un MAXIMUM avec le niveau de
+// départ, donc la couleur max réussie n'est constante dans un paquet que pour les grimpeurs
+// qui y sont par leur performance. Un grimpeur rangé en rouge par son niveau déclaré, et qui
+// n'a réussi qu'un bleu, est dans le même paquet avec une couleur max différente — le dernier
+// cas du test.
+describe('§1.6 — le départage à l\'intérieur d\'un paquet de niveau', () => {
+  interface G extends ParticipantBase { first_name: string }
+  const blocs = [
+    { id: 'r', color: 'rouge', difficulty: 'rouge' },
+    { id: 'b', color: 'bleu', difficulty: 'bleu' },
+    { id: 'v', color: 'violet', difficulty: 'violet' },
+  ];
+
+  const ima: G = { user_id: 'ima', first_name: 'Ima', level: 'bleu' };
+  const jo: G = { user_id: 'jo', first_name: 'Jo', level: 'bleu' };
+  const kim: G = { user_id: 'kim', first_name: 'Kim', level: 'bleu' };
+  const lou: G = { user_id: 'lou', first_name: 'Lou', level: 'bleu' };
+  const paulo: G = { user_id: 'paulo', first_name: 'Paulo', level: 'rouge' };
+
+  // Les quatre premiers sont dans le paquet « rouge » PAR LEUR PERFORMANCE (rouge réussi en
+  // 2 essais, bleu en 1) : même plus haute couleur, même dureté, mêmes essais sur chaque bloc
+  // réussi. Tout le départage historique est épuisé entre eux.
+  const resultats = [
+    { user_id: 'jo', boulder_id: 'r', success: true, attempts: 2 },
+    { user_id: 'jo', boulder_id: 'b', success: true, attempts: 1 },
+    { user_id: 'jo', boulder_id: 'v', success: false, attempts: 5 },
+    { user_id: 'ima', boulder_id: 'r', success: true, attempts: 2 },
+    { user_id: 'ima', boulder_id: 'b', success: true, attempts: 1 },
+    { user_id: 'ima', boulder_id: 'v', success: false, attempts: 1 },
+    { user_id: 'kim', boulder_id: 'r', success: true, attempts: 2 },
+    { user_id: 'kim', boulder_id: 'b', success: true, attempts: 1 },
+    { user_id: 'lou', boulder_id: 'r', success: true, attempts: 2 },
+    { user_id: 'lou', boulder_id: 'b', success: true, attempts: 1 },
+    // Paulo est rangé en rouge par son NIVEAU DÉCLARÉ, pas par sa performance : sa plus haute
+    // couleur réussie est bleu. Il est donc dans le même paquet avec une couleur max
+    // différente — la preuve que « constant par construction » ne vaut pas pour tout le paquet.
+    { user_id: 'paulo', boulder_id: 'b', success: true, attempts: 1 },
+  ];
+
+  const paquets = getClassementByCategory(resultats, [ima, jo, kim, lou, paulo], blocs, 'level_max');
+
+  it('les cinq grimpeurs forment un seul paquet « Niveau rouge »', () => {
+    expect(paquets.map(g => g.category)).toEqual(['Niveau rouge']);
+    expect(paquets[0].participants).toHaveLength(5);
+  });
+
+  it('le premier critère de départage est bien constant pour les quatre arrivés par la performance', () => {
+    const parPerf = paquets[0].participants.filter(e => e.participant.user_id !== 'paulo');
+    // Assertion de taille AVANT toute affirmation sur l'ensemble (règle du 03/10) : sans
+    // elle, « tous ont la même dureté » serait vrai d'un ensemble vide ou d'un singleton.
+    expect(parPerf).toHaveLength(4);
+    const duretes = new Set(parPerf.map(e => e.tieBreak[0].hardness));
+    expect(duretes.size).toBe(1);
+    expect([...duretes]).toEqual([400]);
+  });
+
+  it('la règle dégrade sur les essais, qui ne sont pas fonction de la couleur, et tranche', () => {
+    const ordre = paquets[0].participants.map(e => e.participant.user_id);
+    const rangs = rankPointEntries(paquets[0].participants);
+
+    // kim et lou (3 essais) devant ima (4), devant jo (8). Paulo, à 100 points, est dernier.
+    expect(ordre).toEqual(['kim', 'lou', 'ima', 'jo', 'paulo']);
+    // kim et lou restent réellement ex æquo : l'ex æquo est affiché, pas masqué par un
+    // critère improvisé.
+    expect(rangs).toEqual([1, 1, 3, 4, 5]);
+  });
+});
+
+describe('Partition par niveau max : paquets, ordre et effectifs (§1.4)', () => {
+  interface G extends ParticipantBase { first_name: string }
+  const blocs = [
+    { id: 'n', color: 'noir', difficulty: 'noir' },
+    { id: 'b', color: 'bleu', difficulty: 'bleu' },
+    { id: 'b2', color: 'bleu', difficulty: 'bleu' },
+    { id: 'b3', color: 'bleu', difficulty: 'bleu' },
+    { id: 'b4', color: 'bleu', difficulty: 'bleu' },
+    { id: 'b5', color: 'bleu', difficulty: 'bleu' },
+  ];
+
+  const nino: G = { user_id: 'nino', first_name: 'Nino', level: 'bleu' };   // réussit noir -> noir
+  const olga: G = { user_id: 'olga', first_name: 'Olga', level: 'noir' };   // réussit bleu  -> noir
+  const tam: G = { user_id: 'tam', first_name: 'Tam', level: 'bleu' };      // 5 bleus       -> bleu
+  const sam: G = { user_id: 'sam', first_name: 'Sam' };                     // aucun niveau, aucune réussite
+
+  // ⚠️ Tam est le MEILLEUR SCORE du lot (500) tout en étant dans le paquet le plus BAS : cinq
+  // bleus à vue valent plus qu'un noir arraché en dix essais (420). Sans ce déséquilibre,
+  // l'ordre d'insertion des paquets (celui du classement open) coïnciderait avec l'ordre des
+  // niveaux et le tri décroissant ne vérifierait RIEN — le jeu serait incapable d'exprimer le
+  // défaut qu'on prétend garder. Vérifié : en retirant le tri, ce test rougit (avec trois
+  // bleus au lieu de cinq, il restait vert).
+  const resultats = [
+    { user_id: 'tam', boulder_id: 'b', success: true, attempts: 1 },
+    { user_id: 'tam', boulder_id: 'b2', success: true, attempts: 1 },
+    { user_id: 'tam', boulder_id: 'b3', success: true, attempts: 1 },
+    { user_id: 'tam', boulder_id: 'b4', success: true, attempts: 1 },
+    { user_id: 'tam', boulder_id: 'b5', success: true, attempts: 1 },
+    { user_id: 'nino', boulder_id: 'n', success: true, attempts: 10 },
+    { user_id: 'olga', boulder_id: 'b', success: true, attempts: 1 },
+    { user_id: 'sam', boulder_id: 'n', success: false, attempts: 3 },
+  ];
+
+  const paquets = getClassementByCategory(resultats, [nino, olga, tam, sam], blocs, 'level_max');
+
+  it('ordonne les paquets du plus haut niveau au plus bas, « non déterminé » en dernier', () => {
+    // Différence volontaire avec les partitions âge/genre, dont l'ordre suit la première
+    // apparition au classement open : une suite de niveaux a un ordre naturel.
+    expect(paquets.map(g => g.category)).toEqual(['Niveau noir', 'Niveau bleu', 'Niveau non déterminé']);
+  });
+
+  it('range un grimpeur monté par sa performance avec ceux de son nouveau niveau', () => {
+    expect(paquets[0].participants.map(e => e.participant.user_id)).toEqual(['nino', 'olga']);
+  });
+
+  it('n\'écarte aucun paquet non vide, même à un seul grimpeur', () => {
+    // §1.4 : un paquet à un participant est le cas NORMAL ici (8 niveaux, une vingtaine de
+    // participants), pas le cas limite. Le masquer produirait la question à l'accueil que
+    // l'affichage de l'effectif évite.
+    expect(paquets[1].participants.map(e => e.participant.user_id)).toEqual(['tam']);
+    expect(paquets[2].participants.map(e => e.participant.user_id)).toEqual(['sam']);
+  });
+
+  it('un grimpeur sans niveau ni réussite est affiché, pas perdu', () => {
+    expect(paquets[2].category).toBe(LEVEL_MAX_UNKNOWN_CATEGORY);
+    expect(paquets[2].participants[0].bestColorSucceeded).toBeUndefined();
+  });
+
+  it('pousse « non déterminé » en dernier même quand il arrive premier au classement', () => {
+    // ⚠️ Cette propriété-là n'est exprimable QUE dans ce cas de figure. Un grimpeur sans
+    // niveau n'a, par construction, aucune réussite — donc 0 point, donc la dernière place au
+    // score : l'ordre d'insertion le met déjà en dernier et le tri ne prouve rien. Il faut
+    // donc que TOUT LE MONDE soit à 0 et que lui soit saisi en premier, pour que l'ordre
+    // d'insertion le place devant et que seul le tri puisse le renvoyer en queue.
+    const sansNiveau: G = { user_id: 'sans', first_name: 'Sans' };
+    const uma: G = { user_id: 'uma', first_name: 'Uma', level: 'bleu' };
+    const quEchecs = [
+      { user_id: 'sans', boulder_id: 'n', success: false, attempts: 1 },
+      { user_id: 'uma', boulder_id: 'n', success: false, attempts: 1 },
+    ];
+    const ordre = getClassementByCategory(quEchecs, [sansNiveau, uma], blocs, 'level_max');
+
+    expect(ordre.map(g => g.category)).toEqual(['Niveau bleu', LEVEL_MAX_UNKNOWN_CATEGORY]);
   });
 });

@@ -9,9 +9,10 @@ import {
 } from '@mui/material';
 import { Delete as DeleteIcon, Edit as EditIcon, Add as AddIcon, Tune as TuneIcon } from '@mui/icons-material';
 import { db } from '../services/firebaseConfig';
-import { collection, addDoc, getDocs, getDoc, doc, setDoc, updateDoc, deleteDoc, deleteField } from 'firebase/firestore';
+import { collection, addDoc, getDocs, getDoc, doc, setDoc, updateDoc, deleteDoc, deleteField, query, where, writeBatch } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import { buildCompetitionParticipant, competitionParticipantId } from '../utils/competitionParticipant';
+import { buildLevelAtStartSnapshot, type ParticipationForSnapshot, type SnapshotSourceUser } from '../utils/competitionLevelSnapshot';
 import { basePoints, deductions, type ScoringMode, type CustomScoringTable } from '../utils/climbingPoints';
 
 type CompetitionStatus = 'à venir' | 'en cours' | 'terminée' | 'annulée';
@@ -219,6 +220,53 @@ const AdminCompetitionManagement: React.FC = () => {
   // tout le monde, pas seulement les prochaines validations.
   const isScoringModeEditable = (competition: Competition) => competition.status === 'à venir';
 
+  // ✅ Fige `competition_participants.level_at_start` au COUP D'ENVOI — voir
+  // utils/competitionLevelSnapshot.ts pour le pourquoi (rien, dans ce dépôt, ne disait ce que
+  // valait le niveau d'un grimpeur le jour de l'épreuve : l'inscription peut dater de trois
+  // semaines avant, et `users.level` n'est historisé nulle part).
+  //
+  // Déclenché sur la seule TRANSITION vers « en cours », et le constructeur ne remplit qu'un
+  // champ absent : les deux gardes se cumulent, l'opération est rejouable sans rien redater.
+  //
+  // ⚠️ Un échec est SIGNALÉ à l'admin, pas seulement journalisé. Le statut, lui, est déjà
+  // changé : sans message, un palmarès classerait les grimpeurs sur leur niveau d'inscription
+  // au lieu de leur niveau de départ, et personne ne saurait pourquoi. « Un échec journalisé
+  // n'est pas un échec signalé. »
+  const figerNiveauxAuDepart = async (competitionId: string) => {
+    const participationsSnap = await getDocs(query(
+      collection(db, 'competition_participants'),
+      where('competition_id', '==', competitionId)
+    ));
+    if (participationsSnap.empty) return 0;
+
+    const participations: ParticipationForSnapshot[] = participationsSnap.docs.map(d => ({
+      id: d.id,
+      user_id: d.data().user_id,
+      level: d.data().level,
+      level_at_start: d.data().level_at_start,
+    }));
+
+    // Lecture ciblée des seuls comptes concernés, pas de toute la collection `users` : une
+    // vingtaine de lectures au lieu de soixante et une, sur une action d'administration.
+    const uids = [...new Set(participations.map(p => p.user_id).filter(Boolean))];
+    const comptes = await Promise.all(uids.map(uid => getDoc(doc(db, 'users', uid))));
+    const usersById = new Map<string, SnapshotSourceUser>(
+      comptes.filter(s => s.exists()).map(s => [s.id, { level: s.data()?.level }])
+    );
+
+    const writes = buildLevelAtStartSnapshot(participations, usersById);
+    if (writes.length === 0) return 0;
+
+    const batch = writeBatch(db);
+    writes.forEach(w => {
+      batch.update(doc(db, 'competition_participants', w.participationId), {
+        level_at_start: w.level_at_start,
+      });
+    });
+    await batch.commit();
+    return writes.length;
+  };
+
   const handleUpdateCompetition = async () => {
     if (!selectedCompetition) return;
     try {
@@ -244,6 +292,23 @@ const AdminCompetitionManagement: React.FC = () => {
           ? { custom_scoring: (scoringModeEditable ? editForm.custom_scoring : selectedCompetition.custom_scoring) ?? defaultCustomScoring() }
           : { custom_scoring: deleteField() }),
       });
+
+      // Le coup d'envoi : on vient de faire passer la compétition de « à venir » (ou de tout
+      // autre statut) à « en cours ». C'est le seul instant où « le niveau avant l'épreuve »
+      // est observable.
+      let messageFigeage = '';
+      if (editForm.status === 'en cours' && selectedCompetition.status !== 'en cours') {
+        try {
+          const figes = await figerNiveauxAuDepart(selectedCompetition.id);
+          if (figes > 0) messageFigeage = ` Niveau de départ figé pour ${figes} participant(s).`;
+        } catch (error: unknown) {
+          console.error('Erreur lors du figeage des niveaux de départ :', error);
+          messageFigeage = ' ATTENTION : le niveau de départ des participants n\'a PAS pu être figé — '
+            + 'le classement par niveau max se rabattrait sur leur niveau d\'inscription. '
+            + 'Réenregistrez la compétition pour réessayer.';
+        }
+      }
+
       const querySnapshot = await getDocs(collection(db, 'competitions'));
       setCompetitions(querySnapshot.docs.map(doc => ({
         id: doc.id,
@@ -260,7 +325,7 @@ const AdminCompetitionManagement: React.FC = () => {
         custom_scoring: doc.data().custom_scoring // ✅ Nouveau
       })));
       setOpenEditDialog(false);
-      setSnackbarMessage("Compétition mise à jour avec succès !");
+      setSnackbarMessage(`Compétition mise à jour avec succès !${messageFigeage}`);
       setOpenSnackbar(true);
     } catch (error: unknown) {
       console.error("Erreur :", error);

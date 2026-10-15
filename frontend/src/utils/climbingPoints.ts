@@ -42,6 +42,17 @@ export interface CompetitionScoringBoulder {
   points_value?: number;
 }
 
+// ✅ La couleur qui sert de clé au barème : `color` pour un bloc du jour, `difficulty` pour un
+// bloc créé pour la compétition (il n'a pas de `color` — sa cotation cachée EST ce champ, voir
+// CompetitionBoulderForm.tsx).
+//
+// Exporté parce que le classement par niveau max (competitionClassement.ts) doit lire la MÊME
+// couleur que le barème : deux lectures séparées de « la couleur de ce bloc » finiraient par
+// diverger, et elles décideraient alors d'un paquet d'un côté et d'un score de l'autre, sur le
+// même bloc. Un seul endroit répond à la question.
+export const boulderColorKey = (boulder: CompetitionScoringBoulder): string =>
+  boulder.color || boulder.difficulty;
+
 // Calcule les points d'un bloc de compétition selon le mode choisi pour cette
 // compétition. `calculatePoints` reste le seul calcul utilisé par le classement
 // quotidien et les mini-compétitions — cette fonction ne s'y substitue jamais.
@@ -56,7 +67,7 @@ export const calculateCompetitionPoints = (
   // ✅ Voir la note sur ScoringMode ci-dessus : ce mode ne produit pas de points,
   // renvoyer 0 plutôt que de laisser cette fonction faire semblant.
   if (mode === 'officiel') return 0;
-  const colorKey = boulder.color || boulder.difficulty;
+  const colorKey = boulderColorKey(boulder);
 
   if (mode === 'blocs_valides') {
     return Math.max(0, boulder.points_value || 0);

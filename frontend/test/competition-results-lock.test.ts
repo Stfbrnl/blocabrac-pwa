@@ -248,3 +248,65 @@ describe('competition_participants : verrouillage (chantier écritures point 2)'
     );
   });
 });
+
+// ⚠️ `level_at_start` (figé au coup d'envoi, voir utils/competitionLevelSnapshot.ts) décide du
+// PAQUET dans lequel un grimpeur est classé — et le paquet est gelé avec le palmarès. Un
+// grimpeur qui pourrait écrire le sien se rangerait dans un paquet plus faible : du sandbagging
+// par la porte de service, exactement ce que la règle du §1.1 (le maximum) sert à empêcher.
+//
+// Les règles l'interdisent déjà, sans modification : l'`update` client est borné à
+// `hasOnly(['submitted', 'submitted_at'])`. Ces tests le VERROUILLENT, pour que personne
+// n'élargisse ce `hasOnly` un jour sans voir ce qu'il ouvre.
+describe('competition_participants : level_at_start (classement par niveau max)', () => {
+  // ⚠️ CE TEST-CI N'EST PAS ANCRÉ SUR LE `hasOnly`, contrairement à ce qu'on croirait. Mesuré :
+  // en élargissant le `hasOnly` à `level_at_start`, il reste VERT — parce que l'écriture est
+  // aussi refusée par la clause `request.resource.data.submitted == true`, qu'un écrit portant
+  // le seul `level_at_start` ne satisfait pas. Il ne rougit qu'en cassant LES DEUX clauses.
+  // C'est donc le test suivant qui garde le `hasOnly` ; celui-ci garde leur conjonction.
+  // Les deux ont été vus rouges séparément, et c'est la seule raison de savoir ça.
+  it('un client ne peut pas écrire son propre level_at_start', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'competition_participants', PARTICIPATION_ID), baseParticipationData());
+    });
+    const db = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertFails(
+      setDoc(doc(db, 'competition_participants', PARTICIPATION_ID), { level_at_start: 'bleu' }, { merge: true })
+    );
+  });
+
+  it('un client ne peut pas le glisser dans le même geste que le verrouillage', async () => {
+    // Le verrouillage est le SEUL écrit autorisé au client sur ce document : la tentative de
+    // faire passer un champ de plus avec lui doit échouer en entier, pas réussir à moitié.
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'competition_participants', PARTICIPATION_ID), baseParticipationData());
+    });
+    const db = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertFails(
+      setDoc(
+        doc(db, 'competition_participants', PARTICIPATION_ID),
+        { submitted: true, submitted_at: new Date().toISOString(), level_at_start: 'bleu' },
+        { merge: true }
+      )
+    );
+  });
+
+  it('un admin peut le figer (c\'est le chemin du coup d\'envoi)', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'competition_participants', PARTICIPATION_ID), baseParticipationData());
+    });
+    const db = testEnv.authenticatedContext(ADMIN_UID).firestore();
+    await assertSucceeds(
+      setDoc(doc(db, 'competition_participants', PARTICIPATION_ID), { level_at_start: 'violet' }, { merge: true })
+    );
+  });
+
+  it('un ouvreur aussi, même accès libre que l\'admin sur ce document', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'competition_participants', PARTICIPATION_ID), baseParticipationData());
+    });
+    const db = testEnv.authenticatedContext(OUVREUR_UID).firestore();
+    await assertSucceeds(
+      setDoc(doc(db, 'competition_participants', PARTICIPATION_ID), { level_at_start: 'violet' }, { merge: true })
+    );
+  });
+});
