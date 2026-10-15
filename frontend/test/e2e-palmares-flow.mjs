@@ -92,6 +92,27 @@ async function main() {
     assert((await lirePalmaresEnBase()) === null, 'un palmarès existe déjà avant publication');
   });
 
+
+  // ⚠️ CE PAS NE VÉRIFIE PAS LE CODE, IL VÉRIFIE LE JEU D'ESSAI — et c'est ce qui donne
+  // leur sens aux pas suivants. Les assertions « Chloe à 300 points » et « paquet violet »
+  // ne prouvent la lecture de la couleur d'un bloc du jour QUE si un tel bloc est
+  // réellement dans la compétition. Sans ce pas, quelqu'un pourrait « simplifier » le seed
+  // en blocs de compétition uniquement, et tout resterait vert en ne vérifiant plus rien.
+  await step('la compétition est bien HYBRIDE : les deux formes de bloc y sont', async () => {
+    const blocs = await db.collection('boulders').where('competition_id', '==', COMPETITION_ID).get();
+    assert(blocs.size === 3, `3 blocs attendus dans la compétition, vu ${blocs.size}`);
+
+    const formes = blocs.docs.map((d) => {
+      const b = d.data();
+      return { id: d.id, type: b.type, aColor: !!b.color, aDifficulty: !!b.difficulty };
+    });
+    const duJour = formes.filter((f) => f.type === 'daily' && f.aColor && !f.aDifficulty);
+    const deCompet = formes.filter((f) => f.type === 'competition' && f.aDifficulty && !f.aColor);
+
+    // Les deux formes réelles, telles que mesurées en production : disjointes.
+    assert(duJour.length === 1, `1 bloc du jour réutilisé attendu (color sans difficulty), vu ${duJour.length}`);
+    assert(deCompet.length === 2, `2 blocs de compétition attendus (difficulty sans color), vu ${deCompet.length}`);
+  });
   await step('le grimpeur voit « aucun palmarès publié », et non une page en erreur', async () => {
     await login(clientPage, CLIENT_EMAIL);
     await clientPage.goto(`${BASE_URL}/client/competitions`);
@@ -130,7 +151,7 @@ async function main() {
     const rangs = data.general_open.map((e) => e.rank);
     assert(JSON.stringify(rangs) === JSON.stringify([1, 1, 3, 4]), `rangs attendus 1,1,3,4 — vu ${rangs.join(',')}`);
     const scores = data.general_open.map((e) => e.score);
-    assert(JSON.stringify(scores) === JSON.stringify([480, 480, 400, 100]), `scores inattendus : ${scores.join(',')}`);
+    assert(JSON.stringify(scores) === JSON.stringify([480, 480, 400, 300]), `scores inattendus : ${scores.join(',')}`);
   });
 
   await step('le document ne porte aucun nom de famille ni date de naissance', async () => {
@@ -161,7 +182,7 @@ async function main() {
     const data = await lirePalmaresEnBase();
     const paquets = data.client_level_max.map((g) => `${g.category}:${g.entries.length}`);
     assert(
-      JSON.stringify(paquets) === JSON.stringify(['Niveau rouge:2', 'Niveau bleu:1']),
+      JSON.stringify(paquets) === JSON.stringify(['Niveau rouge:2', 'Niveau violet:1']),
       `paquets inattendus : ${paquets.join(' | ')}`
     );
     const ages = data.client_age.map((g) => g.category);
@@ -287,7 +308,7 @@ async function main() {
     const data = await lirePalmaresEnBase();
     const chloe = data.general_open.find((e) => e.display_name === 'Chloe');
     assert(chloe, 'Chloe est absente du palmarès');
-    assert(chloe.score === 100, `Chloe devrait rester à 100 points, vue à ${chloe.score}`);
+    assert(chloe.score === 300, `Chloe devrait rester à 300 points, vue à ${chloe.score}`);
     assert(chloe.rank === 4, `Chloe devrait rester au rang 4, vue au rang ${chloe.rank}`);
   });
 
@@ -307,7 +328,7 @@ async function main() {
     assert(lignes.length === 4, `4 lignes attendues, vu ${lignes.length}`);
     const chloe = lignes.find((l) => l.nom === 'Chloe');
     assert(chloe, 'Chloe est absente du tableau affiché');
-    assert(chloe.points === '100', `Chloe affichée à ${chloe.points} points au lieu de 100 — la page recalcule !`);
+    assert(chloe.points === '300', `Chloe affichée à ${chloe.points} points au lieu de 300 — la page recalcule !`);
     assert(chloe.rang === '4', `Chloe affichée au rang ${chloe.rang} au lieu de 4`);
   });
 

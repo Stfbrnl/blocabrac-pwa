@@ -68,9 +68,14 @@ describe('getParticipantScores', () => {
     expect(scores.map(s => s.participant.user_id)).toEqual(['bob', 'alice']);
   });
 
-  it('utilise la couleur du bloc plutôt que sa cotation cachée quand les deux diffèrent', () => {
-    // Cas "grosse compétition" : difficulty = cotation FFME cachée, color = valeur affichée
-    // une fois la compétition terminée. Le barème doit suivre color en priorité.
+  // ⚠️ CE TEST S'APPELAIT « utilise la couleur plutôt que sa cotation cachée quand les deux
+  // diffèrent », alors que sa fixture a `color: undefined` — les deux ne différaient pas, l'une
+  // était absente. Le titre promettait donc plus que le jeu de données ne pouvait exprimer,
+  // exactement le travers que ce dépôt traque ailleurs. Renommé le 15/10/2026 pour dire ce
+  // qu'il fait, et les deux cas qu'il ne couvrait pas sont ajoutés juste après.
+  it('se replie sur la cotation cachée quand le bloc n\'a pas de couleur (bloc de compétition)', () => {
+    // Forme réelle d'un bloc créé pour une compétition (7 blocs sur 180 en production au
+    // 15/10/2026) : `difficulty` renseigné, `color` absent.
     const hiddenBoulders = [{ id: 'b1', color: undefined, difficulty: 'bleu' }];
     const results = [{ user_id: 'alice', boulder_id: 'b1', success: true, attempts: 1 }];
     expect(getParticipantScores(results, participants, hiddenBoulders)).toEqual([
@@ -963,5 +968,89 @@ describe('La variante « essais sur les réussites » peut-elle départager ?', 
     // propriété serait vraie d'un ensemble vide.
     expect(paquetsEgaux).toBeGreaterThan(50);
     console.log(`   ex æquo tirés : ${paquetsEgaux} — somme des essais toujours identique`);
+  });
+});
+
+// ============================================================================================
+// COMPÉTITION HYBRIDE — les deux formes de bloc dans la même épreuve
+// ============================================================================================
+//
+// Le Contest du 5 novembre met en jeu des blocs du jour DÉJÀ EN PLACE (couleur publique, elle
+// est sur le mur) et les blocs d'un MUR NEUF (cotation non annoncée). Les deux formes sont
+// disjointes en base, mesuré le 15/10/2026 sur les 180 blocs de production :
+//
+//   - bloc du jour         : `color` renseigné, `difficulty` ABSENT      → 173 blocs
+//   - bloc de compétition  : `difficulty` renseigné, `color` ABSENT      →   7 blocs
+//   - les deux renseignés  : ZÉRO bloc
+//
+// ⚠️ Et jusqu'au 15/10/2026 AUCUN jeu d'essai n'exerçait la première forme : les trois seeds
+// et toutes les fixtures n'utilisaient que des blocs de compétition. La branche que
+// l'événement allait faire tourner était donc la seule non testée — le code avait l'air juste
+// (`boulderColorKey = color || difficulty`), ce qui n'est pas la même chose.
+describe('Compétition hybride : bloc du jour réutilisé et bloc de compétition mêlés', () => {
+  interface G extends ParticipantBase { first_name: string }
+
+  // Un bloc du jour réutilisé : PAS de `difficulty`. C'est la forme réelle, et c'est ce que
+  // `difficulty` optionnel permet enfin d'écrire.
+  const blocDuJour = { id: 'jour-violet', color: 'violet' };
+  // Un bloc créé pour l'épreuve : PAS de `color`, sa cotation est cachée.
+  const blocDeCompet = { id: 'compet-rouge', difficulty: 'rouge' };
+  const blocs = [blocDuJour, blocDeCompet];
+
+  it('cote le bloc du jour sur sa COULEUR et le bloc de compétition sur sa cotation', () => {
+    const ima: G = { user_id: 'ima', first_name: 'Ima', level: 'bleu' };
+    const resultats = [
+      // violet au 1er essai = 200 ; rouge au 1er essai = 400. Total 600.
+      { user_id: 'ima', boulder_id: 'jour-violet', success: true, attempts: 1 },
+      { user_id: 'ima', boulder_id: 'compet-rouge', success: true, attempts: 1 },
+    ];
+    const open = getClassementByCategory(resultats, [ima], blocs, 'global');
+
+    expect(open).toHaveLength(1);
+    // 600 et non 400 : si la couleur du bloc du jour n'était pas lue, il vaudrait 0.
+    expect(open[0].score).toBe(600);
+    expect(open[0].boulders).toBe(2);
+    expect(open[0].tieBreak).toEqual([
+      { hardness: 400, attempts: 1 },
+      { hardness: 200, attempts: 1 },
+    ]);
+  });
+
+  it('un bloc du jour fait monter de paquet comme un bloc de compétition', () => {
+    // L'anti-sandbagging sur un bloc dont la couleur est PUBLIQUE : le grimpeur sait ce qu'il
+    // risque en le tentant, et c'est le cas normal du 5 novembre.
+    const jo: G = { user_id: 'jo', first_name: 'Jo', level: 'bleu' };
+    const resultats = [{ user_id: 'jo', boulder_id: 'jour-violet', success: true, attempts: 1 }];
+    const paquets = getClassementByCategory(resultats, [jo], blocs, 'level_max');
+
+    expect(paquets.map(g => g.category)).toEqual(['Niveau violet']);
+    expect(paquets[0].participants[0].bestColorSucceeded).toBe('violet');
+  });
+
+  it('`color` l\'emporte sur `difficulty` si les deux sont renseignés', () => {
+    // ⚠️ Ce cas N'EXISTE PAS en production (zéro bloc sur 180) — c'est la précédence que
+    // `boulderColorKey` établit, fixée ici pour qu'elle ne change pas par accident. C'est
+    // aussi ce que l'ancien titre du test précédent prétendait vérifier sans le faire.
+    const kim: G = { user_id: 'kim', first_name: 'Kim' };
+    const divergent = [{ id: 'd1', color: 'violet', difficulty: 'rose' }];
+    const resultats = [{ user_id: 'kim', boulder_id: 'd1', success: true, attempts: 1 }];
+    const open = getClassementByCategory(resultats, [kim], divergent, 'global');
+    // violet = 200, rose = 1000. C'est 200 qui doit sortir.
+    expect(open[0].score).toBe(200);
+  });
+
+  it('un bloc sans couleur NI cotation vaut 0, sans faire planter le classement', () => {
+    // Chemin rendu explicite le 15/10/2026 (`if (!colorKey) return 0`). Il existait déjà à
+    // l'exécution, le typage le niait.
+    const lou: G = { user_id: 'lou', first_name: 'Lou' };
+    const muet = [{ id: 'muet' }];
+    const resultats = [{ user_id: 'lou', boulder_id: 'muet', success: true, attempts: 1 }];
+    const open = getClassementByCategory(resultats, [lou], muet, 'global');
+
+    expect(open).toHaveLength(1);
+    expect(open[0].score).toBe(0);
+    // Le bloc compte comme réussi, mais sa couleur est inconnue : aucun paquet de niveau.
+    expect(open[0].boulders).toBe(1);
+    expect(open[0].bestColorSucceeded).toBeUndefined();
   });
 });

@@ -58,8 +58,21 @@ interface Grimpeur extends ParticipantBase {
 }
 
 /** 3 murs x 10 blocs = 30 blocs, deux de chaque couleur par mur (bleu -> blanc). */
-function construireBlocs(): (BoulderInput & { wall: string })[] {
-  const blocs: (BoulderInput & { wall: string })[] = [];
+/**
+ * Un bloc de cette simulation porte TOUJOURS sa cotation : c'est un jeu d'essai synthétique de
+ * blocs créés pour la compétition. Depuis le 15/10/2026, `BoulderInput.difficulty` est
+ * optionnel — parce qu'un bloc du jour réutilisé n'en a pas (mesuré : 173 blocs sur 180 en
+ * production) — donc l'oracle de ce fichier doit déclarer qu'ici il est renseigné, plutôt que
+ * de l'affirmer par un `!` à chaque usage.
+ *
+ * ⚠️ Ce resserrement de type est la raison pour laquelle cette simulation n'exerce PAS la
+ * compétition hybride : c'est `e2e-palmares-flow.mjs` qui s'en charge, avec un vrai bloc du
+ * jour réutilisé.
+ */
+type BlocSimule = BoulderInput & { wall: string; difficulty: string };
+
+function construireBlocs(): BlocSimule[] {
+  const blocs: BlocSimule[] = [];
   MURS.forEach((mur, iMur) => {
     COULEURS.forEach((couleur) => {
       for (let n = 0; n < 2; n += 1) {
@@ -95,7 +108,7 @@ interface Tirage {
   attendu: Record<string, { score: number; blocs: number }>;
 }
 
-function tirer(graine: number, blocs: (BoulderInput & { wall: string })[], participants: Grimpeur[]): Tirage {
+function tirer(graine: number, blocs: BlocSimule[], participants: Grimpeur[]): Tirage {
   const alea = rng(graine);
   const resultats: CompetitionResultInput[] = [];
   const attendu: Record<string, { score: number; blocs: number }> = {};

@@ -34,8 +34,18 @@ export interface CustomScoringEntry {
 export type CustomScoringTable = Record<string, CustomScoringEntry>;
 
 export interface CompetitionScoringBoulder {
+  // ⚠️ LES DEUX SONT OPTIONNELS, et les deux sortes de blocs sont DISJOINTES en production
+  // (mesuré le 15/10/2026 sur les 180 blocs) : un bloc du jour porte `color` et **pas**
+  // `difficulty` (173 cas), un bloc créé pour une compétition porte `difficulty` et **pas**
+  // `color` (7 cas). Zéro bloc porte les deux.
+  //
+  // `difficulty` était déclaré obligatoire, ce qui était faux pour 173 blocs sur 180 — un
+  // mensonge de typage sans conséquence à l'exécution (`boulderColorKey` se replie), mais qui
+  // empêchait d'écrire un jeu d'essai à la forme réelle d'un bloc du jour. C'est exactement
+  // le cas qu'une compétition HYBRIDE fait tourner (Contest du 5 novembre : des blocs déjà en
+  // place plus un mur neuf), donc la forme qu'il faut pouvoir tester.
   color?: string;
-  difficulty: string;
+  difficulty?: string;
   // Mode "Blocs validés" uniquement : valeur en points fixée bloc par bloc par
   // l'ouvreur/l'admin (la cotation étant cachée en compétition, un barème par couleur
   // ne reflèterait pas la difficulté réelle perçue).
@@ -50,7 +60,7 @@ export interface CompetitionScoringBoulder {
 // couleur que le barème : deux lectures séparées de « la couleur de ce bloc » finiraient par
 // diverger, et elles décideraient alors d'un paquet d'un côté et d'un score de l'autre, sur le
 // même bloc. Un seul endroit répond à la question.
-export const boulderColorKey = (boulder: CompetitionScoringBoulder): string =>
+export const boulderColorKey = (boulder: CompetitionScoringBoulder): string | undefined =>
   boulder.color || boulder.difficulty;
 
 // Calcule les points d'un bloc de compétition selon le mode choisi pour cette
@@ -72,6 +82,13 @@ export const calculateCompetitionPoints = (
   if (mode === 'blocs_valides') {
     return Math.max(0, boulder.points_value || 0);
   }
+
+  // ⚠️ Ni couleur ni cotation : le bloc n'est pas cotable, et il vaut 0. Explicite plutôt
+  // qu'implicite — avant le 15/10/2026, `difficulty` était typé obligatoire et ce chemin
+  // n'existait pas aux yeux du compilateur, alors qu'à l'exécution `basePoints[undefined]`
+  // renvoyait déjà `undefined || 0`. Le comportement ne change pas ; il est désormais dit.
+  // (Le mode "blocs_valides" est traité au-dessus : il ne dépend pas de la couleur.)
+  if (!colorKey) return 0;
 
   if (mode === 'personnalise') {
     const entry = customScoring?.[colorKey];

@@ -44,8 +44,11 @@ export interface CompetitionResultInput {
 
 export interface BoulderInput {
   id: string;
+  // Voir `CompetitionScoringBoulder` (climbingPoints.ts) : les deux sont optionnels, et les
+  // deux sortes de blocs sont disjointes en production. Une compétition hybride met les deux
+  // en jeu dans la même épreuve.
   color?: string;
-  difficulty: string;
+  difficulty?: string;
   // Mode "Blocs validés" uniquement — voir climbingPoints.ts.
   points_value?: number;
 }

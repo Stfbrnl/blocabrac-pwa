@@ -103,14 +103,29 @@ async function main() {
     scoring_mode: 'blocabrac',
   });
 
-  // Barème blocabrac : rouge 400/-20, bleu 100/-10.
+  // ⚠️ COMPÉTITION HYBRIDE, et c'est la forme réelle du Contest du 5 novembre : des blocs
+  // créés pour l'épreuve sur un mur neuf, PLUS des blocs du jour déjà en place réutilisés.
+  //
+  // Les deux formes sont disjointes en base (mesuré sur les 180 blocs de production le
+  // 15/10/2026) : un bloc de compétition porte `difficulty` et PAS `color` ; un bloc du jour
+  // porte `color` et PAS `difficulty`. Jusqu'à cette date, les trois seeds du dépôt
+  // n'utilisaient QUE la première forme — la branche que l'événement allait emprunter était
+  // donc la seule non exercée. Ne pas « simplifier » ce mélange.
+  //
+  // Barème blocabrac : rouge 400/-20, violet 200/-10, bleu 100/-10.
   await db.collection('boulders').doc('bloc-rouge-essai').set({
-    type: 'competition', competition_id: COMPETITION_ID, number: 1, wall: 'Grande Face',
+    type: 'competition', competition_id: COMPETITION_ID, number: 1, wall: 'Mur Neuf',
     difficulty: 'rouge', is_active: true, difficulty_types: [],
   });
   await db.collection('boulders').doc('bloc-bleu-essai').set({
-    type: 'competition', competition_id: COMPETITION_ID, number: 2, wall: 'Grande Face',
+    type: 'competition', competition_id: COMPETITION_ID, number: 2, wall: 'Mur Neuf',
     difficulty: 'bleu', is_active: true, difficulty_types: [],
+  });
+  // Le bloc du jour réutilisé : `type: 'daily'`, couleur PUBLIQUE, aucune `difficulty`, et
+  // `competition_active: true` — l'état exact qu'un bloc tagué dans une compétition porte.
+  await db.collection('boulders').doc('bloc-jour-reutilise').set({
+    type: 'daily', competition_id: COMPETITION_ID, competition_active: true,
+    number: 7, wall: 'Grande Face', color: 'violet', is_active: true, difficulty_types: [],
   });
 
   for (const g of grimpeurs) {
@@ -138,8 +153,13 @@ async function main() {
     { uid: uids.amandine, boulder_id: 'bloc-bleu-essai', success: true, attempts: 1 },
     { uid: uids.bruno, boulder_id: 'bloc-rouge-essai', success: true, attempts: 2 },
     { uid: uids.bruno, boulder_id: 'bloc-bleu-essai', success: true, attempts: 1 },
-    // Chloe : bleu en 1 essai = 100.
+    // Chloe : bleu en 1 essai (100) + LE BLOC DU JOUR, violet en 1 essai (200) = 300.
+    // ⚠️ C'est la seule assertion qui distingue « la couleur du bloc du jour est lue » de
+    // « elle est ignorée » : sans elle, Chloe serait à 100. Et le violet la fait MONTER du
+    // paquet bleu au paquet violet — l'anti-sandbagging sur un bloc dont la couleur est
+    // publique, c'est-à-dire le cas normal du 5 novembre.
     { uid: uids.chloe, boulder_id: 'bloc-bleu-essai', success: true, attempts: 1 },
+    { uid: uids.chloe, boulder_id: 'bloc-jour-reutilise', success: true, attempts: 1 },
     // Victor (non client) : rouge au premier essai = 400.
     { uid: uids.victor, boulder_id: 'bloc-rouge-essai', success: true, attempts: 1 },
   ];

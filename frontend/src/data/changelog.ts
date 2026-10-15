@@ -13,6 +13,18 @@ export interface ChangelogEntry {
 // les commits git.
 export const changelog: ChangelogEntry[] = [
   {
+    version: '2.74',
+    date: '2026-10-15',
+    title: 'En compétition, un palmarès officiel et un classement par niveau',
+    items: [
+      'La prochaine compétition mélange deux sortes de blocs : des blocs déjà en place, dont vous connaissez la couleur — elle est sur le mur — et ceux d\'un mur neuf, dont la cotation n\'est pas annoncée. Le départage s\'appuie sur la difficulté des blocs réussis : sur les premiers, vous savez ce que vaut ce que vous tentez ; sur le mur neuf, vous grimpez à l\'aveugle. L\'application, elle, n\'affiche la couleur d\'aucun bloc pendant l\'épreuve : seulement son numéro et son mur.',
+      'À la fin d\'une compétition, un palmarès officiel est publié dans l\'onglet Compétitions. Il est définitif : si un bloc est recoté plus tard, le palmarès ne bouge pas — le podium du jour reste celui du jour. Il contient cinq classements : le général, tous participants confondus, puis quatre réservés aux grimpeurs de la salle — open, par genre, par catégorie d\'âge, et par niveau max.',
+      'Le classement par niveau max vous range avec les grimpeurs de votre niveau. Et si vous réussissez pendant l\'épreuve un bloc d\'une couleur plus dure que votre niveau, c\'est cette couleur qui vous classe : réussir plus dur vous fait monter de paquet, et vous vous mesurez alors à ce niveau-là. Sur les blocs déjà en place, vous décidez donc en connaissance de cause — réussir un noir que vous voyez noir vous fera monter dans le paquet des noirs. Sur le mur neuf, vous le découvrirez à la publication.',
+      'Nouveau départage, quand tout le reste est à égalité (mêmes points, mêmes blocs réussis, mêmes essais sur chacun) : c\'est le nombre total d\'essais qui tranche, échecs compris. Il repose donc sur votre honnêteté — ne pas déclarer ses échecs avantagerait mécaniquement, et rien n\'est vérifié. On vous demande de les enregistrer. Et tant que personne n\'a réussi de bloc, tout le monde partage la première place : on ne classe pas des grimpeurs sur leurs seuls échecs.',
+      'Sur le palmarès comme sur l\'écran diffusé dans la salle, seuls votre prénom et l\'initiale de votre nom apparaissent. Avant la publication du palmarès, aucun classement de compétition n\'est visible depuis votre espace : les résultats des autres grimpeurs ne sont pas lisibles, et c\'est voulu.',
+    ],
+  },
+  {
     version: '2.73',
     date: '2026-10-15',
     title: 'Les inscriptions aux compétitions sont ouvertes à tous',
