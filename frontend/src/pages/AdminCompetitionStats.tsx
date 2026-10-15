@@ -5,7 +5,7 @@ import {
   LinearProgress, Chip, Button, Dialog, DialogTitle, DialogContent,
   DialogActions, TextField, Alert, useTheme, useMediaQuery
 } from '@mui/material';
-import { collection, query, where, getDocs, addDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, doc, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebaseConfig';
 import { buildPointsAnnouncement, buildOfficialAnnouncement, announcementTitle } from '../utils/competitionAnnouncement';
 import { getSeasonAge, getFfmeCategory, OPEN_CATEGORY } from '../utils/ageCategory';
@@ -91,6 +91,8 @@ const AdminCompetitionStats: React.FC = () => {
   const [messageContent, setMessageContent] = useState('');
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Date de publication du palmares officiel de la competition selectionnee (null si aucun).
+  const [palmaresPublieLe, setPalmaresPublieLe] = useState<string | null>(null);
 
   // ✅ Charger tous les utilisateurs une fois
   useEffect(() => {
@@ -135,6 +137,34 @@ const AdminCompetitionStats: React.FC = () => {
     };
     fetchCompetitions();
   }, []);
+
+  // ✅ Retour ClaudeNav §4.3 (15/10/2026) : APRÈS publication du palmarès officiel,
+  // `competition_results` et `boulders` restent modifiables. Cet écran RECALCULE, le palmarès
+  // ne bouge plus — les deux peuvent donc afficher deux classements différents, et l'admin est
+  // la seule personne à voir les deux. C'est le comportement voulu (c'est tout l'objet du
+  // gel), mais sans libellé il se lit comme une publication cassée.
+  //
+  // Une seule lecture, et seulement quand une compétition est sélectionnée.
+  useEffect(() => {
+    let annule = false;
+    (async () => {
+      if (!selectedCompetition) {
+        if (!annule) setPalmaresPublieLe(null);
+        return;
+      }
+      try {
+        const snap = await getDoc(doc(db, 'competition_rankings', selectedCompetition));
+        if (!annule) setPalmaresPublieLe(snap.exists() ? (snap.data().published_at as string) : null);
+      } catch (err: unknown) {
+        // Un palmarès absent n'échoue pas (les règles ne refusent pas la lecture d'un document
+        // inexistant) : une erreur ici est anormale, mais elle ne doit pas empêcher l'écran de
+        // s'afficher — c'est un libellé informatif, pas le contenu.
+        console.error('Lecture du palmarès publié impossible :', err);
+        if (!annule) setPalmaresPublieLe(null);
+      }
+    })();
+    return () => { annule = true; };
+  }, [selectedCompetition]);
 
   useEffect(() => {
     if (!selectedCompetition) return;
@@ -309,6 +339,21 @@ const AdminCompetitionStats: React.FC = () => {
         </Typography>
         {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
         {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
+
+        {/* ✅ §4.3 : dire sur l'écran que ses chiffres ne sont PAS ceux du palmarès officiel.
+            Sans ce libellé, un écart entre les deux se lit comme une publication cassée. */}
+        {palmaresPublieLe && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Palmarès officiel publié le{' '}
+            <strong>
+              {new Date(palmaresPublieLe).toLocaleDateString()} à{' '}
+              {new Date(palmaresPublieLe).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </strong>{' '}
+            — il est définitif. <strong>Cet écran recalcule sur la donnée actuelle</strong> : si un
+            bloc a été recoté ou un résultat corrigé depuis, les classements ci-dessous diffèrent
+            de ceux du palmarès, et ce sont ceux du palmarès qui font foi.
+          </Alert>
+        )}
 
         <FormControl fullWidth sx={{ mb: 3 }}>
           <InputLabel id="selectionnez-une-competition-select-label">Sélectionnez une compétition</InputLabel>

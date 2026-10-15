@@ -273,6 +273,50 @@ async function main() {
     + `${lacunesDeCompte > 0 ? `, dont ${lacunesDeCompte} limitée(s) par une lacune du compte (normal)` : ''}`
   );
 
+  // ─── Accès aux compétitions : un compte client bloqué ────────────────────────────────
+  //
+  // Retour ClaudeNav §3 (15/10/2026) : « tu écris que le défaut n'était visible nulle part —
+  // c'est précisément la définition de ce que l'audit doit porter. Sans ce contrôle, la mesure
+  // 61/61 est un relevé daté, pas un invariant. » Il a raison.
+  //
+  // Le défaut : `ClientCompetitions.tsx` (`canUserRegister`) refuse l'auto-inscription tant
+  // que `users.inscritAuxCompetitions` n'est pas vrai, et `Register.tsx` créait tout compte à
+  // `false` — 53 comptes sur 61 bloqués, découverts le 15/10/2026 à trois semaines d'un
+  // contest ouvert à tous. Aucun écran ne les comptait, et le grimpeur ne découvrait le refus
+  // qu'au moment de s'inscrire.
+  //
+  // ⚠️ Le compte est affiché À CHAQUE EXÉCUTION, même à zéro écart : c'est ce qui en fait un
+  // invariant surveillé plutôt qu'une mesure d'un jour. Et un compte délibérément exclu se
+  // déclare dans KNOWN_EXCEPTIONS, avec sa raison et sa date — sans quoi ce contrôle
+  // deviendrait un avertissement permanent, et un avertissement permanent apprend à ignorer
+  // les avertissements.
+  const clientsBloqués = [];
+  let clientsAutorisés = 0;
+  for (const d of usersSnap.docs) {
+    const u = d.data();
+    const roles = new Set([...(u.roles || []), ...(u.role ? [u.role] : [])]);
+    const estClient = roles.size > 0 ? roles.has('client') : true;
+    if (!estClient) continue;
+    if (u.inscritAuxCompetitions === true) {
+      clientsAutorisés += 1;
+    } else {
+      clientsBloqués.push(d.id);
+    }
+  }
+  console.log(
+    `Accès compétitions : ${clientsAutorisés}/${clientsAutorisés + clientsBloqués.length} compte(s) client autorisé(s)`
+  );
+  for (const uid of clientsBloqués) {
+    const cle = `users/${uid}`;
+    if (KNOWN_EXCEPTIONS[cle]) continue;
+    warnings.push(
+      `${cle} : compte client avec inscritAuxCompetitions non vrai — il ne peut PAS s'inscrire `
+      + 'lui-même à une compétition, et aucun écran ne le montre. Soit c\'est une exclusion '
+      + 'voulue (à déclarer dans KNOWN_EXCEPTIONS), soit lancer '
+      + 'scripts/backfill-inscription-competitions.js.'
+    );
+  }
+
   // competition_results -> competitions. Même raisonnement que pour les participations : ce
   // contrôle n'est ajouté qu'APRÈS nettoyage. Il existait un résultat orphelin en production
   // (`comp_test_20260521`, un test de mai 2026 : compétition absente, bloc absent, et

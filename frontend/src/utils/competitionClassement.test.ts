@@ -7,9 +7,11 @@ import {
   rankOfficialEntries,
   rankedOfficialEntries,
   rankPointEntries,
+  compareTieBreak,
   resolveClassementLevel,
   LEVEL_MAX_UNKNOWN_CATEGORY,
   type ParticipantBase,
+  type TieBreakBoulder,
 } from './competitionClassement';
 
 interface TestParticipant extends ParticipantBase {
@@ -897,5 +899,69 @@ describe('Début d\'épreuve : aucun bloc réussi, donc rien à départager', ()
     const open = getClassementByCategory(resultats, [soigneux, brouillon], blocs, 'global');
     expect(open.map(e => e.participant.user_id)).toEqual(['soigneux', 'brouillon']);
     expect(rankPointEntries(open)).toEqual([1, 2]);
+  });
+});
+
+// ⚠️ POURQUOI « LE MOINS D'ESSAIS SUR LES BLOCS RÉUSSIS » NE PEUT PAS ÊTRE LE CRITÈRE.
+//
+// Proposé par ClaudeNav le 15/10/2026 (RETOUR-classements-avant-deploiement.md §2) pour
+// remplacer « le moins d'essais au total, échecs compris », dont l'objection est juste : dans
+// une application qui ne vérifie rien, un critère dont la hausse nuit à celui qui le déclare ne
+// sera pas déclaré.
+//
+// Mais la variante est un NO-OP, et ce test le prouve plutôt que de l'affirmer. Le critère
+// secondaire n'est atteint que si `compareTieBreak` vaut 0 — c'est-à-dire si les deux listes
+// de blocs réussis sont identiques, dureté ET essais, bloc par bloc. La somme des essais sur
+// les réussites y est donc égale par construction : elle ne peut jamais trancher. Choisir
+// cette variante équivaut exactement à n'avoir AUCUN critère secondaire, pas à en avoir un
+// autre — sa dernière ligne de tableau (« ex æquo par construction ») est vraie de toutes les
+// lignes, pas seulement de celle à 0 point.
+//
+// L'utilisateur a tranché le 15/10/2026 : on GARDE les essais totaux, échecs compris, et la
+// limite se traite par l'annonce de début de contest. Ce test reste pour que la même variante
+// ne soit pas reproposée comme si elle départageait quelque chose.
+
+const sommeEssais = (l: TieBreakBoulder[]) => l.reduce((s, b) => s + b.attempts, 0);
+
+const rng = (graine: number) => {
+  let x = graine;
+  return () => {
+    x = (x * 1103515245 + 12345) & 0x7fffffff;
+    return x / 0x7fffffff;
+  };
+};
+
+describe('La variante « essais sur les réussites » peut-elle départager ?', () => {
+  it('propriété : si compareTieBreak vaut 0, les essais sur les réussites sont EGAUX', () => {
+    const alea = rng(20261015);
+    const duretes = [100, 200, 400, 600, 800, 1000];
+    let paquetsEgaux = 0;
+
+    for (let t = 0; t < 20000; t += 1) {
+      const faire = () => {
+        const n = Math.floor(alea() * 4);
+        const l: TieBreakBoulder[] = [];
+        for (let i = 0; i < n; i += 1) {
+          l.push({
+            hardness: duretes[Math.floor(alea() * duretes.length)],
+            attempts: 1 + Math.floor(alea() * 6),
+          });
+        }
+        return l.sort((x, y) => (y.hardness !== x.hardness ? y.hardness - x.hardness : x.attempts - y.attempts));
+      };
+      const a = faire();
+      const b = faire();
+      if (compareTieBreak(a, b) === 0) {
+        paquetsEgaux += 1;
+        // LE POINT : à ex æquo réel, la somme des essais sur les réussites est forcément
+        // identique. Un critère fondé sur elle ne peut donc JAMAIS trancher.
+        expect(sommeEssais(a)).toBe(sommeEssais(b));
+      }
+    }
+
+    // Assertion de TAILLE avant d'affirmer quoi que ce soit : sans égalités tirées, la
+    // propriété serait vraie d'un ensemble vide.
+    expect(paquetsEgaux).toBeGreaterThan(50);
+    console.log(`   ex æquo tirés : ${paquetsEgaux} — somme des essais toujours identique`);
   });
 });

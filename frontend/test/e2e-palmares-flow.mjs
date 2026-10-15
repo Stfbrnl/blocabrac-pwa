@@ -28,6 +28,9 @@
 // Prérequis : émulateurs Auth/Firestore + `vite --port 5174` + `node test/seed-palmares-users.mjs`.
 import { chromium } from 'playwright';
 import admin from 'firebase-admin';
+import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 
 process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8080';
 process.env.FIREBASE_AUTH_EMULATOR_HOST = 'localhost:9099';
@@ -40,6 +43,13 @@ const CLIENT_EMAIL = 'amandine.palmares@blocabrac.test';
 
 admin.initializeApp({ projectId: 'blocabrac' });
 const db = admin.firestore();
+
+// Le script de depublication vit a la racine du depot et resout ses modules depuis la.
+const RACINE = join(process.cwd(), '..');
+const sauvegardeAttendue = () => join(
+  RACINE, 'firestore-migration',
+  `dump-palmares-${COMPETITION_ID}-${new Date().toISOString().slice(0, 10)}.emulator.json`
+);
 
 let stepNum = 0;
 const results = [];
@@ -185,6 +195,81 @@ async function main() {
       JSON.stringify(rangs) === JSON.stringify(['1', '1', '3', '4']),
       `rangs affichés inattendus : ${rangs.join(',')}`
     );
+  });
+
+
+  // ═══ LE CHEMIN DE RÉCUPÉRATION, EXERCÉ DE BOUT EN BOUT (retour ClaudeNav §4.1) ═══════
+  //
+  // « Écrit n'est pas exercé », et c'est désormais le SEUL chemin de correction d'un palmarès :
+  // les règles interdisent `update` et `delete` à tout le monde, application comprise. Le
+  // 5 novembre au soir, si le palmarès part avec une erreur, le seul recours est le poste de
+  // Stéphane et la clé de service. Un chemin de secours jamais emprunté est un filet jamais vu
+  // attraper quelque chose.
+  //
+  // ⚠️ On lance le VRAI script, dans un vrai processus — pas une suppression équivalente via
+  // l'Admin SDK depuis ce test. C'est le script qui doit être exercé, ses gardes comprises.
+  //
+  // ⚠️ Et « identique » ne peut pas inclure `published_at` : il est horodaté au moment de
+  // l'aperçu, donc il DOIT changer. L'assertion porte sur tout le reste, et nommer cette
+  // exception est ce qui l'empêche d'être une comparaison vide.
+  let palmaresAvantDepublication = null;
+
+  await step('§4.1 — la simulation du script de dépublication ne supprime rien', async () => {
+    palmaresAvantDepublication = await lirePalmaresEnBase();
+    assert(palmaresAvantDepublication !== null, 'aucun palmarès à dépublier');
+
+    execFileSync('node', ['scripts/unpublish-competition-rankings.js', '--competitionId', COMPETITION_ID], {
+      cwd: RACINE, env: { ...process.env }, encoding: 'utf8',
+    });
+
+    assert((await lirePalmaresEnBase()) !== null, 'la simulation a supprimé le palmarès');
+    assert(
+      !existsSync(sauvegardeAttendue()),
+      `la simulation a écrit une sauvegarde (${sauvegardeAttendue()}) — une simulation n'écrit rien, nulle part`
+    );
+  });
+
+  await step('§4.1 — le script dépublie réellement, et sauvegarde avant', async () => {
+    execFileSync('node', ['scripts/unpublish-competition-rankings.js', '--competitionId', COMPETITION_ID, '--fix'], {
+      cwd: RACINE, env: { ...process.env }, encoding: 'utf8',
+    });
+
+    assert((await lirePalmaresEnBase()) === null, 'le palmarès existe encore après --fix');
+    assert(existsSync(sauvegardeAttendue()), `aucune sauvegarde produite (${sauvegardeAttendue()})`);
+    const sauvegarde = JSON.parse(readFileSync(sauvegardeAttendue(), 'utf8'));
+    assert(
+      JSON.stringify(sauvegarde.data) === JSON.stringify(palmaresAvantDepublication),
+      'la sauvegarde ne reproduit pas le palmarès supprimé'
+    );
+  });
+
+  await step('§4.1 — republication : le palmarès est identique, hors date de publication', async () => {
+    await adminPage.reload();
+    await adminPage.getByRole('button', { name: 'Publier le palmarès' }).waitFor({ timeout: 15000 });
+    await adminPage.getByRole('button', { name: 'Publier le palmarès' }).click();
+    await adminPage.getByRole('heading', { name: 'Publier le palmarès officiel' }).waitFor({ timeout: 10000 });
+    await adminPage.getByRole('button', { name: 'Publier définitivement' }).click();
+    await adminPage.getByText('Palmarès officiel publié').waitFor({ timeout: 15000 });
+
+    const republie = await lirePalmaresEnBase();
+    assert(republie !== null, 'aucun palmarès après republication');
+
+    // La date DOIT avoir changé : sans cette assertion, on pourrait comparer deux fois le
+    // même document sans s'en apercevoir.
+    assert(
+      republie.published_at !== palmaresAvantDepublication.published_at,
+      'published_at n\'a pas changé : le document n\'a probablement pas été réécrit'
+    );
+
+    const sansDate = (d) => JSON.stringify({ ...d, published_at: null });
+    assert(
+      sansDate(republie) === sansDate(palmaresAvantDepublication),
+      'le palmarès republié diffère de l\'original sur une donnée inchangée'
+    );
+
+    // Le nettoyage de la sauvegarde d'essai : elle vit dans un dossier gitignoré, mais la
+    // laisser ferait échouer le pas « la simulation n'écrit rien » au prochain passage.
+    rmSync(sauvegardeAttendue(), { force: true });
   });
 
   // ═══ LE TEST DÉCISIF (§6, point 6) ═══════════════════════════════════════════════════

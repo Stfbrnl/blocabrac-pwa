@@ -89,7 +89,14 @@ const AdminCompetitionManagement: React.FC = () => {
   // une publication déjà faite — la règle la refuserait de toute façon (`update: if false`),
   // mais un bouton qui ne peut qu'échouer n'a pas à être affiché.
   const [palmaresPublies, setPalmaresPublies] = useState<Map<string, string>>(new Map());
-  const [palmaresApercu, setPalmaresApercu] = useState<{ competition: Competition; payload: FrozenRankings } | null>(null);
+  const [palmaresApercu, setPalmaresApercu] = useState<{
+    competition: Competition;
+    payload: FrozenRankings;
+    /** Participants inscrits AVANT le coup d'envoi et dépourvus de `level_at_start` (§4.2). */
+    niveauxNonFiges: number;
+    /** Faute de `started_at`, on ne peut pas distinguer inscrit tardif et figeage manquant. */
+    coupDEnvoiInconnu: boolean;
+  } | null>(null);
   const [publicationEnCours, setPublicationEnCours] = useState(false);
   const [createForm, setCreateForm] = useState<Omit<Competition, 'id' | 'registered_count'>>({
     name: '',
@@ -315,6 +322,28 @@ const AdminCompetitionManagement: React.FC = () => {
       // blocs `type: 'daily'`, et « Terminer la compétition » reconvertit les blocs de
       // compétition en `daily`. `competition_id` seul est le périmètre, comme partout
       // ailleurs dans ce projet.
+      // ✅ GARDE DU §4.2 (retour ClaudeNav) : un palmarès dont les niveaux de départ n'ont
+      // jamais été figés classerait les grimpeurs sur leur niveau d'INSCRIPTION, vieux de
+      // plusieurs semaines — et ce cas est SILENCIEUX, puisqu'il n'y a pas d'échec de figeage
+      // à signaler : il n'y a pas eu de figeage du tout.
+      //
+      // La comparaison est faite participation par participation contre `started_at` : un
+      // inscrit APRÈS le coup d'envoi n'a légitimement pas le champ. Sans `started_at`
+      // (compétition d'avant cette version, ou jamais passée par « en cours »), on ne peut pas
+      // trancher — on avertit alors sans distinguer.
+      //
+      // ⚠️ Avertir, et non REFUSER, délibérément : le niveau au coup d'envoi est une
+      // information PERDUE, que rien ne peut reconstituer. Un refus n'offrirait aucun chemin de
+      // réparation, il interdirait seulement de publier. L'admin doit pouvoir publier en
+      // connaissance de cause.
+      const coupDEnvoi = (await getDoc(doc(db, 'competitions', competition.id))).data()?.started_at as string | undefined;
+      const niveauxNonFiges = participantsSnap.docs.filter(d => {
+        const p = d.data();
+        if (p.level_at_start) return false;
+        if (!coupDEnvoi) return true;
+        return !p.registered_at || p.registered_at < coupDEnvoi;
+      }).length;
+
       const participants: RankingParticipant[] = participantsSnap.docs.map(d => ({
         user_id: d.data().user_id,
         first_name: d.data().first_name,
@@ -354,7 +383,12 @@ const AdminCompetitionManagement: React.FC = () => {
         boulders,
         publishedAt: new Date().toISOString(),
       });
-      setPalmaresApercu({ competition, payload });
+      setPalmaresApercu({
+        competition,
+        payload,
+        niveauxNonFiges,
+        coupDEnvoiInconnu: !coupDEnvoi,
+      });
     } catch (error: unknown) {
       console.error('Erreur lors de la préparation du palmarès :', error);
       setSnackbarMessage("Erreur lors de la préparation du palmarès. Rien n'a été publié.");
@@ -428,6 +462,16 @@ const AdminCompetitionManagement: React.FC = () => {
       let messageFigeage = '';
       if (editForm.status === 'en cours' && selectedCompetition.status !== 'en cours') {
         try {
+          // ✅ `started_at` : l'horodatage du coup d'envoi (retour ClaudeNav §4.2, 15/10/2026).
+          // Sans lui, l'absence de `level_at_start` sur une participation a DEUX causes qui ne
+          // se distinguent pas — un inscrit tardif (légitime : son niveau d'inscription EST
+          // son niveau de départ) ou un figeage qui n'a jamais eu lieu (le palmarès classerait
+          // alors sur des niveaux vieux de trois semaines). En comparant `registered_at` à
+          // `started_at`, le cas devient décidable, et c'est ce qui rend la garde de
+          // publication exacte au lieu d'approximative.
+          await updateDoc(doc(db, 'competitions', selectedCompetition.id), {
+            started_at: new Date().toISOString(),
+          });
           const figes = await figerNiveauxAuDepart(selectedCompetition.id);
           if (figes > 0) messageFigeage = ` Niveau de départ figé pour ${figes} participant(s).`;
         } catch (error: unknown) {
@@ -746,6 +790,20 @@ const AdminCompetitionManagement: React.FC = () => {
                 <Typography variant="subtitle1">
                   {palmaresApercu.competition.name} — {new Date(palmaresApercu.competition.date).toLocaleDateString()}
                 </Typography>
+
+                {palmaresApercu.niveauxNonFiges > 0 && (
+                  <Alert severity="error">
+                    <strong>{palmaresApercu.niveauxNonFiges} participant(s) sans niveau de départ figé.</strong>{' '}
+                    {palmaresApercu.coupDEnvoiInconnu
+                      ? 'Cette compétition n\'a jamais été passée en « en cours » depuis l\'application, '
+                        + 'ou elle est antérieure à ce mécanisme : impossible de distinguer un inscrit tardif '
+                        + 'd\'un figeage manquant.'
+                      : 'Ils étaient inscrits AVANT le coup d\'envoi : leur niveau de départ aurait dû être figé.'}{' '}
+                    Le classement par niveau max les rangera sur leur niveau <strong>à l'inscription</strong>,
+                    qui peut dater de plusieurs semaines. Cette information est perdue et ne peut pas être
+                    reconstituée — publiez en connaissance de cause.
+                  </Alert>
+                )}
 
                 {palmaresApercu.payload.general_open.length === 0 ? (
                   <Alert severity="error">
