@@ -24,8 +24,13 @@ export async function resetEmulators() {
     `http://localhost:8080/emulator/v1/projects/${PROJECT_ID}/databases/(default)/documents`,
     `http://localhost:9099/emulator/v1/projects/${PROJECT_ID}/accounts`,
   ];
+  // ⚠️ Un script dont la raison d'être est un effet de bord ANNONCE son effet : un succès
+  // silencieux est indiscernable d'un no-op. Le 18/10/2026, trois exécutions se sont empilées
+  // sans un mot parce que `node test/emulator-reset.mjs` ne fait RIEN — ce module ne fait
+  // qu'exporter, et l'invoquer en script sort en 0 sans rien vider.
   for (const url of targets) {
     const res = await fetch(url, { method: 'DELETE' });
     if (!res.ok) throw new Error(`Remise à zéro de l'émulateur impossible (${res.status}) : ${url}`);
   }
+  console.log(`✔ Émulateurs remis à zéro : Firestore et Auth vidés (projet ${PROJECT_ID}).`);
 }
