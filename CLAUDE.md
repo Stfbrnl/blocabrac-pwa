@@ -50,6 +50,35 @@ Ce fichier avait atteint ≈ 190 000 caractères pour une limite de 150 000, don
 
 ## Architecture
 
+### ⚠️ Recotation : ce qui mesure se recalcule, ce qui a été proclamé se fige
+
+Ce dépôt donne **trois réponses différentes** à la question « que devient un score quand on
+recote un bloc après coup ? ». Ce n'est pas une divergence à corriger, c'est un choix par
+collection — et faute de l'avoir écrit, deux écrans se sont retrouvés en désaccord sur laquelle
+appliquer (18/10/2026, mini-compétitions : 80 points chez le moniteur, 900 chez l'élève).
+
+| collection | ce qui est stocké | une recotation ultérieure… |
+|---|---|---|
+| `client_boulder_results` | **pas** la couleur | …réécrit rétroactivement le score |
+| `client_course_results` | `boulderColor` **figée** à la validation | …ne change rien |
+| `competition_rankings` | le **résultat entier** figé, immuable par les règles | …ne change rien |
+
+Le principe qui justifie les trois (proposé par ClaudeNav, `docs/handoffs/RETOUR-seance-18-10.md` §3) :
+
+> **Une recotation corrige une erreur de mesure. Elle corrige donc rétroactivement tout ce qui
+> *mesure* une capacité, et jamais un résultat déjà *proclamé*.**
+
+- le classement général **mesure** ce dont un grimpeur est capable aujourd'hui → il doit suivre
+  la cotation corrigée → ne pas stocker la couleur est **juste** ;
+- le classement d'une séance a été **proclamé** aux élèves présents ce soir-là → figer la
+  couleur est **juste** ;
+- le palmarès d'une compétition est proclamé avec une remise de prix → le figer entièrement et
+  le rendre immuable est **juste**.
+
+⚠️ **Critère opérationnel pour toute nouvelle fonctionnalité qui posera la question : ce nombre
+sera-t-il annoncé à quelqu'un ?** Si oui, il se fige au moment de l'annonce. Sinon, il se
+recalcule.
+
 ### Roles and the `roles` vs `role` field
 
 Every account has a role set (`admin`, `ouvreur`, `moniteur`, `client` — combinable, e.g. a moniteur account is also always `client`). Current accounts store this as an array field `roles: string[]`; some legacy accounts still only have a scalar `role: string`. **Never query or check role by the scalar `role` field alone** — always merge both. The canonical patterns are:

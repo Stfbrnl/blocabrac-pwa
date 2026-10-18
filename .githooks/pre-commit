@@ -1,0 +1,4 @@
+#!/bin/sh
+# Garde au COMMIT : voir scripts/assert-claude-md-size.cjs.
+# Activation (une fois par clone) : git config core.hooksPath .githooks
+exec node "$(git rev-parse --show-toplevel)/scripts/assert-claude-md-size.cjs"
