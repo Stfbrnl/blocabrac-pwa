@@ -1,11 +1,13 @@
 {
   "firestore": {
+    "predeploy": ["node scripts/assert-deploy-published.cjs"],
     "database": "(default)",
     "location": "europe-west9",
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
   "hosting": {
+    "predeploy": ["node scripts/assert-deploy-published.cjs"],
     "public": "frontend/dist",
     "ignore": [
       "firebase.json",
