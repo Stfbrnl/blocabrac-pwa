@@ -40,7 +40,8 @@ import {
 import { jsPDF } from 'jspdf';
 import * as html2canvas from 'html2canvas';
 import diplomaBackground from '../../../assets/diploma-background.png';
-import { calculatePoints } from '../../../utils/climbingPoints';
+import { buildMiniCompetitionRanking, selectableMiniCompetitions } from '../../../utils/miniCompetitionRanking';
+import { boulderColorChipSx } from '../../../utils/boulderColorDisplay';
 
 // Types pour les données
 interface User {
@@ -117,6 +118,8 @@ interface MiniCompetition {
   id: string;
   name: string;
   boulderIds: string[];
+  /** Auteur. Absent sur les documents créés avant que le formulaire ne l'écrive. */
+  createdBy?: string;
 }
 
 const StatsList: React.FC = () => {
@@ -245,13 +248,17 @@ const StatsList: React.FC = () => {
         }));
         setBoulders(bouldersList);
 
-        // Récupérer les mini-compétitions du moniteur
-        const miniCompetitionsQuery = query(collection(db, 'mini_competitions'), where('createdBy', '==', user.uid));
-        const miniCompetitionsSnapshot = await getDocs(miniCompetitionsQuery);
+        // ✅ Toutes les mini-compétitions, sans filtre sur `createdBy` : il en faut le NOM
+        // pour libeller chaque ligne de résultat, y compris celles d'un collègue. Le filtre
+        // sur l'auteur est reporté à l'affichage (selectableMiniCompetitions), où il admet
+        // aussi celles qui ont réellement été jouées. Collection minuscule (1 document en
+        // production), sans index composite.
+        const miniCompetitionsSnapshot = await getDocs(collection(db, 'mini_competitions'));
         const miniCompetitionsList: MiniCompetition[] = miniCompetitionsSnapshot.docs.map((d) => ({
           id: d.id,
           name: d.data().name || '',
           boulderIds: d.data().boulderIds || [],
+          createdBy: d.data().createdBy,
         }));
         setMiniCompetitions(miniCompetitionsList);
 
@@ -418,24 +425,29 @@ const StatsList: React.FC = () => {
     return filteredData.filter((userResult) => userResult.results.length > 0);
   };
 
-  // ✅ Classement d'une mini-compétition : somme des points (barème quotidien,
-  // cf. climbingPoints.ts) sur les résultats de blocs rattachés à cette
-  // mini-compétition, tous rangs confondus (pas de filtre période/mur ici — une
-  // mini-compétition a sa propre temporalité, celle de la séance qui la contient).
-  const getMiniCompetitionRanking = (miniCompetitionId: string): { participant: string; score: number; bouldersValidated: number }[] => {
-    const ranking = userResults.map((userResult) => {
-      const miniResults = userResult.results.filter((r) => r.miniCompetitionId === miniCompetitionId);
-      const score = miniResults.reduce(
-        (total, r) => total + calculatePoints(r.boulderColor || '', r.attempts || 1, r.success),
-        0
-      );
-      const bouldersValidated = miniResults.filter((r) => r.success).length;
-      return { participant: userResult.displayName, score, bouldersValidated, hasResults: miniResults.length > 0 };
-    });
-    return ranking
-      .filter((r) => r.hasResults)
-      .sort((a, b) => b.score - a.score)
-      .map(({ participant, score, bouldersValidated }) => ({ participant, score, bouldersValidated }));
+  // ✅ Classement d'une mini-compétition : le calcul vit dans utils/miniCompetitionRanking.ts
+  // (pur, testé). Pas de filtre période/mur ici — une mini-compétition a sa propre
+  // temporalité, celle de la séance qui la contient.
+  //
+  // ⚠️ Le rang y est un rang de COMPÉTITION (1, 1, 3) : c'était un `index + 1`, qui donnait
+  // deux positions différentes à deux élèves au même score, départagés par l'ordre des
+  // documents Firestore. Dans un cours, l'égalité est la règle — en début de séance tout le
+  // monde est à zéro.
+  const getMiniCompetitionRanking = (miniCompetitionId: string) =>
+    buildMiniCompetitionRanking(userResults, miniCompetitionId);
+
+  // ⚠️ Les mini-compétitions proposées ne sont plus seulement celles dont ce moniteur est
+  // l'auteur : voir selectableMiniCompetitions. Faire jouer celle d'un collègue dans sa
+  // propre séance faisait disparaître le bloc « Classement » en entier, sans message.
+  const miniCompetitionsProposees = user
+    ? selectableMiniCompetitions(miniCompetitions, userResults, user.uid)
+    : [];
+
+  // Libellé de la colonne « Exercice » pour un résultat de bloc : ces documents n'ont pas
+  // d'`exerciseId`, la cellule restait donc VIDE, chez le moniteur comme chez l'élève.
+  const nomMiniCompetition = (miniCompetitionId?: string): string => {
+    const trouvee = miniCompetitions.find((m) => m.id === miniCompetitionId);
+    return trouvee ? `Mini-compétition : ${trouvee.name}` : 'Mini-compétition';
   };
 
   // Attribuer un badge à un utilisateur
@@ -853,17 +865,18 @@ const StatsList: React.FC = () => {
                     <TableRow key={`${userResult.id}-${result.exerciseId}-${index}`}>
                       <TableCell>{userResult.displayName}</TableCell>
                       <TableCell>
-                        {exercises.find((ex) => ex.id === result.exerciseId)?.name || result.exerciseName || result.exerciseId}
+                        {/* ✅ Un résultat de bloc n'a pas d'`exerciseId` : la cellule restait
+                            vide. Elle porte maintenant le nom de la mini-compétition. */}
+                        {result.boulderId
+                          ? nomMiniCompetition(result.miniCompetitionId)
+                          : exercises.find((ex) => ex.id === result.exerciseId)?.name || result.exerciseName || result.exerciseId}
                       </TableCell>
                       <TableCell>
+                        {/* ✅ `backgroundColor: 'bleu'` n'est pas une couleur CSS : la
+                            pastille retombait sur le gris de MUI, avec du texte blanc
+                            dessus. Voir utils/boulderColorDisplay.ts. */}
                         {result.boulderColor ? (
-                          <Chip
-                            label={result.boulderColor}
-                            sx={{
-                              backgroundColor: result.boulderColor,
-                              color: result.boulderColor === 'blanc' ? 'black' : 'white',
-                            }}
-                          />
+                          <Chip label={result.boulderColor} sx={boulderColorChipSx(result.boulderColor)} />
                         ) : (
                           'N/A'
                         )}
@@ -983,7 +996,7 @@ const StatsList: React.FC = () => {
         </Snackbar>
       </Paper>
 
-      {miniCompetitions.length > 0 && (
+      {miniCompetitionsProposees.length > 0 && (
         <Paper sx={{ p: { xs: 2, sm: 3 }, mt: 3 }}>
           <Typography variant="h5" gutterBottom sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }}>
             🏆 Classement mini-compétition
@@ -997,7 +1010,7 @@ const StatsList: React.FC = () => {
               onChange={(e: SelectChangeEvent<string>) => setSelectedMiniCompetitionId(e.target.value)}
               label="Mini-compétition"
             >
-              {miniCompetitions.map((mc) => (
+              {miniCompetitionsProposees.map((mc) => (
                 <MenuItem key={mc.id} value={mc.id}>{mc.name}</MenuItem>
               ))}
             </Select>
@@ -1019,9 +1032,11 @@ const StatsList: React.FC = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {ranking.map((entry, index) => (
-                      <TableRow key={entry.participant} hover>
-                        <TableCell>{index + 1}</TableCell>
+                    {/* ✅ Le rang vient du calcul (1, 1, 3), et la clé est l'uid : deux
+                        homonymes produisaient une collision de clés React. */}
+                    {ranking.map((entry) => (
+                      <TableRow key={entry.userId} hover>
+                        <TableCell>{entry.rank}</TableCell>
                         <TableCell>{entry.participant}</TableCell>
                         <TableCell>{entry.bouldersValidated}</TableCell>
                         <TableCell>{entry.score}</TableCell>

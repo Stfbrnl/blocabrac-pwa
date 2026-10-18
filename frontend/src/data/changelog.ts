@@ -13,6 +13,15 @@ export interface ChangelogEntry {
 // les commits git.
 export const changelog: ChangelogEntry[] = [
   {
+    version: '2.74.2',
+    date: '2026-10-18',
+    title: 'Mini-compétitions des cours : les points ne bougent plus',
+    items: [
+      'Dans une mini-compétition de cours, les points d\'un bloc que vous avez réussi sont désormais figés à votre validation. Si l\'ouvreur recote ce bloc plus tard, votre score ne change plus — et il correspond enfin à celui que votre moniteur voit dans son classement, qui lui était déjà figé.',
+      'Dans « Mes statistiques », onglet Cours, les blocs de mini-compétition affichaient une ligne sans intitulé : le nom de la mini-compétition y apparaît maintenant.',
+    ],
+  },
+  {
     version: '2.74',
     date: '2026-10-15',
     title: 'En compétition, un palmarès officiel et un classement par niveau',

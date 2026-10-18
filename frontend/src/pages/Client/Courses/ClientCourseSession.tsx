@@ -14,11 +14,9 @@ import { getSessionStatus, type SessionStatus } from '../../../utils/courseSessi
 import { calculatePoints } from '../../../utils/climbingPoints';
 import { getBoulderImageUrl } from '../../../services/imageStorage';
 import { useDebouncedFlushQueue } from '../../../utils/useDebouncedFlushQueue';
-
-const levelColors: Record<string, string> = {
-  jaune: '#FFFF00', vert: '#00FF00', bleu: '#0000FF', violet: '#800080',
-  rouge: '#FF0000', noir: '#000000', blanc: '#FFFFFF', rose: '#FFC0CB'
-};
+// ✅ Remplace une table `levelColors` recopiée ici : les teintes viennent de `colorGrades`
+// (config/gymConfig.ts), source unique, et la couleur du texte est choisie pour être lisible.
+import { boulderColorChipSx } from '../../../utils/boulderColorDisplay';
 
 interface Exercise {
   id: string;
@@ -74,6 +72,15 @@ interface ValidationResult {
 interface BoulderValidationResult {
   success?: boolean;
   attempts?: number;
+  /**
+   * ⚠️ La couleur FIGÉE à la validation, relue depuis `client_course_results` — jamais la
+   * couleur courante du bloc. C'est elle qui a produit les points, et c'est elle que le
+   * classement du moniteur utilise. Sans elle, les deux écrans se contredisaient dès qu'un
+   * bloc était recoté après la séance : mesuré le 18/10/2026 sur la même validation, 80 pts
+   * chez la monitrice (bleu, figé) contre 900 pts chez l'élève (rose, relu en direct).
+   * Absente sur un résultat écrit avant ce correctif : on se replie alors sur le bloc.
+   */
+  boulderColor?: string;
 }
 
 const statusLabels: Record<SessionStatus, string> = {
@@ -230,6 +237,7 @@ const ClientCourseSession: React.FC = () => {
             boulderResultsData[data.boulderId] = {
               success: data.success,
               attempts: data.attempts,
+              boulderColor: data.boulderColor,
             };
             persistedBoulderResultIds.current.add(data.boulderId);
             lastPersistedBoulderRef.current[data.boulderId] = boulderResultsData[data.boulderId];
@@ -372,7 +380,9 @@ const ClientCourseSession: React.FC = () => {
     value: boolean | number,
     immediate: boolean = false
   ) => {
-    const updated: BoulderValidationResult = { ...boulderResults[boulderId], [field]: value };
+    // ✅ La couleur figée suit le résultat dans l'état local comme dans l'écriture : c'est
+    // celle-ci qui sera affichée en lecture seule, et c'est elle qui vaut des points.
+    const updated: BoulderValidationResult = { ...boulderResults[boulderId], boulderColor, [field]: value };
     setBoulderResults(prev => ({ ...prev, [boulderId]: updated }));
 
     const payload = { miniCompetitionId, boulderColor, result: updated };
@@ -535,8 +545,9 @@ const ClientCourseSession: React.FC = () => {
                     <Typography variant="h6">{exercise.name}</Typography>
                     <Typography sx={{ mb: 1 }}>{exercise.description}</Typography>
                     <Box sx={{
-                      backgroundColor: levelColors[exercise.difficulty] || '#CCCCCC',
-                      color: ['noir', 'blanc'].includes(exercise.difficulty) ? 'black' : 'white',
+                      // ⚠️ Le choix du texte était INVERSÉ : `['noir','blanc'].includes(c)`
+                      // écrivait en noir sur un fond noir. Voir boulderColorDisplay.ts.
+                      ...boulderColorChipSx(exercise.difficulty),
                       padding: '4px 8px',
                       borderRadius: '4px',
                       display: 'inline-block',
@@ -661,6 +672,15 @@ const ClientCourseSession: React.FC = () => {
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
                 {miniCompetition.boulders.map((boulder) => {
                   const result = boulderResults[boulder.id] || {};
+                  // ⚠️ Tant qu'on peut valider, la couleur montrée est celle du bloc tel
+                  // qu'il est AUJOURD'HUI sur le mur — c'est ce que le grimpeur a sous les
+                  // yeux. Une fois la séance archivée, c'est la couleur FIGÉE à la
+                  // validation qui s'affiche et qui donne les points, la même que celle du
+                  // classement du moniteur. Sans ça, une recotation faisait diverger les
+                  // deux écrans sur la même validation (80 pts contre 900).
+                  const couleurAffichee = canValidate
+                    ? (boulder.color || '')
+                    : (result.boulderColor ?? boulder.color ?? '');
                   return (
                     <Card
                       key={boulder.id}
@@ -681,14 +701,13 @@ const ClientCourseSession: React.FC = () => {
                           {boulder.is_child_route && <Chip label="🐒 Enfant" size="small" color="info" sx={{ ml: 1 }} />}
                         </Typography>
                         <Box sx={{
-                          backgroundColor: levelColors[boulder.color || ''] || '#CCCCCC',
-                          color: ['noir', 'blanc'].includes(boulder.color || '') ? 'black' : 'white',
+                          ...boulderColorChipSx(couleurAffichee),
                           padding: '4px 8px',
                           borderRadius: '4px',
                           display: 'inline-block',
                           mb: 1
                         }}>
-                          {boulder.color || 'Non spécifiée'}
+                          {couleurAffichee || 'Non spécifiée'}
                         </Box>
 
                         {canValidate ? (
@@ -736,7 +755,7 @@ const ClientCourseSession: React.FC = () => {
                           <Box sx={{ mt: 1 }}>
                             {result.success !== undefined ? (
                               <Chip
-                                label={result.success ? `Réussi (${result.attempts || 1} essai(s)) — ${calculatePoints(boulder.color || '', result.attempts || 1, result.success)} pts` : 'Échoué'}
+                                label={result.success ? `Réussi (${result.attempts || 1} essai(s)) — ${calculatePoints(couleurAffichee, result.attempts || 1, result.success)} pts` : 'Échoué'}
                                 color={result.success ? 'success' : 'error'}
                                 size="small"
                               />

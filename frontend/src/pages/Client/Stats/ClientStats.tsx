@@ -358,6 +358,27 @@ const ClientStats: React.FC = () => {
           query(collection(db, 'client_course_results'), where('userId', '==', user.uid))
         );
 
+        // ✅ Un résultat de bloc de mini-compétition ne porte pas d'`exerciseId` : la colonne
+        // « Exercice » du tableau ci-dessous restait VIDE. On résout le nom des
+        // mini-compétitions réellement concernées — dédoublonnées, donc au plus une lecture
+        // par mini-compétition jouée, et aucune si le grimpeur n'en a fait aucune.
+        const miniCompetitionIds = [...new Set(
+          courseResultsSnapshot.docs
+            .map((d) => d.data().miniCompetitionId as string | undefined)
+            .filter((id): id is string => !!id)
+        )];
+        const miniCompetitionNames: Record<string, string> = {};
+        for (const id of miniCompetitionIds) {
+          try {
+            const snap = await getDoc(doc(db, 'mini_competitions', id));
+            if (snap.exists()) miniCompetitionNames[id] = snap.data().name || '';
+          } catch (miniErr: unknown) {
+            // Même isolement que pour la séance plus bas : une mini-compétition supprimée
+            // depuis ne doit priver le grimpeur ni de ses badges ni du reste du tableau.
+            console.error(`Mini-compétition ${id} illisible :`, miniErr);
+          }
+        }
+
         const courseStatsData: CourseStatEntry[] = [];
         for (const resultDoc of courseResultsSnapshot.docs) {
           const result = resultDoc.data();
@@ -387,7 +408,11 @@ const ClientStats: React.FC = () => {
                 courseTitle: courseData.title || result.courseId,
                 courseDate: courseData.date ? formatDate(courseData.date) : 'Inconnu',
                 date: resultDate,
-                exerciseName: result.exerciseName || exercisesList.find((ex) => ex.id === result.exerciseId)?.name || result.exerciseId,
+                exerciseName: result.boulderId
+                  ? (miniCompetitionNames[result.miniCompetitionId]
+                    ? `Mini-compétition : ${miniCompetitionNames[result.miniCompetitionId]}`
+                    : 'Mini-compétition')
+                  : result.exerciseName || exercisesList.find((ex) => ex.id === result.exerciseId)?.name || result.exerciseId,
               });
             }
           } catch (courseErr: unknown) {
