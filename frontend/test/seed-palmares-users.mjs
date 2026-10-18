@@ -17,7 +17,19 @@
 //   - DEUX BLOCS de couleurs différentes, pour que la recotation de l'un (le test décisif du
 //     §6) déplace réellement les scores. Avec un seul bloc, recoter changerait tout le monde
 //     dans le même sens et ne prouverait rien sur les rangs ;
-//   - DEUX NIVEAUX de grimpeurs, pour que le classement par niveau max ait plus d'un paquet.
+//   - DEUX NIVEAUX de grimpeurs, pour que le classement par niveau max ait plus d'un paquet ;
+//   - DEUX PARTICIPATIONS SANS `level_at_start`, UNE DE CHAQUE CÔTÉ DU COUP D'ENVOI (Chloe
+//     inscrite avant, Victor après). C'est la paire qui rend le compteur
+//     `niveauxNonFiges` DISCRIMINANT : avec une seule, « 1 » et « 2 » seraient
+//     indiscernables, et une garde qui compterait bêtement toutes les absences resterait
+//     verte. L'attendu est 1, pas 2 — l'inscrit tardif n'a légitimement pas ce champ.
+//     C'est aussi ce qui exerce l'interrupteur « Je publie quand même » (V2.74.1), qui
+//     n'était couvert par aucun test tant que le seed figeait le niveau partout.
+//
+// ⚠️ `level_at_start` vaut `level` pour tout le monde ici, donc son absence ne déplace AUCUN
+// classement (le repli de `resolveClassementLevel` donne la même valeur). C'est voulu : la
+// priorité `level_at_start` > `level` est déjà épinglée par un test unitaire, et la mêler ici
+// obligerait à réécrire les rangs attendus pour vérifier une chose déjà vérifiée ailleurs.
 import { resetEmulators } from './emulator-reset.mjs';
 
 process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8080';
@@ -38,22 +50,35 @@ const PASSWORD = 'TestPassword123!';
 const ADMIN_EMAIL = 'admin.palmares@blocabrac.test';
 const COMPETITION_ID = 'comp-palmares-essai';
 
+// Le coup d'envoi (`competitions.started_at`, écrit au passage en « en cours ») et les deux
+// dates d'inscription qui l'encadrent. Sans `started_at`, l'écran ne peut pas distinguer un
+// inscrit tardif d'un figeage manquant et avertit sans trancher : ce seed doit exercer le
+// chemin où il TRANCHE.
+const COUP_D_ENVOI = '2026-11-05T18:00:00.000Z';
+const INSCRIT_AVANT = '2026-10-20T10:00:00.000Z';
+const INSCRIT_APRES = '2026-11-05T18:30:00.000Z';
+
 const grimpeurs = [
   {
     cle: 'amandine', email: 'amandine.palmares@blocabrac.test',
     first_name: 'Amandine', last_name: 'Dupont-Lachaise',
     gender: 'Femme', dateOfBirth: '1996-04-12', level: 'rouge', roles: ['client'],
+    registered_at: INSCRIT_AVANT, niveau_fige: true,
   },
   {
     cle: 'bruno', email: 'bruno.palmares@blocabrac.test',
     first_name: 'Bruno', last_name: 'Vandenberghe',
     gender: 'Homme', dateOfBirth: '1996-09-30', level: 'rouge', roles: ['client'],
+    registered_at: INSCRIT_AVANT, niveau_fige: true,
   },
   {
     // Ni nom de famille, ni date de naissance : le cas réel du 03/10/2026.
     cle: 'chloe', email: 'chloe.palmares@blocabrac.test',
     first_name: 'Chloe', last_name: null,
     gender: 'Femme', dateOfBirth: null, level: 'bleu', roles: ['client'],
+    // Inscrite AVANT le coup d'envoi et SANS niveau figé : le defaut que la garde doit
+    // compter. C'est elle, et elle seule, qui doit faire 'niveauxNonFiges === 1'.
+    registered_at: INSCRIT_AVANT, niveau_fige: false,
   },
   {
     // NON client : seul rôle « ouvreur ». Il doit apparaître au classement général et dans
@@ -61,6 +86,10 @@ const grimpeurs = [
     cle: 'victor', email: 'victor.palmares@blocabrac.test',
     first_name: 'Victor', last_name: 'Visiteur',
     gender: 'Homme', dateOfBirth: '1996-01-05', level: 'noir', roles: ['ouvreur', 'client'],
+    // Inscrit APRES le coup d'envoi, donc sans niveau figé LEGITIMEMENT : il ne doit PAS
+    // etre compte. Sans ce cas, la garde pourrait compter toutes les absences sans qu'on
+    // le voie.
+    registered_at: INSCRIT_APRES, niveau_fige: false,
     is_client_participation: false,
   },
 ];
@@ -101,6 +130,9 @@ async function main() {
     registered_count: grimpeurs.length,
     liveDisplayEnabled: false,
     scoring_mode: 'blocabrac',
+    // Le coup d'envoi a bien eu lieu : c'est ce qui permet à la garde de publication de
+    // distinguer un inscrit tardif (légitime) d'un figeage manquant.
+    started_at: COUP_D_ENVOI,
   });
 
   // ⚠️ COMPÉTITION HYBRIDE, et c'est la forme réelle du Contest du 5 novembre : des blocs
@@ -130,7 +162,7 @@ async function main() {
 
   for (const g of grimpeurs) {
     const uid = uids[g.cle];
-    await db.collection('competition_participants').doc(`${uid}_${COMPETITION_ID}`).set({
+    const participation = {
       user_id: uid,
       competition_id: COMPETITION_ID,
       email: g.email,
@@ -140,10 +172,13 @@ async function main() {
       dateOfBirth: g.dateOfBirth,
       gender: g.gender,
       level: g.level,
-      level_at_start: g.level,
-      registered_at: new Date().toISOString(),
+      registered_at: g.registered_at,
       is_client: g.is_client_participation !== false,
-    });
+    };
+    // Le champ est ABSENT, pas à null : c'est l'état réel d'une participation dont le niveau
+    // n'a jamais été figé, et c'est sur son absence que porte la garde.
+    if (g.niveau_fige) participation.level_at_start = g.level;
+    await db.collection('competition_participants').doc(`${uid}_${COMPETITION_ID}`).set(participation);
   }
 
   // Amandine et Bruno : rouge en 2 essais (380) + bleu en 1 (100) = 480, et le MÊME échec.

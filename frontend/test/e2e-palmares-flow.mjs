@@ -15,7 +15,10 @@
 //      bouge pas d'une ligne. Et, comme le plan l'exige, prédire les DEUX grandeurs : le
 //      palmarès inchangé **et** le fait que la recotation aurait dû changer le score. Ici
 //      Chloe garde 100 points sur un bloc devenu rose, qui en vaut 1000 : si quoi que ce soit
-//      recalculait, le chiffre serait 1000. Un palmarès inchangé ne prouve rien seul.
+//      recalculait, le chiffre serait 1000. Un palmarès inchangé ne prouve rien seul ;
+//   4. que l'INTERRUPTEUR de confirmation (V2.74.1) garde réellement le bouton inerte, et
+//      qu'il est remis à zéro à chaque réouverture de l'aperçu. Rien de tout cela n'existe
+//      ailleurs que dans le rendu : c'est un état de composant, pas une fonction pure.
 //
 // ⚠️ CE QUE CET e2e NE PEUT PAS VÉRIFIER, et il faut le dire : le §4.4 (un appareil qui a
 // ouvert la page AVANT la publication ne doit pas se voir resservir l'absence depuis le cache
@@ -88,6 +91,12 @@ async function main() {
   const adminPage = await (await browser.newContext()).newPage();
   const clientPage = await (await browser.newContext()).newPage();
 
+  // Une exécution précédente interrompue laisse la sauvegarde d'essai sur le disque, et le
+  // pas « la simulation n'écrit rien » échouerait alors sur un fichier qu'elle n'a pas créé —
+  // un rouge qui ne désigne pas son défaut. Le supprimer ici ne masque rien : ce pas vérifie
+  // une CRÉATION, pas une absence préalable.
+  rmSync(sauvegardeAttendue(), { force: true });
+
   await step('aucun palmarès avant publication (état normal, pas une erreur)', async () => {
     assert((await lirePalmaresEnBase()) === null, 'un palmarès existe déjà avant publication');
   });
@@ -113,6 +122,29 @@ async function main() {
     assert(duJour.length === 1, `1 bloc du jour réutilisé attendu (color sans difficulty), vu ${duJour.length}`);
     assert(deCompet.length === 2, `2 blocs de compétition attendus (difficulty sans color), vu ${deCompet.length}`);
   });
+  // ⚠️ MÊME NATURE QUE LE PAS PRÉCÉDENT : il vérifie le JEU D'ESSAI, pas le code. La garde
+  // du §4.2 ne compte que les participations sans `level_at_start` ET inscrites AVANT le coup
+  // d'envoi. Si le seed n'en portait qu'une seule sorte, « 1 » et « 2 » seraient
+  // indiscernables et une garde qui compterait toutes les absences resterait verte.
+  await step('le jeu d\'essai porte les DEUX absences de niveau figé, de part et d\'autre du coup d\'envoi', async () => {
+    const comp = await db.collection('competitions').doc(COMPETITION_ID).get();
+    const coupDEnvoi = comp.data().started_at;
+    assert(coupDEnvoi, 'la compétition n\'a pas de started_at : la garde ne pourrait pas trancher');
+
+    const parts = await db.collection('competition_participants')
+      .where('competition_id', '==', COMPETITION_ID).get();
+    assert(parts.size === 4, `4 participations attendues, vu ${parts.size}`);
+
+    const sansNiveau = parts.docs.map((d) => d.data()).filter((p) => !p.level_at_start);
+    assert(sansNiveau.length === 2, `2 participations sans level_at_start attendues, vu ${sansNiveau.length}`);
+    const avant = sansNiveau.filter((p) => p.registered_at < coupDEnvoi);
+    const apres = sansNiveau.filter((p) => p.registered_at >= coupDEnvoi);
+    assert(
+      avant.length === 1 && apres.length === 1,
+      `attendu 1 inscrit avant et 1 après le coup d'envoi, vu ${avant.length} / ${apres.length}`
+    );
+  });
+
   await step('le grimpeur voit « aucun palmarès publié », et non une page en erreur', async () => {
     await login(clientPage, CLIENT_EMAIL);
     await clientPage.goto(`${BASE_URL}/client/competitions`);
@@ -140,7 +172,70 @@ async function main() {
     assert(texte.includes('définitive'), 'l\'aperçu ne prévient pas que la publication est définitive');
   });
 
+  // ═══ L'INTERRUPTEUR DE CONFIRMATION (V2.74.1, §3 de RETOUR-avant-deploiement-cloture) ═══
+  //
+  // « Une publication immuable mérite une confirmation, pas un avertissement » : sur un
+  // document que les règles rendent définitif, un avertissement ignoré ne se répare qu'avec
+  // la clé de service. Le bouton doit donc être INERTE tant que la décision n'est pas prise.
+  //
+  // Et la valeur de ce pas tient au CHIFFRE : 1, pas 2. Deux participations n'ont pas de
+  // niveau figé, mais l'une est un inscrit tardif légitime. Une garde qui compterait
+  // naïvement toutes les absences afficherait 2 et serait tout aussi « verte » sur un simple
+  // « > 0 ».
+  await step('§4.2 — la garde compte 1 niveau non figé (pas 2), et le bouton reste inerte', async () => {
+    const texte = await adminPage.locator('[role="dialog"]').innerText();
+    assert(
+      texte.includes('1 participant(s) sans niveau de départ figé'),
+      `l'aperçu n'annonce pas « 1 participant(s) sans niveau de départ figé » :\n${texte}`
+    );
+    // La branche où la garde TRANCHE (coup d'envoi connu), et non celle où elle avertit sans
+    // distinguer : sans cette assertion, un seed ayant perdu `started_at` passerait inaperçu.
+    assert(
+      texte.includes('inscrits AVANT le coup d\'envoi'),
+      'l\'aperçu n\'est pas dans la branche « coup d\'envoi connu »'
+    );
+    assert(
+      await adminPage.getByRole('button', { name: 'Publier définitivement' }).isDisabled(),
+      'le bouton de publication est actif alors qu\'un niveau de départ manque'
+    );
+  });
+
+  // ⚠️ CE PAS DOIT SE JOUER SANS RECHARGEMENT, et c'est tout son intérêt. Une première
+  // version vérifiait la remise à zéro à la REPUBLICATION, après un `reload()` — mais un
+  // rechargement remonte le composant et remet `risqueAssume` à `false` tout seul : en
+  // supprimant `setRisqueAssume(false)` du code, ce pas restait VERT. La fenêtre
+  // d'observation ne pouvait pas exprimer le défaut (règle du 03/10/2026). Ici on ferme et on
+  // rouvre l'aperçu dans la MÊME page : seul l'appel explicite peut remettre à zéro.
+  await step('§3 — l\'interrupteur est remis à zéro à chaque ouverture de l\'aperçu', async () => {
+    const bouton = () => adminPage.getByRole('button', { name: 'Publier définitivement' });
+    await adminPage.getByRole('switch', { name: /Je publie quand même/ }).check();
+    assert(!(await bouton().isDisabled()), 'l\'interrupteur n\'active pas le bouton');
+
+    await adminPage.getByRole('button', { name: 'Annuler' }).click();
+    await adminPage.getByRole('heading', { name: 'Publier le palmarès officiel' })
+      .waitFor({ state: 'hidden', timeout: 10000 });
+
+    await adminPage.getByRole('button', { name: 'Publier le palmarès' }).click();
+    await adminPage.getByRole('heading', { name: 'Publier le palmarès officiel' }).waitFor({ timeout: 10000 });
+    assert(
+      await bouton().isDisabled(),
+      'le bouton est actif dès la réouverture : le risque assumé a survécu à la fermeture'
+    );
+  });
+
   await step('la publication écrit réellement le document, avec les rangs partagés', async () => {
+    // L'interrupteur est le seul chemin vers le bouton : s'il ne l'activait pas, ce pas
+    // échouerait au clic.
+    //
+    // ⚠️ Le rôle est `switch`, PAS `checkbox` : le `Switch` de MUI rend bien un
+    // `<input type="checkbox">`, mais lui pose explicitement `role="switch"` — et un rôle
+    // explicite l'emporte sur le rôle implicite du type. Lu dans le DOM rendu (le `type` seul
+    // menait à `getByRole('checkbox') -> 0`), pas déduit de la documentation.
+    await adminPage.getByRole('switch', { name: /Je publie quand même/ }).check();
+    assert(
+      !(await adminPage.getByRole('button', { name: 'Publier définitivement' }).isDisabled()),
+      'le bouton reste inerte alors que le risque est assumé'
+    );
     await adminPage.getByRole('button', { name: 'Publier définitivement' }).click();
     await adminPage.getByText('Palmarès officiel publié').waitFor({ timeout: 15000 });
 
@@ -287,6 +382,11 @@ async function main() {
     await adminPage.getByRole('button', { name: 'Publier le palmarès' }).waitFor({ timeout: 15000 });
     await adminPage.getByRole('button', { name: 'Publier le palmarès' }).click();
     await adminPage.getByRole('heading', { name: 'Publier le palmarès officiel' }).waitFor({ timeout: 10000 });
+
+    // La page a été rechargée juste avant : l'interrupteur est forcément à zéro, il n'y a
+    // donc rien à vérifier ici (c'est le pas « §3 » plus haut qui le fait, sans rechargement).
+    await adminPage.getByRole('switch', { name: /Je publie quand même/ }).check();
+
     await adminPage.getByRole('button', { name: 'Publier définitivement' }).click();
     await adminPage.getByText('Palmarès officiel publié').waitFor({ timeout: 15000 });
 
