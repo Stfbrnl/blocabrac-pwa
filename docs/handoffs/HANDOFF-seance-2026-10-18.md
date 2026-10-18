@@ -8,9 +8,11 @@
 
 1. **`CLAUDE.md` a été découpé** (190 ko → 80 ko). Une partie de la doctrine que tu cites n'y
    est plus : elle vit dans `docs/architecture/`. Détail en §4.
-2. **La production tourne toujours V2.74.1.** La V2.74.2 d'aujourd'hui est commitée, poussée,
-   construite — **pas déployée**. Rien ne l'impose : elle corrige des écrans de cours, pas le
-   chemin du 5 novembre.
+2. **La production tourne V2.74.2**, déployée en fin de séance (`--only hosting` seul : aucune
+   règle ni index n'a changé depuis V2.74.1, vérifié). `dist/` a été **reconstruit juste avant
+   le déploiement**, et la version servie a été relue en ligne — `2.74.2` est bien dans le
+   bundle que sert `blocabrac.web.app`, et le `index.html` servi pointe sur le même
+   hachage d'actif que celui construit localement.
 3. **Un nouveau chantier non planifié est arrivé en cours de séance** (§5) : l'utilisateur a
    demandé comment apparaissent les résultats d'une mini-compétition de cours. Cinq défauts,
    tous mesurés sur les écrans rendus.
@@ -265,9 +267,12 @@ aucune erreur, et les chiffres faux étaient du bon ordre de grandeur.
   par un e2e : c'est le bon niveau une fois le calcul devenu pur, mais ce n'est pas un œil
   humain sur un écran.
 - **Le PDF a été relu page par page, pas imprimé.**
-- **V2.74.2 n'est pas déployée.** `dist/` a bien été reconstruit **après** le bump (vérifié :
-  `2.74.2` est dans le bundle), donc un `--only hosting` partirait juste — mais il n'a pas
-  été fait.
+- **Le bandeau de mise à jour n'a pas été vu sur cette transition.** V2.74.2 est déployée et
+  servie (vérifié par une lecture du bundle en ligne), mais que le bandeau apparaisse
+  réellement sur le 2.74.1 → 2.74.2 relève de l'essai manuel sur deux déploiements
+  successifs — un e2e ne peut pas le simuler. Le mode `prompt` étant en place depuis V2.62,
+  rien ne forcera la mise à jour tant que personne ne clique : le repère de version dans la
+  barre de navigation reste le diagnostic.
 
 ## Points ouverts par ailleurs
 
