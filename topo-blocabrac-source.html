@@ -88,6 +88,10 @@
   }
   .warn b { display: block; color: #8a4d0e; margin-bottom: 3px; font-size: 13px; }
   .warn p { margin: 0; color: var(--muted); font-size: 12.5px; }
+  /* `.warn b` est le TITRE de l'encadré, donc en bloc — mais un <b> à l'intérieur du
+     paragraphe est une emphase, et il héritait de ce display:block : il cassait la ligne
+     avant et après lui (« Seul le classement / de saison / (nouveau)… »). */
+  .warn p b { display: inline; color: inherit; font-size: inherit; margin: 0; }
   .warn-group-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 16px 0 6px; }
 
   table.feature-table { width: 100%; border-collapse: collapse; margin: 10px 0; }
@@ -184,7 +188,7 @@
     <li><span><span class="num">03</span>Rôle Moniteur — « Espace Moniteur »</span><span class="desc">cours et groupes</span></li>
     <li><span><span class="num">04</span>Rôle Admin — « Espace Admin »</span><span class="desc">pilotage global</span></li>
     <li><span><span class="num">05</span>Options transverses</span><span class="desc">communes à tous les rôles</span></li>
-    <li><span><span class="num">06</span>Barème de points</span><span class="desc">compétitions &amp; classement</span></li>
+    <li><span><span class="num">06</span>Barème, classements &amp; palmarès</span><span class="desc">compétitions &amp; classement</span></li>
     <li><span><span class="num">07</span>Points de vigilance</span><span class="desc">à lire avant de manipuler les réglages</span></li>
   </ul>
 
@@ -233,7 +237,7 @@
 <!-- PAGE 3b : 01 CLIENT (SUITE) -->
 <section class="page">
   <table class="feature-table">
-    <tr><td class="label">Mes compétitions</td><td>Inscription en un clic selon niveau/accès. Une fois inscrit, tous les blocs de l'épreuve sont notés en aveugle, comme des blocs « Mystère ».</td></tr>
+    <tr><td class="label">Mes compétitions</td><td>Inscription en un clic selon niveau/accès, possible sur une épreuve <b>à venir</b> comme <b>en cours</b> (retardataires). Une fois inscrit, tous les blocs de l'épreuve sont notés en aveugle, comme des blocs « Mystère » — l'application n'affiche la couleur d'aucun bloc pendant l'épreuve. Pendant la compétition, un grimpeur ne voit <b>aucun classement</b> : il ne peut pas lire les résultats des autres. Après l'épreuve, la section « Palmarès officiels » affiche les classements gelés que l'admin a publiés (voir page 06).</td></tr>
     <tr><td class="label">Mes statistiques</td><td>Historique filtrable par période, répartition par couleur, détail des cours suivis, badges obtenus. Les badges « couleur » (réussir un bloc violet, rouge, noir, blanc, rose ; un seul bloc suffit, sauf le badge « Master » qui exige toute la couleur) sont attribués automatiquement dès le critère rempli ; les autres badges et diplômes restent décernés par un moniteur. Un badge « couleur » se met en veille (grisé) si, après une rotation des murs, il ne reste plus aucun bloc actif de cette couleur validé par le grimpeur — il se rallume dès qu'il en revalide un. Niveau affiché calculé automatiquement à partir des badges actifs ; s'ils passent tous en veille, il revient au niveau déclaré par le grimpeur (inscription ou fiche « Mes informations »).</td></tr>
     <tr><td class="label">Classement des grimpeurs</td><td>Optionnel (case à cocher dans le profil — désactiver retire aussi de la qualification pour la Finale, voir page 06). Deux vues au choix : classement général (cumulé depuis la création du compte) et classement de la saison en cours. Avant l'ouverture de la saison, l'onglet affiche ses dates au lieu d'un tableau vide.</td></tr>
     <tr><td class="label">Mes cours</td><td>Visible seulement si inscrit aux cours : séances à venir, du jour, archivées ; mini-compétitions incluses ; messagerie avec son moniteur.</td></tr>
@@ -279,7 +283,7 @@
   </footer>
 </section>
 
-<!-- PAGE 6 : 04 ADMIN + 05 OPTIONS -->
+<!-- PAGE 6 : 04 ADMIN -->
 <section class="page">
   <div class="section-head">
     <div><h2 class="section-num">04</h2><h2 class="section-title" style="display:inline;">Admin — « Espace Admin »</h2></div>
@@ -287,15 +291,23 @@
   </div>
   <table class="feature-table">
     <tr><td class="label">Utilisateurs</td><td>Création/édition des comptes, attribution des rôles (cumulables), activation/désactivation de l'accès aux compétitions par personne.</td></tr>
-    <tr><td class="label">Créer/gérer les compétitions</td><td>Restrictions de niveau, activation de la diffusion sur l'écran TV, mode de comptage des points parmi 4 (avant le déclenchement, verrouillé ensuite — voir page 06). En mode Officiel FFME, bouton « Générer le roster » : reprend automatiquement le top 10 garçons/filles de la dernière saison clôturée (voir page 06-07).</td></tr>
+    <tr><td class="label">Créer/gérer les compétitions</td><td>Restrictions de niveau, activation de la diffusion sur l'écran TV, mode de comptage des points parmi 4 (avant le déclenchement, verrouillé ensuite — voir page 06). En mode Officiel FFME, bouton « Générer le roster » : reprend automatiquement le top 10 garçons/filles de la dernière saison clôturée (voir page 06-07). Le passage en « en cours » <b>fige le niveau de départ</b> de chaque inscrit, dont se sert le classement par niveau max.</td></tr>
+    <tr><td class="label">Publier le palmarès</td><td>Une fois l'épreuve terminée, bouton « Publier le palmarès » sur la carte de la compétition : il prépare un <b>aperçu</b> des cinq classements, puis une seconde confirmation les <b>gèle définitivement</b> (voir page 06). Le palmarès devient alors visible de tous les grimpeurs dans « Mes compétitions ». Refusé en mode Officiel FFME.</td></tr>
     <tr><td class="label">Gérer les inscriptions</td><td>Inscription manuelle d'un participant, retrait, contrôle de l'accès général aux compétitions par utilisateur.</td></tr>
     <tr><td class="label">Classement de saison</td><td>Réglage de la fenêtre de saison (calendrier retenu : du 1er novembre au 31 mai, juin réservé à la Finale). Une nouvelle saison s'ouvre avec « Enregistrer » : tout le monde part de zéro. Le bouton « Redémarrer la saison maintenant » donne au contraire à chacun <b>tout son historique</b> en crédit de départ — conçu pour le lancement de l'application, pas pour une nouvelle saison (voir page 06-07).</td></tr>
     <tr><td class="label">Statistiques &amp; publication</td><td>Classement général et par catégorie/genre, publication dans le bandeau d'annonces des clients.</td></tr>
     <tr><td class="label">Informations clients</td><td>Rédaction des annonces affichées en haut de l'écran d'accueil de tous les clients.</td></tr>
     <tr><td class="label">Écran live TV</td><td>Fenêtre séparée en plein écran (mode HDMI étendu) affichant le classement en direct, réservée aux compétitions diffusées et déclenchées. En mode « Officiel FFME », les deux groupes de genre s'affichent côte à côte en permanence, sans rotation.</td></tr>
   </table>
+  <footer class="pagefoot">
+    <span>Topo Blocabrac — édition papier</span>
+    <span>04 · Admin</span>
+  </footer>
+</section>
 
-  <div class="eyebrow" style="margin-top:24px;">05 · Communes à tous les rôles</div>
+<!-- PAGE 7 : 05 OPTIONS TRANSVERSES -->
+<section class="page">
+  <div class="eyebrow">05 · Communes à tous les rôles</div>
   <h2 class="section-title">Options transverses</h2>
   <table class="feature-table" style="margin-top:10px;">
     <tr><td class="label">Thème clair / sombre</td><td>Icône lune/soleil toujours visible en haut de l'écran, sur toutes les pages.</td></tr>
@@ -308,11 +320,11 @@
   </table>
   <footer class="pagefoot">
     <span>Topo Blocabrac — édition papier</span>
-    <span>04-05 · Admin, Options</span>
+    <span>05 · Options transverses</span>
   </footer>
 </section>
 
-<!-- PAGE 7 : 06 BAREME -->
+<!-- PAGE 8 : 06 BAREME -->
 <section class="page">
   <div class="eyebrow">06 · Compétitions &amp; classement</div>
   <h2 class="section-title">Barème de points</h2>
@@ -361,7 +373,7 @@
   </footer>
 </section>
 
-<!-- PAGE 8 : 06 SUITE -->
+<!-- PAGE 9 : 06 SUITE -->
 <section class="page">
   <p style="font-weight:600; margin-bottom:6px;">Classement de compétition par catégorie</p>
   <p style="color:var(--muted); font-size:12.5px; margin-top:0;">
@@ -385,7 +397,7 @@
     Le classement général reste cumulé depuis la création du compte, sans
     remise à zéro (progression personnelle). Le classement <b>de saison</b>
     (nouveau) porte seulement sur les blocs validés dans la fenêtre réglée
-    par l'admin (« Classement de saison », page 05), et seulement les blocs
+    par l'admin (« Classement de saison », page 04), et seulement les blocs
     réussis pour la première fois pendant la saison — c'est lui qui détermine
     la qualification à la Finale, pas le classement général.
   </div>
@@ -406,7 +418,7 @@
     reconfigure ensuite la fenêtre suivante depuis « Classement de saison »
     — tant que ce n'est pas fait, le classement de saison reste à zéro pour
     tout le monde, sans casser le classement général. Le bouton « Générer le
-    roster » (page 05) reprend ce top 10/10 pour amorcer les inscriptions à
+    roster » (page 04) reprend ce top 10/10 pour amorcer les inscriptions à
     la Finale (mode Officiel FFME, page 06) — modifiable ensuite à la main.
     <b>La Finale n'est pas encore annoncée aux grimpeurs</b> : sa faisabilité
     reste à confirmer, les textes de l'application n'en parlent plus d'ici là.
@@ -417,7 +429,68 @@
   </footer>
 </section>
 
-<!-- PAGE 9 : 07 VIGILANCE -->
+<!-- PAGE 10 : 06 SUITE 2 — CLASSEMENTS DE COMPETITION & PALMARES -->
+<section class="page">
+  <div class="eyebrow">06 · Compétitions &amp; classement (suite)</div>
+  <h2 class="section-title">Palmarès officiel d'une compétition</h2>
+  <p style="color:var(--muted); font-size:12.5px; max-width:640px; margin-top:2px;">
+    Pendant l'épreuve, seuls l'admin et l'ouvreur voient un classement (écrans
+    de statistiques, écran live TV) : un grimpeur ne peut pas lire les
+    résultats des autres. <b>Publier le palmarès est donc le seul moyen qu'un
+    grimpeur voie un jour le classement d'une compétition.</b> Une fois publié,
+    il apparaît pour tous dans « Mes compétitions ».
+  </p>
+  <div class="callout" style="margin-bottom:6px;">
+    <b style="display:block; margin-bottom:6px; color:var(--green-dark);">Cinq classements dans un même palmarès</b>
+    <div class="modes-list" style="margin-top:8px;">
+      <div class="mode-row"><div class="mode-name">Général open</div><div class="mode-desc">Tous les participants sans distinction, visiteur extérieur inscrit pour l'occasion compris.</div></div>
+      <div class="mode-row"><div class="mode-name">Open adhérents</div><div class="mode-desc">Les seuls comptes clients de la salle, toutes catégories confondues.</div></div>
+      <div class="mode-row"><div class="mode-name">Par genre</div><div class="mode-desc">Adhérents, séparés filles / garçons.</div></div>
+      <div class="mode-row"><div class="mode-name">Par catégorie d'âge</div><div class="mode-desc">Adhérents, tranches FFME de la page précédente.</div></div>
+      <div class="mode-row"><div class="mode-name">Par niveau max</div><div class="mode-desc">Adhérents, rangés sur le plus haut de deux niveaux : celui <b>figé au coup d'envoi</b> et la couleur la plus dure réussie pendant l'épreuve. Réussir un noir range donc parmi les noirs, même en partant plus bas. Réservé aux adhérents : le niveau est une notion de l'application, un visiteur n'en a pas.</div></div>
+    </div>
+  </div>
+  <div class="callout">
+    <b style="display:block; margin-bottom:4px; color:var(--green-dark);">Deux gestes, et le second est définitif</b>
+    « Publier le palmarès » prépare d'abord un <b>aperçu</b> : on y relit les
+    classements avant toute écriture. La confirmation, elle, <b>gèle</b> le
+    palmarès — personne ne peut plus le corriger ni le reprendre, pas même
+    l'admin ; seule une intervention technique (clé de service) peut le
+    dépublier. Vérifier que <b>toutes les saisies sont faites</b> avant de
+    confirmer. Si des niveaux de départ manquent (inscription après le coup
+    d'envoi), le bouton reste inerte jusqu'à cocher « Je publie quand même ».
+  </div>
+  <div class="callout">
+    <b style="display:block; margin-bottom:4px; color:var(--green-dark);">Pourquoi geler, et pas recalculer à l'affichage</b>
+    Recoter un bloc déjà validé réécrit les points de tous ceux qui l'ont
+    validé — c'est déjà arrivé. Un classement recalculé changerait donc de
+    podium des semaines après l'épreuve, sans que personne n'ait touché à la
+    compétition. Un score qui bouge abîme la confiance ; un podium qui bouge
+    la détruit.
+  </div>
+  <div class="callout">
+    <b style="display:block; margin-bottom:4px; color:var(--green-dark);">Départage, et ce qu'il faut annoncer</b>
+    À points égaux : d'abord les blocs réussis, du plus dur au moins dur et à
+    essais égaux le moins d'essais ; celui qui a un bloc de plus passe devant.
+    En dernier recours, <b>le moins d'essais au total, échecs compris</b> — et
+    seulement entre deux grimpeurs ayant réussi au moins un bloc. À dire au
+    micro en début d'épreuve : <b>« déclarez vos échecs »</b>, puisqu'un échec
+    non déclaré avantage à égalité. Si rien ne sépare, le rang est partagé
+    (1, 1, 3).
+  </div>
+  <div class="callout">
+    <b style="display:block; margin-bottom:4px; color:var(--green-dark);">Prénom + initiale, et aucune date de naissance</b>
+    Le palmarès, comme l'écran live TV, n'affiche jamais un nom complet. Et
+    aucune date de naissance n'y est enregistrée : la catégorie d'âge est le
+    titre du groupe, elle suffit à son lecteur.
+  </div>
+  <footer class="pagefoot">
+    <span>Topo Blocabrac — édition papier</span>
+    <span>06 · Palmarès de compétition</span>
+  </footer>
+</section>
+
+<!-- PAGE 11 : 07 VIGILANCE -->
 <section class="page">
   <div class="eyebrow">07 · À lire avant de manipuler les réglages</div>
   <h2 class="section-title">Points de vigilance</h2>
@@ -432,17 +505,13 @@
   <div class="warn"><b>Inscription manuelle = information à donner soi-même</b><p>Un participant inscrit par l'admin ne voit jamais la mention de diffusion — à faire savoir oralement.</p></div>
   <div class="warn"><b>Toujours en mode HDMI étendu</b><p>En mode miroir, les cotations cachées de l'admin s'afficheraient aussi sur la TV de la salle.</p></div>
   <div class="warn"><b>Ne pas recharger la page pendant l'épreuve</b><p>Chaque rechargement recharge tout le classement — connexion filaire, veille désactivée, pas de mise à jour en pleine soirée.</p></div>
+  <div class="warn"><b>Publier le palmarès est définitif</b><p>Le palmarès gelé n'est ni modifiable ni supprimable depuis l'application — pas même par l'admin. Relire l'aperçu et s'assurer que toutes les saisies sont faites avant de confirmer (voir page 06).</p></div>
+  <div class="warn"><b>Inscrire les participants avant le coup d'envoi</b><p>Le passage en « en cours » fige le niveau de départ de chaque inscrit. Un grimpeur inscrit après sera classé sur son niveau à l'inscription dans le classement par niveau max — le palmarès le signale, mais rien ne reconstitue l'information perdue.</p></div>
 
   <div class="warn-group-title">Comptes &amp; rôles</div>
   <div class="warn"><b>Le rôle Client ne se retire jamais</b><p>Tout compte le garde en permanence, staff compris — ce n'est pas une anomalie.</p></div>
   <div class="warn"><b>Accès compétitions ≠ rôle</b><p>S'active/se désactive par personne, indépendamment de son ou ses rôles.</p></div>
 
-  <div class="warn-group-title">Cours &amp; séances</div>
-  <div class="warn"><b>Contenu caché avant activation</b><p>Exercices et mini-compétitions invisibles au client tant que la séance n'est pas « active » — seuls les objectifs le sont.</p></div>
-  <div class="warn"><b>Retrait possible seulement avant activation</b><p>Une fois la séance activée, un client ne peut plus se retirer lui-même de la liste des participants.</p></div>
-
-  <div class="warn-group-title">Classement &amp; clôture</div>
-  <div class="warn"><b>Classement général = cumulé, pas remis à zéro</b><p>Un grimpeur inactif garde son total — à présenter comme tel à l'équipe. Seul le classement <b>de saison</b> (nouveau) se réinitialise, pas le général.</p></div>
 
   <footer class="pagefoot">
     <span>Topo Blocabrac — édition papier</span>
@@ -450,9 +519,14 @@
   </footer>
 </section>
 
-<!-- PAGE 10 : 07 SUITE TECHNIQUE -->
+<!-- PAGE 12 : 07 SUITE TECHNIQUE -->
 <section class="page">
-  <div class="warn-group-title" style="margin-top:0;">Classement &amp; clôture (suite)</div>
+  <div class="warn-group-title" style="margin-top:0;">Cours &amp; séances</div>
+  <div class="warn"><b>Contenu caché avant activation</b><p>Exercices et mini-compétitions invisibles au client tant que la séance n'est pas « active » — seuls les objectifs le sont.</p></div>
+  <div class="warn"><b>Retrait possible seulement avant activation</b><p>Une fois la séance activée, un client ne peut plus se retirer lui-même de la liste des participants.</p></div>
+
+  <div class="warn-group-title">Classement &amp; clôture</div>
+  <div class="warn"><b>Classement général = cumulé, pas remis à zéro</b><p>Un grimpeur inactif garde son total — à présenter comme tel à l'équipe. Seul le classement <b>de saison</b> (nouveau) se réinitialise, pas le général.</p></div>
   <div class="warn"><b>Nouvelle saison = « Enregistrer », jamais « Redémarrer »</b><p>« Redémarrer la saison » crédite tout l'historique de chaque grimpeur : les anciens partiraient avec une avance énorme. Pour une saison où tout le monde part de zéro, régler les dates et « Enregistrer ».</p></div>
   <div class="warn"><b>Enregistrer la saison suivante avant fin octobre</b><p>La saison se clôt seule le 1er juin ; l'été sans saison est normal. La fenêtre suivante (1er novembre → 31 mai) peut être enregistrée dès juin. Si elle ne l'est toujours pas fin octobre, la tâche automatique de nuit passe en alerte : sans elle, les validations de novembre ne compteraient pas.</p></div>
   <div class="warn"><b>Désactiver l'apparition au classement retire aussi de la Finale</b><p>La case à cocher du profil client ne masque pas seulement le nom du classement public : un score qualifiant ne compte plus pour le top 10/10 de fin de saison.</p></div>
