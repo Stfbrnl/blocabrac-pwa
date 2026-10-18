@@ -15,5 +15,12 @@ const OUT = resolve(__dirname, '../../topo-blocabrac.pdf');
   // Les marges sont dans le CSS (.page : padding 18mm 16mm), donc marges PDF à zéro.
   await page.pdf({ path: OUT, format: 'A4', printBackground: true, margin: { top: 0, bottom: 0, left: 0, right: 0 } });
   await browser.close();
+  // ✅ Garde à l'ÉVÉNEMENT plutôt que compte affiché : la pagination ne change qu'à une
+  // régénération, donc c'est ici qu'elle se vérifie — pas dans un contrôle qu'il faudrait
+  // penser à lancer. Un débordement fait disparaître un pied de page EN SILENCE.
+  require("child_process").execFileSync(
+    "node", [resolve(__dirname, "assert-topo-footers.cjs"), resolve(__dirname, "../../topo-blocabrac-source.html")],
+    { stdio: "inherit" }
+  );
   console.log(`✅ ${OUT} régénéré.`);
 })().catch((e) => { console.error(e); process.exit(1); });
