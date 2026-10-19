@@ -191,3 +191,36 @@ est abîmé : il faut compter. Exercé dans les deux sens sur l'émulateur (3 an
 → rouge ; 1 pour 1 → muet). ⚠️ Il attrape la **conséquence**, jamais le **retour en arrière** :
 un `registered_count: x + 1` réintroduit dans un composant ne serait vu qu'après une soirée de
 concurrence réelle.
+
+### Le taux de flash, et le filet statique du compteur (19/10/2026)
+
+`scripts/mesure-taux-de-flash.js` (lecture seule) situe le curseur entre les deux bornes
+d'écritures ci-dessus, à partir de ce que la base contient : **81,7 % des réussites sont à un
+essai** (188 sur 230). Soit ≈ 26,7 écritures par grimpeur sur 20 blocs, 2 132 à 80 participants,
+10,7 % du plafond.
+
+🔴 **Et le premier chiffre obtenu, 85,2 %, était contaminé.** Jusqu'à **V2.69 (25/09/2026)**
+l'écran des blocs du jour avait une **valeur par défaut à 1 essai** — son changelog l'annonce
+(« plus de valeur par défaut à 1 essai »). Tout résultat antérieur dont le grimpeur n'a pas
+touché le `Select` porte donc `attempts: 1` sans avoir été flashé. Le script découpe sur
+`createdAt` (immuable) et ne retient que la population postérieure. L'effet de la contamination
+est de **3,5 points** : réel, mesuré, petit. ⚠️ **Toute statistique future tirée de `attempts` sur
+`client_boulder_results` doit faire ce découpage.**
+
+⚠️ **Ce taux est un MINORANT du coût réel, jamais une prédiction** : il est mesuré sur des blocs
+du jour, que le grimpeur voit, connaît et répète, alors qu'un bloc de contest se découvre à vue
+et se cote « Mystère ». Le flash y sera plus rare, d'une quantité inconnue. **La borne haute
+(3 440, 17,2 %) reste la valeur de dimensionnement.** Le script bascule tout seul sur
+`competition_results` quand cette population dépassera 100 réussites — elle est à **0** au
+19/10.
+
+**Et le contrat d'écriture est désormais gardé statiquement** :
+`frontend/test/contrats/registeredCount.test.ts`, dans `npm test`, exige que tout appel
+d'écriture Firestore de `frontend/src` posant `registered_count` utilise `increment(…)` — ou le
+littéral `0` à la création, seule exception. Il complète l'audit de prod, qui n'attrapait que la
+**conséquence** : une régression se verrait ici **pendant qu'on écrit le code**, et non après une
+soirée de concurrence. Ses deux propriétés ont été vues rouges séparément, et la seconde
+(« on trouve bien ces écritures », une assertion de TAILLE) est indispensable : quand la
+reconnaissance d'appels devient aveugle, la première reste verte sur un ensemble vide.
+⚠️ Il reconnaît les écritures **par leur nom** — un alias, une autre méthode de batch, ou les
+scripts d'administration lui échappent.
