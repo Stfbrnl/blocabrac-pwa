@@ -224,3 +224,67 @@ soirée de concurrence. Ses deux propriétés ont été vues rouges séparément
 reconnaissance d'appels devient aveugle, la première reste verte sur un ensemble vide.
 ⚠️ Il reconnaît les écritures **par leur nom** — un alias, une autre méthode de batch, ou les
 scripts d'administration lui échappent.
+
+### La marge réelle du 5 novembre, enfin mesurée (19/10/2026)
+
+Tous les calculs de quota d'août comparaient la charge d'une compétition au **plafond entier**,
+alors que le contest s'ajoute à une journée de salle ordinaire dont la consommation n'avait
+jamais été relevée. C'était la dernière inconnue. Elle est levée.
+
+`scripts/sonde-metriques-firestore.cjs` lit Cloud Monitoring. ⚠️ **Et cela n'est possible que sur
+Blaze** : `timeSeries.list` répond « This API method requires billing to be enabled » sur un
+projet Spark, sous toutes les formes de requête, pendant que `metricDescriptors` répond 200 — le
+script porte la chronologie complète de cette découverte dans son en-tête.
+
+Sur 30 jours de production :
+
+| | moyenne/jour | pire jour | part de la franchise |
+|---|---|---|---|
+| lectures | 2 288 | **11 990** (02/10) | 24 % de 50 000 |
+| écritures | 102 | **635** (23/09) | 3,2 % de 20 000 |
+| suppressions | 5 | 16 | 0,1 % |
+
+⚠️ **Les pics de LECTURES sont les audits de production eux-mêmes, pas des grimpeurs** — les
+trois plus hauts tombent sur des jours de séance. Le bon témoin de l'activité réelle est
+l'**écriture** : chaque validation en produit une, et elles sont minuscules.
+
+**D'où la marge du 5 novembre, en écritures :** 635 (pire journée de salle observée) + 3 440
+(borne haute mesurée du contest) + ≈ 250 (admin) = **4 325, soit 21,6 % de la franchise
+quotidienne**. La part déjà consommée est donc négligeable, et la marge ×2,7 d'août était
+pessimiste pour deux raisons cumulées : un surdimensionnement voulu, et une journée de salle
+quasi vide.
+
+⚠️ **Et depuis le passage en Blaze, ces plafonds ne sont plus des murs mais des franchises** :
+un dépassement est facturé au lieu de faire refuser les opérations. Le risque du 5 novembre
+passe de « l'application s'arrête en pleine épreuve » à « cela coûte quelques centimes ». Les
+documents de chantier d'août qui écrivent « gratuité totale, plan Spark » sont des faits datés.
+
+⚠️ **Trois défauts d'instrument trouvés en produisant ces chiffres, tous rendant un nombre
+plausible** : les jours libellés par `interval.endTime` (toutes les lignes décalées d'un jour,
+la dernière portant une date future), puis **deux résumés `awk` cassés par l'espace insécable
+que `toLocaleString('fr-FR')` insère** — « 9 568 » se lisait « 9 », et le total s'effondrait sur
+une valeur petite et crédible. **Ne jamais gratter la sortie formatée d'un script : réinterroger
+l'API.**
+
+⚠️ **La sonde est QUALIFIÉE, et par prédiction plutôt que par comparaison d'écran.** Le contrôle
+prévu était « comparer un total à l'onglet Statistiques de la console pour le même jour » ; une
+charge dont on connaît la taille exacte est plus forte, à condition d'écrire la prédiction
+d'avance. `mesure-taux-de-flash.js` lit 936 documents plus une requête vide (facturée 1 lecture
+minimum) : prédiction posée **+936 ou +937**, mesure **+936**.
+
+🔴 **Et la trace a livré le piège le plus dangereux de la série, qui n'était pas prévu** :
+l'ingestion de Cloud Monitoring prend 3 à 5 minutes **et elle arrive par tranches**.
+
+| relevé | écart affiché | ce qu'on en conclurait |
+|---|---|---|
+| +0,8 min | +0 | « la sonde ne voit rien » — faux, mais **repérable** |
+| +3,0 min | **+741** | « +741 » — plausible, faux, et **non repérable** |
+| +4,5 min | +936 | la valeur réelle |
+
+Le zéro du début se repère parce qu'il est manifestement incomplet ; le 741 intermédiaire ne se
+repère pas, parce qu'il est *correct pour ce qu'il contient* et simplement pas fini.
+⚠️ **D'où la règle d'usage, non négociable : ne lire que des journées CLOSES.** Un relevé nocturne
+sur « hier » est sûr ; un tableau de bord affichant « aujourd'hui » montrerait un nombre qui
+dérive à la hausse pendant des minutes, sans jamais dire qu'il n'est pas terminé. Cela condamne
+la variante « écran qui interroge l'API en direct » et confirme la forme proposée par ClaudeNav :
+un script nocturne qui écrit **un** document par journée révolue.

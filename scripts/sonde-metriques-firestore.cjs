@@ -18,45 +18,67 @@
 //
 // ⚠️ La clé de service n'est jamais lue ni affichée par ce script : son CHEMIN est passé à
 // GoogleAuth, qui s'en charge.
-// ════ RÉPONSE DÉFINITIVE DU 19/10/2026 : NON, BLOQUÉ SUR SPARK ════
+// ════ CE QUE CETTE SONDE A RÉPONDU — TROIS ÉTATS, DANS L'ORDRE ════
 //
-// Issue 3 du §3. La question est close, et ce script n'a plus qu'une valeur d'archive : il
-// documente le refus pour que la question ne se repose pas dans six mois.
+// ⚠️ Écrit comme une chronologie, et pas réécrit une troisième fois, parce que les deux
+// premières réponses ont été DÉMENTIES par la suivante : garder seulement la dernière
+// effacerait ce qui rend ce fichier utile.
 //
-// ① `metricDescriptors` → **200**. Le rôle `roles/monitoring.viewer`, accordé par Stéphane,
-//    fonctionne. Et au passage les trois noms de métriques du document de ClaudeNav sont
-//    CONFIRMÉS à la source : `document/read_count`, `document/write_count`,
-//    `document/delete_count` existent exactement sous ces noms (plus des variantes
-//    `*_ops_count` et `billable_*`).
+// ── ① 19/10, Spark, sans rôle IAM → AMBIGU (issue 2 du §3) ──
+// `metricDescriptors` : 403 `reason: forbidden`, nommant `monitoring.metricDescriptors.list`,
+// sans un mot de facturation. J'ai refusé de conclure sur la forme d'un message et je l'ai
+// exercée : les mêmes identifiants contre deux API non activées (Cloud Translation, Cloud
+// Scheduler) rendaient `SERVICE_DISABLED` et « API has not been used in project… ». Le
+// discriminant était réel. J'en ai conclu, À TORT, que la facturation était écartée.
 //
-// ② `timeSeries` → **403 PERMISSION_DENIED, « This API method requires billing to be
-//    enabled »**. C'est exactement le point que ClaudeNav signalait comme non établi (§1) :
-//    le million de séries offert est compté par compte de facturation, et un projet Spark
-//    n'en a pas. La méthode refuse donc d'emblée.
+// ── ② 19/10, Spark, rôle `roles/monitoring.viewer` accordé → NON, BLOQUÉ ──
+// `metricDescriptors` : **200**, et les trois noms de métriques du document de ClaudeNav
+// CONFIRMÉS à la source (`document/read_count`, `write_count`, `delete_count`, plus des
+// variantes `*_ops_count` et `billable_*`).
+// `timeSeries` : **403, « This API method requires billing to be enabled »** — sous TROIS
+// formes (nue sans agrégation, avec l'agrégation de ce script, et `view=HEADERS` qui ne
+// demande aucun point), pendant que `monitoredResourceDescriptors` et `alertPolicies`
+// répondaient 200. C'était donc bien la MÉTHODE, pas la requête. Et c'est exactement le
+// point que ClaudeNav signalait comme non établi (§1) : le million de séries offert est
+// compté par compte de facturation, et un projet Spark n'en a pas.
 //
-// ⚠️ ET C'EST BIEN LA MÉTHODE, PAS LA REQUÊTE. Vérifié : `timeSeries` refuse sous trois
-// formes — nue sans aucune agrégation, avec l'agrégation de ce script, et en `view=HEADERS`
-// qui ne renvoie aucun point. Pendant que `metricDescriptors`,
-// `monitoredResourceDescriptors` et `alertPolicies` répondent tous 200 avec les mêmes
-// identifiants. La facturation est exigée par `timeSeries.list` seule.
+// 🔴 POURQUOI ① ÉTAIT FAUX, et la leçon vaut plus que le résultat : mon contrôle portait sur
+// `metricDescriptors`, une méthode ATTEIGNABLE, et je transférais son verdict à `timeSeries`,
+// la méthode qui comptait et qui était hors d'atteinte. **Quand la chose qui compte est
+// inatteignable, une mesure sur sa voisine renseigne sur la voisine.** Le discriminant que
+// j'avais validé répondait « cette API est-elle activée ? » et non « cette méthode est-elle
+// permise ? » — deux questions que le même 403 et le même `status` recouvrent.
 //
-// 🔴 CORRECTION D'UNE CONCLUSION QUE CE FICHIER A PORTÉE QUELQUES HEURES, et la leçon vaut
-// plus que le résultat. Avant que le rôle ne soit accordé, j'avais écrit ici que
-// « l'hypothèse de la facturation est écartée ». Le contrôle qui me le faisait croire était
-// pourtant bon : les mêmes identifiants contre deux API non activées rendaient
-// `SERVICE_DISABLED`, là où Monitoring nommait une permission. Mais ce contrôle portait sur
-// `metricDescriptors` — une méthode ATTEIGNABLE — et je transférais son verdict à
-// `timeSeries`, la méthode qui comptait et qui, elle, était hors d'atteinte.
+// ── ③ 19/10, Blaze (essai gratuit de 90 jours activé par Stéphane) → OUI ──
+// `timeSeries` : **200**, un total par jour et par métrique. Donc la réponse à la question
+// posée dépend du PLAN, et pas d'autre chose : impossible sur Spark, immédiat sur Blaze,
+// sans aucun changement à ce script.
 //
-// ⚠️ **Quand la chose qui compte est inatteignable, une mesure sur sa voisine renseigne sur
-// la voisine.** Le discriminant que j'avais validé répondait « cette API est-elle activée ? »
-// et non « cette méthode est-elle permise ? » — deux questions que le même code HTTP 403 et
-// le même `status` recouvrent.
+// ⚠️ ET UN DÉFAUT DE CE SCRIPT, TROUVÉ À CE MOMENT-LÀ : il libellait chaque point par
+// `interval.endTime`, donc une tranche alignée se terminant le 20 à 00:00 UTC portait les
+// données du 19 sous l'étiquette « 2026-10-20 » — toutes les lignes décalées d'un jour, et la
+// dernière portant une date future. Invisible tant qu'on ne connaît pas d'avance la grandeur
+// attendue. Corrigé : le jour est celui de `startTime`.
 //
-// CE QUI RESTE LA SOURCE : l'onglet Statistiques de la console Firebase, relevé à la main.
-// La console affiche bien ces chiffres sur Spark, donc la donnée existe — mais elle n'est pas
-// atteignable par l'API publique sans facturation. Le contrôle du §4 (comparer un total à la
-// console) est désormais sans objet : aucun total ne reviendra.
+// ── ④ QUALIFICATION, et c'est le contrôle du §4 sous une forme plus forte ──
+// La comparaison à la console demandait un écran ; une charge dont on connaît la TAILLE
+// EXACTE se suffit, à condition d'écrire la prédiction d'avance.
+// `mesure-taux-de-flash.js` lit deux collections entières — 936 documents plus une requête
+// vide facturée 1 lecture minimum. Prédiction posée avant : +936 ou +937.
+// Mesuré : **+936**. La sonde compte bien les lectures de documents.
+//
+// 🔴 ET LA TRACE A LIVRÉ UN PIÈGE QUE JE N'ATTENDAIS PAS, le plus dangereux de la série :
+//   +0,8 min : écart +0      ← un relevé ici conclurait « la sonde ne voit rien »
+//   +3,0 min : écart +741    ← un relevé ICI conclurait « +741 », valeur PLAUSIBLE et FAUSSE
+//   +4,5 min : écart +936    ← la valeur réelle
+// L'ingestion de Cloud Monitoring prend 3 à 5 minutes, ET ELLE ARRIVE PAR TRANCHES. Le zéro
+// du début se repère (il est manifestement incomplet) ; le +741 intermédiaire ne se repère
+// pas — il est correct pour ce qu'il contient, simplement pas fini.
+//
+// ⚠️ **RÈGLE D'USAGE, non négociable : ne lire que des journées CLOSES.** La journée courante
+// se remplit encore, et sa valeur monte pendant plusieurs minutes après chaque action. Un
+// relevé nocturne sur « hier » est sûr ; un tableau de bord affichant « aujourd'hui »
+// montrerait un nombre qui dérive, sans jamais dire qu'il n'est pas fini.
 const path = require('path');
 const { GoogleAuth } = require('google-auth-library');
 
@@ -183,7 +205,12 @@ async function main() {
     for (const s of series) {
       const pts = (s.points || [])
         .map((p) => ({
-          jour: (p.interval.endTime || '').slice(0, 10),
+          // ⚠️ LE JOUR EST CELUI DU DÉBUT DE LA FENÊTRE, JAMAIS DE SA FIN. Une tranche
+          // alignée de 86 400 s qui se termine le 20 à 00:00 UTC porte les données du 19.
+          // Libellées par `endTime`, comme dans la première version de ce script, toutes les
+          // lignes étaient décalées d'un jour et la dernière portait une date future — un
+          // décalage qui ne se voit pas quand on ne connaît pas d'avance la grandeur attendue.
+          jour: (p.interval.startTime || '').slice(0, 10),
           v: Number(p.value.int64Value ?? p.value.doubleValue ?? 0),
         }))
         .sort((a, b) => a.jour.localeCompare(b.jour));
