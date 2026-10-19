@@ -86,3 +86,61 @@ Official/regular competitions (not the annual `classement des grimpeurs`) can pi
 
 Like `liveDisplayEnabled`, `scoring_mode`/`custom_scoring` are locked once a competition leaves `status: 'à venir'` — enforced **server-side** in `firestore.rules` (not just disabled in the UI), same `affectedKeys().hasAny([...])` pattern, same rationale: changing the mode mid-event would retroactively change everyone's score, not just future validations.
 
+
+## `competitions.registered_count` — le seul document partagé du chemin du contest (19/10/2026)
+
+Question posée par ClaudeNav (`docs/handoffs/2026-10-19-CN-apres-mesures.md` §2) : **existe-t-il
+un document qu'un grand nombre de participants écrivent en même temps ?** Elle visait la
+contention — sous contention, Firestore étrangle les écritures sur un même document, le client
+réessaie, et un réessai est une écriture de plus. Réponse par recherche exhaustive dans
+`frontend/src` : **oui, exactement un**, et ce n'est pas la contention qui mord.
+
+Le chemin du contest est sinon **clos et par grimpeur** : `ClientCompetitions.tsx` n'écrit que
+`competition_participants/{uid}_{compId}` et `competition_results/{uid}_{blocId}_{compId}`, et
+n'importe ni `ludicState`, ni `classement_profiles`, ni `challenges`. Les deux autres agrégats
+partagés de l'application — `boulders.methodCounts` et `boulders.firstAscents` — sont fermés
+pendant une compétition (filtre sur `type !== 'daily'` **et** `competition_active`), et
+`challenges.progress` est plafonné à 6 participants.
+
+Reste `competitions/{id}.registered_count`, le « Participants : X/Y ». À l'échelle réelle la
+contention n'a aucune prise : 40 inscriptions groupées dans les dix minutes avant le coup
+d'envoi font 0,07 écriture/seconde, quinze fois sous le seuil. Le défaut était ailleurs — **ses
+trois rédacteurs ne s'écrivaient pas de la même façon** :
+
+| rédacteur | avant le 19/10 |
+|---|---|
+| `ClientCompetitions.tsx` (le grimpeur) | `increment(1)` ✔ |
+| `AdminCompetitionRegistration.tsx` (ajout/retrait au comptoir) | `selectedCompetition.registered_count ± 1` ✖ |
+| `AdminCompetitionManagement.tsx` (« Générer le roster ») | `competition.registered_count + added` ✖ |
+
+Les deux derniers lisaient un nombre chargé **au montage de l'écran**, y ajoutaient 1, et
+réécrivaient : toute inscription arrivée entre-temps était écrasée. Le scénario est exactement
+celui du soir d'un contest — l'admin inscrit un retardataire au comptoir pendant que d'autres
+s'inscrivent sur leur téléphone. Mesuré sur l'émulateur avant correction : un admin détenant
+`registered_count = 0`, cinq inscriptions pendant qu'il remplit le formulaire, puis son ajout →
+le compteur retombe à **1 au lieu de 6**, cinq inscriptions perdues sur six.
+
+⚠️ **Tout nouveau rédacteur de ce compteur passe par `increment()`.** C'est la quatrième
+occurrence dans ce dépôt de « un document, plusieurs rédacteurs, des contrats divergents »,
+après `role`/`roles[]`, l'état ludique et `competition_participants` — et la première où les
+rédacteurs divergeaient non sur la *forme* du document mais sur la *façon d'y écrire*.
+
+**Enjeu réel, dit sans le grossir : un nombre faux à l'affichage.** Rien ne *garde* sur
+`max_participants` — aucune inscription n'est refusée, aucun résultat n'est touché, et l'écran
+de l'admin affiche déjà `participants.length`, donc le vrai compte. Ce qui décrochait est le
+compteur que voient les grimpeurs. ⚠️ **Et il n'y a aucun filet permanent** : un retour à une
+lecture-puis-écriture ne ferait rougir aucun test du dépôt.
+
+### Le harnais d'écritures ne mesure pas l'application
+
+`measure-competition-writes*.mjs` (août 2026) ne **fait pas tourner** `ClientCompetitions.tsx`,
+il le **recopie** : son total est une somme de constantes littérales. Relancé le 19/10/2026 au
+code de V2.75, il rend **7 470, au chiffre près** — le même qu'après V2.28. Il ne peut donc pas
+vieillir, et ne peut pas non plus être rafraîchi : la seule mise à jour de ce chiffre est une
+relecture du code. Son contre-exemple exact est `measure-competition-reads-after.mjs`, qui
+totalise des `snap.size` et bouge donc avec la donnée. Voir la règle générale dans `CLAUDE.md`.
+
+⚠️ Et **90 participants × 35 blocs était un surdimensionnement voulu**, pas une estimation : la
+répétition générale retient 80 × 20. La marge ×2,7 sur les écritures est pessimiste par
+construction. Ce qui reste ouvert est autre chose — la marge est calculée contre le plafond
+**entier**, alors que le contest s'ajoute à une journée de salle complète.
