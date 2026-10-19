@@ -10,7 +10,7 @@ import {
 import { Delete as DeleteIcon, Edit as EditIcon, Add as AddIcon, ArrowUpward as ArrowUpwardIcon, ArrowDownward as ArrowDownwardIcon, Lock as LockIcon, LockOpen as LockOpenIcon } from '@mui/icons-material';
 import { db, auth } from '../services/firebaseConfig';
 import {
-  collection, getDocs, doc, deleteDoc, writeBatch
+  collection, getDocs, doc, deleteDoc, writeBatch, type QueryDocumentSnapshot
 } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, sendPasswordResetEmail, getAuth, signOut, connectAuthEmulator } from 'firebase/auth';
 import { initializeApp, deleteApp, FirebaseError } from 'firebase/app';
@@ -54,6 +54,28 @@ interface User {
   inscritAuxCompetitions?: boolean;
 }
 
+// ✅ Un document `users` tel que cet écran le lit. Extrait pour les deux gestes en masse
+// ci-dessous, qui relisent la collection depuis le serveur et ont besoin de la même forme
+// que `fetchUsers` — les autres points de lecture gardent leur mapping en ligne.
+const mapUserDoc = (d: QueryDocumentSnapshot): User => {
+  const data = d.data();
+  return {
+    uid: d.id,
+    email: data.email || '',
+    first_name: data.first_name || '',
+    last_name: data.last_name || '',
+    roles: data.roles || [],
+    legacyAge: data.age,
+    dateOfBirth: data.dateOfBirth,
+    gender: data.gender,
+    level: data.level,
+    levelOverride: data.levelOverride || false,
+    createdAt: data.createdAt ?? data.created_at,
+    inscritAuxCours: data.inscritAuxCours ?? false,
+    inscritAuxCompetitions: data.inscritAuxCompetitions ?? true,
+  };
+};
+
 // ✅ "age" n'est plus une clé de User (renommé "legacyAge", voir plus bas) : c'est une
 // pseudo-clé de tri, traitée à part dans sortUsers (dérive l'âge via getSeasonAge, pour
 // trier sur l'âge réellement affiché plutôt que sur le seul champ hérité).
@@ -76,6 +98,8 @@ const AdminUsers: React.FC = () => {
   const [userToDelete, setUserToDelete] = useState<string | null>(null);
   const [openUnlockAllDialog, setOpenUnlockAllDialog] = useState(false);
   const [unlockingAll, setUnlockingAll] = useState(false);
+  const [openLockAllDialog, setOpenLockAllDialog] = useState(false);
+  const [lockingAll, setLockingAll] = useState(false);
   const [openSnackbar, setOpenSnackbar] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -464,23 +488,91 @@ const AdminUsers: React.FC = () => {
     }
   };
 
-  const handleUnlockAllLevels = async () => {
-    const lockedUsers = users.filter(u => u.levelOverride);
-    if (lockedUsers.length === 0) {
-      setOpenUnlockAllDialog(false);
-      return;
+  // ✅ Les deux gestes en masse d'une soirée de compétition : figer tous les niveaux juste
+  // avant le coup d'envoi, les libérer tous après (docs/handoffs/2026-10-19-CN-80-inscrits.md
+  // §4, et l'ordre du §6 de 2026-10-18-CN-plan-niveaux-contest.md — déverrouiller seulement
+  // une fois le correctif du plancher déployé).
+  //
+  // ⚠️ CETTE FONCTION RELIT `users` DEPUIS LE SERVEUR avant d'agir, au lieu de se fier à la
+  // liste chargée au montage de l'écran. Le verrouillage se fait deux fois le même soir — on
+  // clique, des retardataires créent leur compte au comptoir, on reclique — et un compte créé
+  // après l'ouverture de cet écran est absent de l'état React : sur la liste en mémoire, le
+  // second clic ne le verrait pas, et l'écran afficherait pourtant « 0 restant ». Au
+  // déverrouillage d'après-contest le même oubli serait définitif et silencieux : un niveau
+  // resté verrouillé ne suit plus jamais ses badges — Roulette, défis et missions compris.
+  //
+  // N'écrit que les comptes dont l'état diffère de la cible : rejouable sans rien réécrire.
+  const setLevelOverrideForAll = async (verrouiller: boolean) => {
+    const snapshot = await getDocs(collection(db, 'users'));
+    const frais = snapshot.docs.map(mapUserDoc);
+    // ⚠️ Les règles n'acceptent une écriture d'admin sur `users` que si le document résultant
+    // porte le rôle `client` (`hasClientRole`, qui fusionne `roles[]` et le scalaire hérité
+    // `role`). Un `writeBatch` est atomique : un seul compte sans ce rôle ferait échouer le lot
+    // ENTIER, à deux minutes du coup d'envoi et sans dire lequel. On les écarte donc avant
+    // d'écrire — et on les annonce, parce que « tout compte porte client » est une convention
+    // tenue par cet écran, pas une contrainte de schéma (0 compte concerné en prod au
+    // 19/10/2026 ; le seed e2e en fabrique un exprès, voir seed-daily-users.mjs).
+    const exclus = new Set(
+      snapshot.docs
+        .filter(d => {
+          const data = d.data();
+          return !((Array.isArray(data.roles) && data.roles.includes('client')) || data.role === 'client');
+        })
+        .map(d => d.id)
+    );
+    const cibles = frais.filter(u => !exclus.has(u.uid) && (u.levelOverride ?? false) !== verrouiller);
+    const cibleIds = new Set(cibles.map(u => u.uid));
+    // Un batch Firestore accepte au maximum 500 opérations : on découpe par sécurité.
+    for (let i = 0; i < cibles.length; i += 450) {
+      const chunk = cibles.slice(i, i + 450);
+      const batch = writeBatch(db);
+      chunk.forEach(u => batch.update(doc(db, 'users', u.uid), { levelOverride: verrouiller }));
+      await batch.commit();
     }
+    setUsers(frais.map(u => (cibleIds.has(u.uid) ? { ...u, levelOverride: verrouiller } : u)));
+    return { traites: cibles.length, total: frais.length, ignores: exclus.size };
+  };
+
+  // Suffixe commun aux deux messages : muet quand il n'y a rien à signaler.
+  const mentionIgnores = (ignores: number) =>
+    ignores === 0
+      ? ''
+      : ` ${ignores} compte(s) sans rôle « client » ont été ignorés (les règles refusent de les modifier).`;
+
+  const handleLockAllLevels = async () => {
+    setLockingAll(true);
+    try {
+      const { traites, total, ignores } = await setLevelOverrideForAll(true);
+      // ✅ Le compte TOTAL, pas seulement le nombre d'écritures : c'est lui qui permet de
+      // vérifier d'un coup d'œil que personne n'a été oublié, ce qu'aucune liste tenue à la
+      // main ne permet à cette échelle.
+      setSnackbarMessage(
+        (traites === 0
+          ? `Rien à verrouiller : les ${total - ignores} comptes ont déjà leur niveau figé.`
+          : `${traites} niveau(x) verrouillé(s). Les ${total - ignores} comptes ont maintenant leur niveau figé.`
+        ) + mentionIgnores(ignores)
+      );
+      setOpenSnackbar(true);
+    } catch (error) {
+      console.error("Erreur :", error);
+      setSnackbarMessage("Erreur lors du verrouillage en masse : " + error);
+      setOpenSnackbar(true);
+    } finally {
+      setLockingAll(false);
+      setOpenLockAllDialog(false);
+    }
+  };
+
+  const handleUnlockAllLevels = async () => {
     setUnlockingAll(true);
     try {
-      // Un batch Firestore accepte au maximum 500 opérations : on découpe par sécurité.
-      for (let i = 0; i < lockedUsers.length; i += 450) {
-        const chunk = lockedUsers.slice(i, i + 450);
-        const batch = writeBatch(db);
-        chunk.forEach(u => batch.update(doc(db, 'users', u.uid), { levelOverride: false }));
-        await batch.commit();
-      }
-      setUsers(prev => prev.map(u => (u.levelOverride ? { ...u, levelOverride: false } : u)));
-      setSnackbarMessage(`${lockedUsers.length} niveau(x) déverrouillé(s) avec succès !`);
+      const { traites, total, ignores } = await setLevelOverrideForAll(false);
+      setSnackbarMessage(
+        (traites === 0
+          ? `Aucun verrou à lever : les ${total - ignores} comptes suivent déjà leurs badges.`
+          : `${traites} niveau(x) déverrouillé(s). Plus aucun des ${total - ignores} comptes n'a son niveau figé.`
+        ) + mentionIgnores(ignores)
+      );
       setOpenSnackbar(true);
     } catch (error) {
       console.error("Erreur :", error);
@@ -504,7 +596,13 @@ const AdminUsers: React.FC = () => {
     return <Typography>Chargement des utilisateurs...</Typography>;
   }
 
+  // ✅ Les deux compteurs des libellés sont complémentaires, et c'est voulu : leur somme est le
+  // nombre de comptes. « Verrouiller (0) » dit donc « personne n'a été oublié » sans qu'aucun
+  // écran supplémentaire ne soit nécessaire. Ils sont dérivés de la liste chargée au montage —
+  // une indication, pas une preuve : c'est le message qui suit l'action qui fait foi, puisque
+  // lui seul relit la collection (voir setLevelOverrideForAll).
   const lockedCount = users.filter(u => u.levelOverride).length;
+  const unlockedCount = users.length - lockedCount;
 
   return (
     <Container maxWidth={false} sx={{ px: 2 }}> {/* ✅ Largeur maximale */}
@@ -525,12 +623,22 @@ const AdminUsers: React.FC = () => {
           <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1, width: { xs: '100%', sm: 'auto' } }}>
             <Button
               variant="outlined"
-              startIcon={<LockOpenIcon />}
-              onClick={() => setOpenUnlockAllDialog(true)}
-              disabled={lockedCount === 0}
+              startIcon={<LockIcon />}
+              onClick={() => setOpenLockAllDialog(true)}
               sx={{ width: { xs: '100%', sm: 'auto' }, height: '48px' }}
             >
-              Déverrouiller tous les niveaux{lockedCount > 0 ? ` (${lockedCount})` : ''}
+              Verrouiller tous les niveaux ({unlockedCount})
+            </Button>
+            {/* ✅ Jamais désactivé, même à zéro verrou connu : le compteur vient de la liste
+                chargée au montage, et un compte verrouillé entre-temps rendrait le seul geste
+                qui le libère inatteignable. Le dialogue dit ce qu'il en est vraiment. */}
+            <Button
+              variant="outlined"
+              startIcon={<LockOpenIcon />}
+              onClick={() => setOpenUnlockAllDialog(true)}
+              sx={{ width: { xs: '100%', sm: 'auto' }, height: '48px' }}
+            >
+              Déverrouiller tous les niveaux ({lockedCount})
             </Button>
             <Button
               variant="contained"
@@ -964,6 +1072,40 @@ const AdminUsers: React.FC = () => {
             <Button onClick={() => setOpenDeleteDialog(false)}>Annuler</Button>
             <Button onClick={handleDeleteUser} color="error" variant="contained" autoFocus>
               Supprimer
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Dialogue de confirmation du verrouillage en masse */}
+        <Dialog
+          open={openLockAllDialog}
+          onClose={() => !lockingAll && setOpenLockAllDialog(false)}
+          fullWidth
+          maxWidth="xs"
+        >
+          <DialogTitle>Verrouiller tous les niveaux</DialogTitle>
+          <DialogContent>
+            {unlockedCount} compte(s) n'ont pas leur niveau verrouillé.
+            <br />
+            Leur niveau sera figé à sa valeur actuelle : la synchronisation automatique par les
+            badges ne le changera plus, dans aucun sens, jusqu'au déverrouillage.
+            <br />
+            <br />
+            À faire juste avant de passer la compétition en « en cours » — un compte créé après
+            ce clic reste déverrouillé, il suffit de recliquer.
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setOpenLockAllDialog(false)} disabled={lockingAll}>
+              Annuler
+            </Button>
+            <Button
+              onClick={handleLockAllLevels}
+              color="primary"
+              variant="contained"
+              disabled={lockingAll}
+              autoFocus
+            >
+              {lockingAll ? 'Verrouillage...' : 'Verrouiller'}
             </Button>
           </DialogActions>
         </Dialog>
