@@ -79,6 +79,26 @@
 // se remplit encore, et sa valeur monte pendant plusieurs minutes après chaque action. Un
 // relevé nocturne sur « hier » est sûr ; un tableau de bord affichant « aujourd'hui »
 // montrerait un nombre qui dérive, sans jamais dire qu'il n'est pas fini.
+// ════ LA FENÊTRE BLAZE : 19/10/2026 → 6/11/2026 ════
+//
+// Essai gratuit Blaze activé le 19/10 (crédit 264 €, valable jusqu'au 18/01/2027), et
+// **retour en Spark décidé pour le 6 novembre**, dans la séquence de ce jour-là : déployer le
+// correctif des niveaux, lever les verrous, redescendre le forfait.
+//
+// 🔴 **APRÈS LA REDESCENTE, CE SCRIPT CESSERA DE FONCTIONNER, ET C'EST LE COMPORTEMENT
+// ATTENDU.** `timeSeries` redeviendra un 403 « requires billing ». Ne pas le « réparer » :
+// rien n'est cassé, le projet est simplement revenu à son forfait.
+//
+// ⚠️ PAS DE COLLECTEUR QUOTIDIEN À ÉCRIRE. Cloud Monitoring conserve ses séries : un seul
+// passage le 6 novembre sur l'intervalle 19/10 → 6/11 rend les dix-huit jours d'un coup.
+// Rétention MESURÉE le 19/10, pas supposée : une requête sur 30 jours a rendu des données
+// depuis le 2026-09-19, soit toute la fenêtre demandée — donc ≥ 30 jours, et les 18 jours de
+// la fenêtre sont couverts. (La borne exacte n'a pas été cherchée : inutile.)
+//
+// ⚠️ CE QUI NE SE RÉCUPÈRE PAS APRÈS COUP, C'EST LE CONTEXTE — seule discipline quotidienne à
+// tenir : `docs/suivi/SUIVI-fenetre-blaze-2026.md`, une ligne écrite LE JOUR MÊME. Un nombre
+// sans son contexte cesse d'être interprétable dès le lendemain.
+
 const path = require('path');
 const { GoogleAuth } = require('google-auth-library');
 
@@ -180,6 +200,7 @@ async function main() {
   const fin = jourUTC(1).toISOString();
   console.log(`\n── ② Totaux par jour, du ${debut.slice(0, 10)} au ${fin.slice(0, 10)} (UTC) ──`);
 
+  let timeSeriesRepond = false;
   for (const type of aInterroger) {
     const url = `https://monitoring.googleapis.com/v3/projects/${PROJET}/timeSeries`
       + `?filter=${encodeURIComponent(`metric.type = "${type}"`)}`
@@ -197,6 +218,7 @@ async function main() {
       console.log(`     corps : ${JSON.stringify(r.corps).slice(0, 400)}`);
       continue;
     }
+    timeSeriesRepond = true;
     const series = r.corps.timeSeries || [];
     if (series.length === 0) {
       console.log('     ⚠️  200 AVEC ZÉRO SÉRIE — indéterminé (§4), ne rien conclure.');
@@ -217,6 +239,24 @@ async function main() {
       console.log(`     ressource ${s.resource?.type || '?'} ${JSON.stringify(s.resource?.labels || {})}`);
       for (const p of pts) console.log(`       ${p.jour} : ${p.v.toLocaleString('fr-FR')}`);
       if (pts.length === 0) console.log('       (série présente mais sans point)');
+    }
+  }
+
+  // ⚠️ L'INSTRUMENT QUI A BESOIN DE BLAZE EST LE MEILLEUR DÉTECTEUR DE BLAZE RESTÉ ALLUMÉ.
+  // Le retour en Spark du 6 novembre est un geste de console que personne ici ne peut faire ;
+  // plutôt qu'un rappel qui vit dans la mémoire de quelqu'un, c'est une GARDE qui parle à
+  // chaque exécution ultérieure, sans que personne ait à y penser (ClaudeNav,
+  // `docs/handoffs/2026-10-19-CN-plan-fenetre-blaze.md` §5).
+  if (timeSeriesRepond) {
+    const aujourdhui = new Date().toISOString().slice(0, 10);
+    console.log('\n════ ÉTAT DU FORFAIT ════');
+    console.log('`timeSeries` a répondu 200 → le projet est en BLAZE.');
+    if (aujourdhui > '2026-11-06') {
+      console.log('🔴 Nous sommes le ' + aujourdhui + ', après le 6 novembre 2026 :');
+      console.log('   c\'est un OUBLI DE RETOUR EN SPARK. Console Firebase → ⚙ Utilisation et');
+      console.log('   facturation → Modifier le forfait → Spark.');
+    } else {
+      console.log('Fenêtre d\'essai en cours, redescente prévue le 6 novembre 2026.');
     }
   }
 
