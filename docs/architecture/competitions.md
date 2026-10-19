@@ -144,3 +144,50 @@ totalise des `snap.size` et bouge donc avec la donnée. Voir la règle général
 répétition générale retient 80 × 20. La marge ×2,7 sur les écritures est pessimiste par
 construction. Ce qui reste ouvert est autre chose — la marge est calculée contre le plafond
 **entier**, alors que le contest s'ajoute à une journée de salle complète.
+
+### Le coût réel en écritures, mesuré dans le navigateur (19/10/2026)
+
+`frontend/test/measure-competition-writes-browser.mjs` remplace le chiffre d'août par une
+mesure : il compte **chaque entrée `writes`** des corps de requête partant vers
+`/Write/channel`, lus depuis `page.on('request')` de Playwright. Les corps sont form-encodés et
+en clair (`count=4&ofs=2&req0___data__={…}`) — la frontière du SDK est atteignable sans toucher
+au bundle, ni patcher `fetch`.
+
+⚠️ **L'unité comptée est le DOCUMENT, pas la requête HTTP.** WebChannel groupe plusieurs
+opérations dans un seul POST, et Firestore facture au document écrit : compter les requêtes
+aurait rendu un chiffre plausible et faux, du bon ordre de grandeur, donc invisible.
+
+| | par grimpeur (20 blocs) | × 80 participants | % du plafond (20 000) |
+|---|---|---|---|
+| **borne basse** (tout au 1er essai) | **23** | 1 840 | 9,2 % |
+| **borne haute** (rien au 1er essai) | **43** | 3 440 | 17,2 % |
+| transcription d'août (90 × 35) | 83 | 7 470 | 37 % |
+
+⚠️ **Pourquoi deux nombres et pas un** : `defaultValidationResult.attempts` vaut **1** sur cet
+écran. Un bloc réussi au premier essai est donc déjà dans l'état que « Réussi » vient de
+persister, et sélectionner « 1 essai » **n'écrit rien** — le dédoublonnage (`lastPersistedRef`,
+V2.75) l'élide. Tout autre nombre écrit une seconde fois. **Le coût par grimpeur dépend donc de
+son taux de flash, une grandeur de la salle et pas du code.** Un seul passage du script
+n'échantillonne qu'une valeur ; il impose les deux bornes (`MESURE_ESSAIS=flash|varie`), et la
+valeur intermédiaire est libellée « hypothèse, PAS une mesure ».
+
+**On mesure l'unité, on modélise le multiplicateur, et la sortie dit lequel est lequel** — « 43
+observées × 80 supposés » est honnête ET révisable : si l'épreuve compte 35 blocs et non 20, on
+change le multiplicateur sans refaire la mesure (la borne haute remonte alors vers 5 800, 29 %).
+
+⚠️ **Hors périmètre et non mesuré** : les écritures de l'admin (~250 — verrouillage groupé des
+niveaux, `level_at_start` au coup d'envoi, palmarès), celles d'un grimpeur qui valide aussi des
+blocs du jour le même soir (`classement_profiles`, `user_ludic_state`, `challenges`), et **la
+part du quota qu'une journée de salle ordinaire a déjà consommée** — la mesure est
+mono-utilisateur, et seule la console Firebase dira ce qui restera le soir du 5.
+
+**Filet du compteur partagé** : `audit-prod-catalog.js` compare désormais, pour chaque
+compétition, `registered_count` au nombre réel de participations, affiché à chaque exécution
+même à zéro, sans aucune lecture supplémentaire (les deux collections sont déjà chargées).
+⚠️ **Né VERT, et vérifié tel** : 1 compétition en prod, 0 écart — le défaut de mise à jour
+perdue exigeait de la **concurrence**, et avec 2 participations il n'a jamais tiré. « Un
+correctif à l'écriture ne répare pas le passé » ne dit rien de la question de savoir si le passé
+est abîmé : il faut compter. Exercé dans les deux sens sur l'émulateur (3 annoncés pour 2 réels
+→ rouge ; 1 pour 1 → muet). ⚠️ Il attrape la **conséquence**, jamais le **retour en arrière** :
+un `registered_count: x + 1` réintroduit dans un composant ne serait vu qu'après une soirée de
+concurrence réelle.
