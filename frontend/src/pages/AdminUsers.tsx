@@ -76,6 +76,25 @@ const mapUserDoc = (d: QueryDocumentSnapshot): User => {
   };
 };
 
+// ✅ La date de naissance reste DÉLIBÉRÉMENT non bloquante dans ces deux formulaires : un
+// admin qui crée un compte au comptoir, dans la file, ne la connaît pas toujours, et un champ
+// qui refuse serait contourné en saisissant n'importe quoi — ce qui est pire qu'une absence.
+// Mais le compromis ne tient que si la conséquence est visible AU MOMENT DU GESTE, donc ici,
+// à côté du champ (retour de ClaudeNav, `docs/handoffs/2026-10-19-CN-apres-mesures.md` §3).
+//
+// ⚠️ La condition d'affichage est l'ABSENCE D'ÂGE DÉRIVABLE, jamais "dateOfBirth est vide" :
+// un compte hérité sans date mais avec `age` est correctement catégorisé par le repli de
+// getSeasonAge, et lui afficher cet avertissement serait un mensonge. C'est aussi pourquoi la
+// condition passe par getSeasonAge — le point unique de dérivation de l'âge — plutôt que de
+// relire les deux champs ici.
+//
+// ⚠️ Et le texte dit "Inconnu", pas "n'apparaîtra pas" : un grimpeur sans âge dérivable n'est
+// pas exclu des classements par catégorie, il y est rangé sous `unknownCategoryLabel`. La
+// nuance décide de la conduite à tenir, et un palmarès publié est définitif.
+const AVERTISSEMENT_SANS_AGE =
+  'Sans date de naissance, ce grimpeur sera classé « Inconnu » dans les classements par '
+  + 'catégorie d\'âge — et un palmarès publié est définitif.';
+
 // ✅ "age" n'est plus une clé de User (renommé "legacyAge", voir plus bas) : c'est une
 // pseudo-clé de tri, traitée à part dans sortUsers (dérive l'âge via getSeasonAge, pour
 // trier sur l'âge réellement affiché plutôt que sur le seul champ hérité).
@@ -936,7 +955,7 @@ const AdminUsers: React.FC = () => {
                 }
                 label="Verrouiller ce niveau (empêche la mise à jour automatique par les badges du client)"
               />
-              <TextField label="Date de naissance" type="date" value={editForm.dateOfBirth || ''} onChange={(e) => setEditForm({...editForm, dateOfBirth: e.target.value || undefined})} fullWidth slotProps={{ inputLabel: { shrink: true } }} />
+              <TextField label="Date de naissance" type="date" value={editForm.dateOfBirth || ''} onChange={(e) => setEditForm({...editForm, dateOfBirth: e.target.value || undefined})} fullWidth slotProps={{ inputLabel: { shrink: true } }} helperText={getSeasonAge(editForm.dateOfBirth, editForm.legacyAge) === undefined ? AVERTISSEMENT_SANS_AGE : undefined} />
               <FormControl fullWidth>
                 <InputLabel id="genre-select-label">Genre</InputLabel>
                 <Select
@@ -1021,7 +1040,7 @@ const AdminUsers: React.FC = () => {
                 }
                 label="Verrouiller ce niveau (empêche la mise à jour automatique par les badges du client)"
               />
-              <TextField label="Date de naissance" type="date" value={createForm.dateOfBirth || ''} onChange={(e) => setCreateForm({...createForm, dateOfBirth: e.target.value || undefined})} fullWidth slotProps={{ inputLabel: { shrink: true } }} />
+              <TextField label="Date de naissance" type="date" value={createForm.dateOfBirth || ''} onChange={(e) => setCreateForm({...createForm, dateOfBirth: e.target.value || undefined})} fullWidth slotProps={{ inputLabel: { shrink: true } }} helperText={getSeasonAge(createForm.dateOfBirth, createForm.legacyAge) === undefined ? AVERTISSEMENT_SANS_AGE : undefined} />
               <FormControl fullWidth>
                 <InputLabel id="genre-select-label-2">Genre</InputLabel>
                 <Select
