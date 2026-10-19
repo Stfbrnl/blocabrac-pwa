@@ -290,7 +290,7 @@
     <div class="section-route">/admin</div>
   </div>
   <table class="feature-table">
-    <tr><td class="label">Utilisateurs</td><td>Création/édition des comptes, attribution des rôles (cumulables), activation/désactivation de l'accès aux compétitions par personne.</td></tr>
+    <tr><td class="label">Utilisateurs</td><td>Création/édition des comptes, attribution des rôles (cumulables), activation/désactivation de l'accès aux compétitions par personne. Deux boutons groupés en haut de l'écran : <b>« Verrouiller tous les niveaux »</b> fige le niveau de chacun à sa valeur du moment (les badges ne le feront plus bouger, ni à la hausse ni à la baisse), <b>« Déverrouiller tous les niveaux »</b> rend la main à l'application. Le nombre entre parenthèses est celui des comptes que le clic traiterait : « Verrouiller (0) » signifie donc que personne n'a été oublié. On peut recliquer autant de fois qu'on veut — seuls les comptes arrivés depuis sont écrits.</td></tr>
     <tr><td class="label">Créer/gérer les compétitions</td><td>Restrictions de niveau, activation de la diffusion sur l'écran TV, mode de comptage des points parmi 4 (avant le déclenchement, verrouillé ensuite — voir page 06). En mode Officiel FFME, bouton « Générer le roster » : reprend automatiquement le top 10 garçons/filles de la dernière saison clôturée (voir page 06-07). Le passage en « en cours » <b>fige le niveau de départ</b> de chaque inscrit, dont se sert le classement par niveau max.</td></tr>
     <tr><td class="label">Publier le palmarès</td><td>Une fois l'épreuve terminée, bouton « Publier le palmarès » sur la carte de la compétition : il prépare un <b>aperçu</b> des cinq classements, puis une seconde confirmation les <b>gèle définitivement</b> (voir page 06). Le palmarès devient alors visible de tous les grimpeurs dans « Mes compétitions ». Refusé en mode Officiel FFME.</td></tr>
     <tr><td class="label">Gérer les inscriptions</td><td>Inscription manuelle d'un participant, retrait, contrôle de l'accès général aux compétitions par utilisateur.</td></tr>
@@ -507,11 +507,10 @@
   <div class="warn"><b>Ne pas recharger la page pendant l'épreuve</b><p>Chaque rechargement recharge tout le classement — connexion filaire, veille désactivée, pas de mise à jour en pleine soirée.</p></div>
   <div class="warn"><b>Publier le palmarès est définitif</b><p>Le palmarès gelé n'est ni modifiable ni supprimable depuis l'application — pas même par l'admin. Relire l'aperçu et s'assurer que toutes les saisies sont faites avant de confirmer (voir page 06).</p></div>
   <div class="warn"><b>Un grimpeur ne voit pas le palmarès ? Regarder son repère de version</b><p>Le numéro affiché à côté du logo, en haut de son écran. S'il n'est pas celui du jour, l'appareil est resté sur une version plus ancienne : « Mettre à jour » depuis le bandeau, ou recharger la page. C'est la réponse dans la quasi-totalité des cas, et elle prend dix secondes.</p></div>
+  <div class="warn"><b>Verrouiller les niveaux en dernier, déverrouiller après l'épreuve</b><p>Verrouiller (page 04) juste avant le coup d'envoi : des comptes se créent jusqu'au dernier moment, il suffit de recliquer. Un niveau laissé verrouillé ensuite cesse définitivement de suivre les badges.</p></div>
   <div class="warn"><b>Inscrire les participants avant le coup d'envoi</b><p>Le passage en « en cours » fige le niveau de départ de chaque inscrit. Un grimpeur inscrit après sera classé sur son niveau à l'inscription dans le classement par niveau max — le palmarès le signale, mais rien ne reconstitue l'information perdue.</p></div>
 
-  <div class="warn-group-title">Comptes &amp; rôles</div>
-  <div class="warn"><b>Le rôle Client ne se retire jamais</b><p>Tout compte le garde en permanence, staff compris — ce n'est pas une anomalie.</p></div>
-  <div class="warn"><b>Accès compétitions ≠ rôle</b><p>S'active/se désactive par personne, indépendamment de son ou ses rôles.</p></div>
+
 
 
   <footer class="pagefoot">
@@ -533,6 +532,22 @@
   <div class="warn"><b>Désactiver l'apparition au classement retire aussi de la Finale</b><p>La case à cocher du profil client ne masque pas seulement le nom du classement public : un score qualifiant ne compte plus pour le top 10/10 de fin de saison.</p></div>
   <div class="warn"><b>Une réussite ne se réécrit pas en revenant sur le bloc</b><p>Refaire un bloc déjà réussi ne change ni ses essais ni ses points : c'est la première réussite qui compte. Un grimpeur qui s'est trompé passe par « Corriger ma saisie » sur la fiche du bloc.</p></div>
   <div class="warn"><b>« Terminer la compétition » est définitif</b><p>La cotation cachée devient la couleur publique du bloc — à n'utiliser qu'une fois l'épreuve réellement terminée.</p></div>
+
+  <footer class="pagefoot">
+    <span>Topo Blocabrac — édition papier</span>
+    <span>07 · Points de vigilance</span>
+  </footer>
+</section>
+
+<!-- PAGE 13 : 07 SUITE — COMPTES ET TECHNIQUE.
+     Page de suite EXPLICITE : les deux pages précédentes étaient pleines, et c'est
+     l'ajout du verrouillage groupé des niveaux (V2.75) qui a fait déborder la première.
+     Un débordement accidentel ferait disparaître le pied de page en silence ; le filet
+     scripts/assert-topo-footers.cjs l'a attrapé, ce découpage est sa réponse. -->
+<section class="page">
+  <div class="warn-group-title" style="margin-top:0;">Comptes &amp; rôles</div>
+  <div class="warn"><b>Le rôle Client ne se retire jamais</b><p>Tout compte le garde en permanence, staff compris — ce n'est pas une anomalie.</p></div>
+  <div class="warn"><b>Accès compétitions ≠ rôle</b><p>S'active/se désactive par personne, indépendamment de son ou ses rôles.</p></div>
 
   <div class="warn-group-title">Technique &amp; mises à jour</div>
   <div class="warn"><b>Un écran figé peut afficher une version périmée</b><p>Le numéro de version dans la barre de navigation (à côté du logo, en haut de chaque page) permet de vérifier en cas de doute. Depuis V2.57, un bandeau propose de recharger dès qu'une nouvelle version est déployée ; l'écran live TV en est volontairement dépourvu (repère de version dans le coin).</p></div>
