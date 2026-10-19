@@ -273,6 +273,43 @@ async function main() {
     + `${lacunesDeCompte > 0 ? `, dont ${lacunesDeCompte} limitée(s) par une lacune du compte (normal)` : ''}`
   );
 
+  // ─── `competitions.registered_count` contre le vrai nombre de participations ──────────
+  //
+  // Le SEUL document de l'application qu'un grand nombre de comptes écrivent en même temps, et
+  // la seule chose qui protégeait son contrat était un commentaire aux trois sites d'écriture
+  // — c'est-à-dire une convention (ClaudeNav, docs/handoffs/2026-10-19-CN-harnais-et-compteur.md
+  // §3). Jusqu'au 19/10/2026 deux des trois rédacteurs relisaient le compteur AU MONTAGE de
+  // l'écran puis le réécrivaient, écrasant toute inscription arrivée entre-temps : mesuré sur
+  // l'émulateur, 5 inscriptions perdues sur 6 dans le scénario du soir d'un contest.
+  //
+  // Ne coûte AUCUNE lecture de plus : les deux collections sont déjà chargées ci-dessus.
+  //
+  // ⚠️ Affiché à chaque exécution, même à zéro — comme le compteur d'écarts de la
+  // réconciliation. Un contrôle qui ne parle que lorsqu'il a quelque chose à dire ne se
+  // distingue pas d'un contrôle en panne.
+  const participationsParCompetition = new Map();
+  for (const d of participantsSnap.docs) {
+    const cid = d.data().competition_id;
+    if (cid) participationsParCompetition.set(cid, (participationsParCompetition.get(cid) || 0) + 1);
+  }
+  let compteursEnEcart = 0;
+  for (const d of competitionsSnap.docs) {
+    const annonce = d.data().registered_count;
+    const reel = participationsParCompetition.get(d.id) || 0;
+    if (annonce === undefined) continue; // champ jamais écrit : l'écran affiche 0, pas un chiffre faux
+    if (annonce !== reel) {
+      compteursEnEcart += 1;
+      warnings.push(
+        `competitions/${d.id} ("${d.data().name || 'sans nom'}") : registered_count=${annonce} `
+        + `alors que ${reel} participation(s) existent — le "Participants : X/Y" affiché aux `
+        + 'grimpeurs est faux de ' + (annonce - reel) + '.'
+      );
+    }
+  }
+  console.log(
+    `Compteurs registered_count : ${competitionsSnap.size} compétition(s), ${compteursEnEcart} en écart.`
+  );
+
   // ─── Accès aux compétitions : un compte client bloqué ────────────────────────────────
   //
   // Retour ClaudeNav §3 (15/10/2026) : « tu écris que le défaut n'était visible nulle part —
