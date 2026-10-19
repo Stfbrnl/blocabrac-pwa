@@ -18,29 +18,45 @@
 //
 // ⚠️ La clé de service n'est jamais lue ni affichée par ce script : son CHEMIN est passé à
 // GoogleAuth, qui s'en charge.
-// ════ RÉSULTAT DU 19/10/2026, pour ne pas reposer la question ════
+// ════ RÉPONSE DÉFINITIVE DU 19/10/2026 : NON, BLOQUÉ SUR SPARK ════
 //
-// Issue 2 du §3 : HTTP 403 PERMISSION_DENIED, `reason: forbidden`, message
-// « Permission monitoring.metricDescriptors.list denied » — SANS un mot de facturation.
-// Le jeton OAuth est obtenu sans difficulté : la clé de service fonctionne pour ce périmètre.
+// Issue 3 du §3. La question est close, et ce script n'a plus qu'une valeur d'archive : il
+// documente le refus pour que la question ne se repose pas dans six mois.
 //
-// ⚠️ Et ce n'est pas une déduction sur la forme d'un message : la forme a été EXERCÉE contre
-// deux témoins, avec les mêmes identifiants. Une API réellement non activée (Cloud Translation,
-// Cloud Scheduler — ce projet ne s'en sert pas) répond `reason: SERVICE_DISABLED` et « API has
-// not been used in project … before or it is disabled ». Monitoring ne répond ni l'un ni
-// l'autre. Donc : **l'API Monitoring est joignable sur ce projet Spark, et le seul obstacle est
-// un rôle IAM manquant.** L'hypothèse « Spark refuse faute de compte de facturation », qui
-// était le cœur de la question, est écartée.
+// ① `metricDescriptors` → **200**. Le rôle `roles/monitoring.viewer`, accordé par Stéphane,
+//    fonctionne. Et au passage les trois noms de métriques du document de ClaudeNav sont
+//    CONFIRMÉS à la source : `document/read_count`, `document/write_count`,
+//    `document/delete_count` existent exactement sous ces noms (plus des variantes
+//    `*_ops_count` et `billable_*`).
 //
-// CE QUI RESTE À FAIRE, et seul Stéphane peut le faire : accorder `roles/monitoring.viewer` au
-// compte de service (son adresse est le champ `client_email` de la clé, et la page IAM de la
-// console GCP la liste), puis relancer ce script.
+// ② `timeSeries` → **403 PERMISSION_DENIED, « This API method requires billing to be
+//    enabled »**. C'est exactement le point que ClaudeNav signalait comme non établi (§1) :
+//    le million de séries offert est compté par compte de facturation, et un projet Spark
+//    n'en a pas. La méthode refuse donc d'emblée.
 //
-// ⚠️ LA SONDE N'EST PAS ENCORE QUALIFIÉE. Le contrôle du §4 — comparer un total obtenu à
-// l'onglet Statistiques de la console pour le MÊME jour — n'a pas pu avoir lieu, puisqu'aucun
-// chiffre n'est encore revenu. Tant qu'il n'a pas eu lieu, un nombre rendu par ce script ne
-// vaut pas plus que la requête qui l'a produit.
-
+// ⚠️ ET C'EST BIEN LA MÉTHODE, PAS LA REQUÊTE. Vérifié : `timeSeries` refuse sous trois
+// formes — nue sans aucune agrégation, avec l'agrégation de ce script, et en `view=HEADERS`
+// qui ne renvoie aucun point. Pendant que `metricDescriptors`,
+// `monitoredResourceDescriptors` et `alertPolicies` répondent tous 200 avec les mêmes
+// identifiants. La facturation est exigée par `timeSeries.list` seule.
+//
+// 🔴 CORRECTION D'UNE CONCLUSION QUE CE FICHIER A PORTÉE QUELQUES HEURES, et la leçon vaut
+// plus que le résultat. Avant que le rôle ne soit accordé, j'avais écrit ici que
+// « l'hypothèse de la facturation est écartée ». Le contrôle qui me le faisait croire était
+// pourtant bon : les mêmes identifiants contre deux API non activées rendaient
+// `SERVICE_DISABLED`, là où Monitoring nommait une permission. Mais ce contrôle portait sur
+// `metricDescriptors` — une méthode ATTEIGNABLE — et je transférais son verdict à
+// `timeSeries`, la méthode qui comptait et qui, elle, était hors d'atteinte.
+//
+// ⚠️ **Quand la chose qui compte est inatteignable, une mesure sur sa voisine renseigne sur
+// la voisine.** Le discriminant que j'avais validé répondait « cette API est-elle activée ? »
+// et non « cette méthode est-elle permise ? » — deux questions que le même code HTTP 403 et
+// le même `status` recouvrent.
+//
+// CE QUI RESTE LA SOURCE : l'onglet Statistiques de la console Firebase, relevé à la main.
+// La console affiche bien ces chiffres sur Spark, donc la donnée existe — mais elle n'est pas
+// atteignable par l'API publique sans facturation. Le contrôle du §4 (comparer un total à la
+// console) est désormais sans objet : aucun total ne reviendra.
 const path = require('path');
 const { GoogleAuth } = require('google-auth-library');
 
