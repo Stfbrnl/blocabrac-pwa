@@ -9,7 +9,7 @@ import {
 } from '@mui/material';
 import { Delete as DeleteIcon, Edit as EditIcon, Add as AddIcon, Tune as TuneIcon } from '@mui/icons-material';
 import { db } from '../services/firebaseConfig';
-import { collection, addDoc, getDocs, getDoc, doc, setDoc, updateDoc, deleteDoc, deleteField, query, where, writeBatch } from 'firebase/firestore';
+import { collection, addDoc, getDocs, getDoc, doc, setDoc, updateDoc, deleteDoc, deleteField, query, where, writeBatch, increment } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import { buildCompetitionParticipant, competitionParticipantId } from '../utils/competitionParticipant';
 import { buildLevelAtStartSnapshot, type ParticipationForSnapshot, type SnapshotSourceUser } from '../utils/competitionLevelSnapshot';
@@ -594,9 +594,13 @@ const AdminCompetitionManagement: React.FC = () => {
       }
 
       if (added > 0) {
-        const newCount = competition.registered_count + added;
-        await updateDoc(doc(db, 'competitions', competition.id), { registered_count: newCount });
-        setCompetitions((prev) => prev.map((c) => (c.id === competition.id ? { ...c, registered_count: newCount } : c)));
+        // ⚠️ increment(added) et non une somme sur l'état React — même raison qu'aux deux
+        // autres rédacteurs de ce compteur (ClientCompetitions.tsx, AdminCompetitionRegistration.tsx).
+        // L'affichage local, lui, reste optimiste : il n'a pas à attendre une relecture.
+        await updateDoc(doc(db, 'competitions', competition.id), { registered_count: increment(added) });
+        setCompetitions((prev) => prev.map((c) => (
+          c.id === competition.id ? { ...c, registered_count: c.registered_count + added } : c
+        )));
       }
       setSnackbarMessage(
         added > 0

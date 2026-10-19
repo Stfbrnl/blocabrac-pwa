@@ -6,7 +6,7 @@ import {
   Switch, Chip, Card, CardContent, CardActions, useTheme, useMediaQuery
 } from '@mui/material';
 import { db } from '../services/firebaseConfig';
-import { collection, getDocs, doc, setDoc, deleteDoc, query, where, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, deleteDoc, query, where, updateDoc, increment } from 'firebase/firestore';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { buildCompetitionParticipant, competitionParticipantId } from '../utils/competitionParticipant';
 import { type Level, canUserRegister } from '../utils/competitionEligibility';
@@ -263,8 +263,15 @@ const AdminCompetitionRegistration: React.FC = () => {
         buildCompetitionParticipant({ ...user, uid: user.uid }, selectedCompetition.id)
       );
 
+      // ⚠️ increment() et JAMAIS une valeur calculée depuis l'état React : ce document est le
+      // SEUL de l'application qu'un grand nombre de comptes écrivent en même temps (voir
+      // docs/handoffs/2026-10-19-CC-point-chaud-et-harnais.md). Le soir d'un contest, l'admin
+      // inscrit un retardataire au comptoir pendant que d'autres s'inscrivent sur leur
+      // téléphone : une lecture-puis-écriture écrase alors les inscriptions arrivées entre
+      // les deux, et le compteur affiché aux grimpeurs décroche. increment() est résolu
+      // côté serveur, donc insensible à l'ancienneté de ce qu'on avait en mémoire.
       await updateDoc(doc(db, 'competitions', selectedCompetition.id), {
-        registered_count: selectedCompetition.registered_count + 1
+        registered_count: increment(1)
       });
 
       await loadParticipants(selectedCompetition.id);
@@ -282,8 +289,9 @@ const AdminCompetitionRegistration: React.FC = () => {
     try {
       await deleteDoc(doc(db, 'competition_participants', participantId));
 
+      // ⚠️ Même raison qu'à l'ajout : increment(), jamais une soustraction sur l'état React.
       await updateDoc(doc(db, 'competitions', selectedCompetition.id), {
-        registered_count: selectedCompetition.registered_count - 1
+        registered_count: increment(-1)
       });
 
       await loadParticipants(selectedCompetition.id);
