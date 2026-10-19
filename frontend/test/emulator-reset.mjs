@@ -1,3 +1,4 @@
+import { pathToFileURL } from 'node:url';
 // Remise à zéro COMPLÈTE des émulateurs locaux (Firestore + Auth) avant un seed —
 // docs/handoffs/RETOUR-v2681-v269-v270.md §5. Sans elle, un e2e enchaîné après un autre sur le
 // même émulateur hérite de ses comptes et de ses profils : `e2e-season-restart-flow.mjs` échouait
@@ -33,4 +34,18 @@ export async function resetEmulators() {
     if (!res.ok) throw new Error(`Remise à zéro de l'émulateur impossible (${res.status}) : ${url}`);
   }
   console.log(`✔ Émulateurs remis à zéro : Firestore et Auth vidés (projet ${PROJECT_ID}).`);
+}
+
+// ⚠️ ET LE PIÈGE QUE LE COMMENTAIRE CI-DESSUS DÉCRIVAIT RESTAIT OUVERT : documenter une
+// trappe ne la referme pas. `node test/emulator-reset.mjs` sortait toujours en 0 sans rien
+// vider — repris le 19/10/2026 après y être tombé une deuxième fois, dans la séance même qui
+// venait d'en écrire la règle. D'où ce garde de module principal : invoqué directement, le
+// script AGIT et annonce ; importé par un seed, il n'exporte que la fonction, comme avant.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  process.env.FIRESTORE_EMULATOR_HOST ||= 'localhost:8080';
+  process.env.FIREBASE_AUTH_EMULATOR_HOST ||= 'localhost:9099';
+  resetEmulators().catch((err) => {
+    console.error(`✖ ${err.message}`);
+    process.exit(1);
+  });
 }
