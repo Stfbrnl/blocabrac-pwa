@@ -291,7 +291,7 @@
   </div>
   <table class="feature-table">
     <tr><td class="label">Utilisateurs</td><td>Création/édition des comptes, attribution des rôles (cumulables), activation/désactivation de l'accès aux compétitions par personne. Deux boutons groupés en haut de l'écran : <b>« Verrouiller tous les niveaux »</b> fige le niveau de chacun à sa valeur du moment (les badges ne le feront plus bouger, ni à la hausse ni à la baisse), <b>« Déverrouiller tous les niveaux »</b> rend la main à l'application. Le nombre entre parenthèses est celui des comptes que le clic traiterait : « Verrouiller (0) » signifie donc que personne n'a été oublié. On peut recliquer autant de fois qu'on veut — seuls les comptes arrivés depuis sont écrits.</td></tr>
-    <tr><td class="label">Créer/gérer les compétitions</td><td>Restrictions de niveau, activation de la diffusion sur l'écran TV, mode de comptage des points parmi 4 (avant le déclenchement, verrouillé ensuite — voir page 06). En mode Officiel FFME, bouton « Générer le roster » : reprend automatiquement le top 10 garçons/filles de la dernière saison clôturée (voir page 06-07). Le passage en « en cours » <b>fige le niveau de départ</b> de chaque inscrit, dont se sert le classement par niveau max.</td></tr>
+    <tr><td class="label">Créer/gérer les compétitions</td><td>Restrictions de niveau, activation de la diffusion sur l'écran TV, mode de comptage des points parmi 5 (avant le déclenchement, verrouillé ensuite — voir page 06). En mode Officiel FFME, bouton « Générer le roster » : reprend automatiquement le top 10 garçons/filles de la dernière saison clôturée (voir page 06-07). Le passage en « en cours » <b>fige le niveau de départ</b> de chaque inscrit, dont se sert le classement par niveau max.</td></tr>
     <tr><td class="label">Publier le palmarès</td><td>Une fois l'épreuve terminée, bouton « Publier le palmarès » sur la carte de la compétition : il prépare un <b>aperçu</b> des cinq classements, puis une seconde confirmation les <b>gèle définitivement</b> (voir page 06). Le palmarès devient alors visible de tous les grimpeurs dans « Mes compétitions ». Refusé en mode Officiel FFME.</td></tr>
     <tr><td class="label">Gérer les inscriptions</td><td>Inscription manuelle d'un participant, retrait, contrôle de l'accès général aux compétitions par utilisateur.</td></tr>
     <tr><td class="label">Classement de saison</td><td>Réglage de la fenêtre de saison (calendrier retenu : du 1er novembre au 31 mai, juin réservé à la Finale). Une nouvelle saison s'ouvre avec « Enregistrer » : tout le monde part de zéro. Le bouton « Redémarrer la saison maintenant » donne au contraire à chacun <b>tout son historique</b> en crédit de départ — conçu pour le lancement de l'application, pas pour une nouvelle saison (voir page 06-07).</td></tr>
@@ -332,7 +332,7 @@
     Barème par défaut (« Barème par couleur », anciennement appelé
     « Blocabrac »), utilisé pour le classement quotidien, les
     mini-compétitions, et les compétitions qui n'ont pas choisi un autre mode
-    de comptage (voir encadré ci-dessous). Les points sont dégressifs selon le
+    de comptage (voir page suivante). Les points sont dégressifs selon le
     nombre d'essais nécessaires pour réussir.
   </p>
   <table class="scoring">
@@ -348,7 +348,12 @@
   </table>
   <div class="callout">
     Un échec ne rapporte jamais de point — la dégressivité ne joue que sur les
-    blocs réussis, et le score ne descend jamais sous 0.
+    blocs réussis, et le score ne descend jamais sous 0. Dans ce barème-ci, un
+    bloc finit par ne plus rien rapporter : un blanc dès le 17ᵉ essai, un noir au
+    31ᵉ. <b>C'est voulu et ça ne change pas</b> — le classement quotidien est
+    cumulatif et recalculé, donc modifier son barème réécrirait les points de tous
+    les grimpeurs sur tous les blocs passés. Une compétition, elle, se joue et se
+    clôt : c'est pourquoi le mode « avec plancher » existe pour elles seules.
   </div>
   <div class="callout">
     Blocs « Mystère » — en grosse compétition officielle, la cotation reste
@@ -356,12 +361,23 @@
     figure dans le barème mais n'est en pratique jamais utilisé en grosse
     compétition (politique de la salle).
   </div>
+  <footer class="pagefoot">
+    <span>Topo Blocabrac — édition papier</span>
+    <span>06 · Barème de points</span>
+  </footer>
+</section>
+
+<!-- PAGE 9 : 06 SUITE — MODES DE COMPTAGE -->
+<section class="page">
+  <div class="eyebrow">06 · Compétitions &amp; classement (suite)</div>
+  <h2 class="section-title">Modes de comptage</h2>
   <div class="callout" style="margin-bottom:6px;">
-    <b style="display:block; margin-bottom:6px; color:var(--green-dark);">4 modes de comptage, au choix par compétition</b>
+    <b style="display:block; margin-bottom:6px; color:var(--green-dark);">5 modes de comptage, au choix par compétition</b>
     réglé par l'admin/l'ouvreur à la création, verrouillé dès que la
     compétition démarre :
     <div class="modes-list" style="margin-top:10px;">
-      <div class="mode-row"><div class="mode-name">Barème par couleur</div><div class="mode-desc">Le barème ci-dessus (par défaut, anciennement appelé « Blocabrac »).</div></div>
+      <div class="mode-row"><div class="mode-name">Barème par couleur</div><div class="mode-desc">Le barème de la page précédente (par défaut, anciennement appelé « Blocabrac »).</div></div>
+      <div class="mode-row"><div class="mode-name">Barème par couleur <b>avec plancher</b></div><div class="mode-desc"><b>Mode du contest du 5 novembre 2026.</b> Mêmes points de base, mais un bloc réussi rapporte toujours au moins <b>un quart</b> de sa valeur, quel que soit le nombre d'essais : plus aucun bloc arraché ne finit à 0. Pas de déduction par couleur, donc une couleur plus dure rapporte toujours plus, à tous les nombres d'essais. Table complète : <b>blocabrac.web.app/docs/affiche-bareme-competition.pdf</b>, à afficher à l'accueil.</div></div>
       <div class="mode-row"><div class="mode-name">Blocs validés</div><div class="mode-desc">Points fixés bloc par bloc par l'ouvreur (la cotation étant cachée, un barème par couleur ne reflète pas la difficulté réelle), sans dégression aux essais.</div></div>
       <div class="mode-row"><div class="mode-name">Personnalisé</div><div class="mode-desc">Barème par couleur propre à cette compétition (points de base et déduction par essai réglables).</div></div>
       <div class="mode-row"><div class="mode-name">Officiel FFME</div><div class="mode-desc">Classement par tops, puis zones, puis essais (pas une somme de points). Pensé pour la Finale de l'année (10 grimpeurs, 5 blocs) : saisie par un juge unique sur un écran dédié plutôt que par auto-déclaration des grimpeurs, écran live sans rotation (les deux genres côte à côte). Une égalité parfaite en tête se tranche par une super-finale (un bloc de plus ajouté à l'épreuve), pas par un titre partagé.</div></div>
@@ -369,7 +385,7 @@
   </div>
   <footer class="pagefoot">
     <span>Topo Blocabrac — édition papier</span>
-    <span>06 · Barème de points</span>
+    <span>06 · Modes de comptage</span>
   </footer>
 </section>
 
