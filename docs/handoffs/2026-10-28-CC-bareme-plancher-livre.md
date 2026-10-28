@@ -253,55 +253,14 @@ Le garde de pagination a rougi **deux fois** avant que la page tienne.
 
 ---
 
-## §12 — ⚠️ L'affiche rendait un ÉCRAN BLANC en ligne, et mes deux vérifications l'avaient déclarée bonne
+## §12 — Un défaut découvert en travers de cette livraison, traité à part
 
-Signalé par Stéphane juste après : *« dans ta méthode pour accéder à un document en ligne, je
-n'obtiens qu'un écran blanc. Je dois forcément aller le chercher en local sur mon disque. »*
+⚠️ **L'affiche rendait un ÉCRAN BLANC en ligne** — le service worker répondait `index.html`
+à l'ouverture d'un `/docs/*.pdf` — et **mes deux vérifications `curl` l'avaient déclarée
+bonne**, parce que `curl` ne passe par aucun service worker. Le `200` annoncé au §4 de ce
+document était donc juste et hors sujet. Corrigé en V2.76.2.
 
-**Le mécanisme.** `vite-plugin-pwa` enregistre une `NavigationRoute` liée à `index.html` — c'est
-ce qui fait marcher les URL profondes d'une application monopage. Sans refus explicite, **toute
-navigation** y passe, un PDF compris. Le service worker répondait donc `index.html` ;
-l'application se chargeait ; aucune route ne correspond à `/docs/...` ; et comme `AppRoutes.tsx`
-n'a **aucune route `*`**, il ne restait rien à l'écran.
-
-Corrigé en V2.76.2 : `navigateFallbackDenylist: [/^\/docs\//]`.
-
-**Ce que ce défaut apprend, et c'est plus important que le correctif :**
-
-1. 🔴 **`curl` ne passe par AUCUN service worker.** J'avais vérifié deux déploiements — `200`,
-   `application/pdf`, octets identiques au dépôt — et j'ai écrit « relue, 200 » dans le §4 de ce
-   document. C'était **juste, et sans aucun rapport avec la question** : j'avais mesuré la couche
-   HTTP et conclu sur le navigateur. C'est **exactement** la faute du 19/10 sur la sonde
-   Monitoring, avec un client HTTP à la place d'une API. La tentation du transfert est maximale
-   là où il est invalide.
-2. ⚠️ **Deux fichiers du même dossier avaient des sorts opposés.** Le `.html` est *précaché*
-   (`globPatterns` contient `html`), donc servi depuis le précache et jamais soumis au repli : il
-   marchait parfaitement. Le `.pdf` n'est pas précaché, donc il tombait dans le repli. **Constater
-   que « le document est accessible » sur l'un ne dit rien de l'autre.**
-3. ⚠️ **Le guide de connexion était cassé depuis sa création**, et la mémoire de projet le
-   décrivait comme « servi en ligne ». **Un document que personne n'a encore eu besoin d'ouvrir
-   peut être cassé depuis toujours** — et aucun test ne le dira, puisque rien dans le dépôt ne
-   l'ouvre.
-4. ⚠️ **La vérification correcte demande deux précautions**, sans lesquelles elle ne traverse
-   aucun service worker et passe au vert pour rien : un profil de navigateur **neuf**, et un
-   **rechargement** après la première ouverture — sous `registerType: 'prompt'` le service worker
-   ne contrôle pas la page au premier chargement.
-
-Vérifié après correctif, navigateur piloté, service worker **aux commandes** : les deux PDF
-rendent `application/pdf` avec `fromServiceWorker: false`, là où l'on avait `text/html` et le
-titre de l'app shell.
-
-⚠️ **Et le correctif ne vaut que pour les appareils ayant activé ce service worker-ci** : c'est
-la version déployée qui gouverne sa propre succession. Un appareil resté sur l'ancienne garde
-l'écran blanc jusqu'à sa mise à jour.
-
-## §13 — Deux points ouverts que ce défaut a mis au jour
-
-- 🟠 **Il n'existe aucune route `*`.** L'écran blanc n'est pas propre aux PDF : c'est ce que voit
-  n'importe qui sur n'importe quelle URL inconnue, une faute de frappe comprise. Une page
-  terminale — du genre de `components/AccessDenied.tsx`, avec une sortie qui ne soit pas
-  elle-même une redirection — fermerait toute la classe, exactement comme la boucle de
-  redirection l'a été.
-- 🟠 **Rien dans l'application ne renvoie vers ces documents** ; ils n'existent que par leur URL,
-  écrite dans le topo. Stéphane suggère un emplacement **côté admin** qui les listerait. À
-  décider : c'est petit et isolé, mais nous sommes à huit jours du contest.
+Le défaut n'a rien à voir avec le barème à plancher, et il porte deux points ouverts
+reportés par Stéphane (absence de route `*`, aucun renvoi vers ces documents depuis
+l'application). Il a donc son propre retour :
+**`docs/handoffs/2026-10-28-CC-ecran-blanc-service-worker.md`**.
