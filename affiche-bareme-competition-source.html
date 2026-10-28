@@ -59,16 +59,16 @@
   .masthead p { margin: 2px 0 0; color: var(--muted); font-size: 11.5pt; font-weight: 600; }
 
   /* Les deux phrases du §5 : l'intention, avant les chiffres. */
-  .annonce { margin: 6mm 0 5mm; padding: 4mm 6mm; background: var(--bg-soft); border-left: 5px solid var(--primary); border-radius: 0 8px 8px 0; }
-  .annonce p { margin: 0 0 2mm; font-size: 14pt; font-weight: 700; }
-  .annonce p:last-child { margin-bottom: 0; font-weight: 600; color: var(--muted); font-size: 12.5pt; }
+  .annonce { margin: 4mm 0 4mm; padding: 3.5mm 6mm; background: var(--bg-soft); border-left: 5px solid var(--primary); border-radius: 0 8px 8px 0; }
+  .annonce p { margin: 0 0 1.5mm; font-size: 13pt; font-weight: 700; }
+  .annonce p:last-child { margin-bottom: 0; font-weight: 600; color: var(--muted); font-size: 12pt; }
 
-  h2 { margin: 0 0 3mm; font-size: 14pt; font-weight: 800; color: var(--primary-dark); }
+  h2 { margin: 0 0 2mm; font-size: 14pt; font-weight: 800; color: var(--primary-dark); }
   .sous-titre { margin: 0 0 4mm; color: var(--muted); font-size: 11pt; font-weight: 600; }
 
   table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-  caption { caption-side: top; text-align: left; padding-bottom: 3mm; color: var(--muted); font-size: 10.5pt; font-weight: 600; }
-  th, td { border: 1px solid var(--line); padding: 2.6mm 1mm; text-align: center; font-size: 11.5pt; }
+  caption { caption-side: top; text-align: left; padding-bottom: 2mm; color: var(--muted); font-size: 10pt; font-weight: 600; }
+  th, td { border: 1px solid var(--line); padding: 1.3mm 1mm; text-align: center; font-size: 11pt; }
   thead th { background: var(--primary-dark); color: #fff; font-weight: 700; font-size: 11pt; }
   thead th:first-child { text-align: left; padding-left: 3mm; }
   tbody th { text-align: left; padding-left: 3mm; font-weight: 700; background: var(--bg-soft); }
@@ -79,9 +79,32 @@
   td.flash { font-weight: 800; color: var(--primary-dark); }
   td.plancher { font-weight: 700; }
 
-  .notes { margin-top: 5mm; }
-  .notes li { margin-bottom: 2mm; font-size: 11.5pt; }
-  .encadre { margin-top: auto; padding: 4mm 5mm; border: 2px dashed var(--primary); border-radius: 8px; background: var(--bg-soft); font-size: 11.5pt; font-weight: 600; }
+  /* La courbe. Une seule série, donc AUCUNE légende : le titre de la figure la nomme.
+     Pas de survol non plus — le livrable est du papier ; la version .html n'est qu'un
+     aperçu avant impression, et la table ci-dessus est déjà la « vue tableau ». */
+  figure { margin: 4mm 0 0; }
+  figcaption { color: var(--muted); font-size: 10pt; font-weight: 600; margin-top: 1mm; }
+  .courbe { width: 100%; height: auto; display: block; }
+  /* Le dessin est large et bas : c'est la FORME qui informe, pas la hauteur. */
+  /* Grille et axes récessifs : ils situent, ils ne se regardent pas. */
+  .courbe .g { stroke: var(--line); stroke-width: 1; }
+  .courbe .ax { stroke: var(--muted); stroke-width: 1; }
+  .courbe .ty, .courbe .tx { fill: var(--muted); font-size: 11px; font-weight: 600; }
+  .courbe .ty { text-anchor: end; }
+  .courbe .tx { text-anchor: middle; }
+  /* La série : trait fin, aire très légère pour donner à voir « ce qui reste ». */
+  .courbe .ln { fill: none; stroke: var(--primary-dark); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .courbe .aire { fill: var(--primary); opacity: .10; }
+  .courbe .pt { fill: var(--primary-dark); stroke: #fff; stroke-width: 2; }
+  /* Le plancher est un repère, pas une seconde série : pointillés, encre neutre. */
+  .courbe .pl { stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 5 4; }
+  .courbe .labpl { fill: var(--muted); font-size: 11px; font-weight: 700; }
+  /* Les valeurs portent l'encre du texte, jamais celle de la série. */
+  .courbe .lab { fill: var(--ink); font-size: 11.5px; font-weight: 700; }
+
+  .notes { margin-top: 4mm; padding-left: 6mm; }
+  .notes li { margin-bottom: 1.5mm; font-size: 11pt; }
+  .encadre { margin-top: auto; padding: 3.5mm 5mm; border: 2px dashed var(--primary); border-radius: 8px; background: var(--bg-soft); font-size: 11.5pt; font-weight: 600; }
   footer { margin-top: 4mm; border-top: 1px solid var(--line); padding-top: 2.5mm; color: var(--muted); font-size: 9.5pt; display: flex; justify-content: space-between; }
 
   @page { size: A4; margin: 0; }
@@ -114,10 +137,9 @@
     </div>
 
     <h2>La table complète</h2>
-    <p class="sous-titre">Points gagnés pour un bloc <b>réussi</b>, selon la couleur et le nombre d'essais qu'il vous a fallu.</p>
 
     <table>
-      <caption>Les colonnes sautent certains nombres d'essais : entre deux colonnes, les points baissent régulièrement. La dernière colonne est le minimum, et on ne descend jamais en dessous.</caption>
+      <caption>Points gagnés pour un bloc <b>réussi</b>, selon sa couleur et le nombre d'essais qu'il vous a fallu. Les colonnes en sautent quelques-uns ; entre deux, les points baissent régulièrement.</caption>
       <thead>
         <tr><!--ENTETE--></tr>
       </thead>
@@ -126,10 +148,18 @@
       </tbody>
     </table>
 
+    <figure>
+      <!--COURBE-->
+      <figcaption>
+        Ce que garde un bloc réussi, en pourcentage de sa valeur — et c'est la ligne « bleu »
+        ci-dessus, le bleu valant 100 points. <b>Cette courbe est la même pour les huit
+        couleurs</b> : voilà pourquoi une couleur plus dure rapporte toujours plus.
+      </figcaption>
+    </figure>
+
     <ul class="notes">
       <li><b>Un bloc échoué rapporte 0 point</b>, mais déclarez vos échecs quand même : à égalité parfaite, c'est le nombre total d'essais qui départage, échecs compris.</li>
       <li><b>Réussir du premier coup rapporte la valeur pleine</b> de la couleur (la colonne « 1 essai »). C'est le maximum : rien ne rapporte plus qu'un flash.</li>
-      <li><b>Une couleur plus dure rapporte toujours plus qu'une couleur plus facile</b>, quel que soit le nombre d'essais de chacun. Un noir arraché après beaucoup d'essais ne dépassera jamais un violet réussi du premier coup.</li>
     </ul>
 
     <div class="encadre">

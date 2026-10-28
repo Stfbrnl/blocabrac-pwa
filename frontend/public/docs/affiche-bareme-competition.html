@@ -65,16 +65,16 @@
   .masthead p { margin: 2px 0 0; color: var(--muted); font-size: 11.5pt; font-weight: 600; }
 
   /* Les deux phrases du §5 : l'intention, avant les chiffres. */
-  .annonce { margin: 6mm 0 5mm; padding: 4mm 6mm; background: var(--bg-soft); border-left: 5px solid var(--primary); border-radius: 0 8px 8px 0; }
-  .annonce p { margin: 0 0 2mm; font-size: 14pt; font-weight: 700; }
-  .annonce p:last-child { margin-bottom: 0; font-weight: 600; color: var(--muted); font-size: 12.5pt; }
+  .annonce { margin: 4mm 0 4mm; padding: 3.5mm 6mm; background: var(--bg-soft); border-left: 5px solid var(--primary); border-radius: 0 8px 8px 0; }
+  .annonce p { margin: 0 0 1.5mm; font-size: 13pt; font-weight: 700; }
+  .annonce p:last-child { margin-bottom: 0; font-weight: 600; color: var(--muted); font-size: 12pt; }
 
-  h2 { margin: 0 0 3mm; font-size: 14pt; font-weight: 800; color: var(--primary-dark); }
+  h2 { margin: 0 0 2mm; font-size: 14pt; font-weight: 800; color: var(--primary-dark); }
   .sous-titre { margin: 0 0 4mm; color: var(--muted); font-size: 11pt; font-weight: 600; }
 
   table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-  caption { caption-side: top; text-align: left; padding-bottom: 3mm; color: var(--muted); font-size: 10.5pt; font-weight: 600; }
-  th, td { border: 1px solid var(--line); padding: 2.6mm 1mm; text-align: center; font-size: 11.5pt; }
+  caption { caption-side: top; text-align: left; padding-bottom: 2mm; color: var(--muted); font-size: 10pt; font-weight: 600; }
+  th, td { border: 1px solid var(--line); padding: 1.3mm 1mm; text-align: center; font-size: 11pt; }
   thead th { background: var(--primary-dark); color: #fff; font-weight: 700; font-size: 11pt; }
   thead th:first-child { text-align: left; padding-left: 3mm; }
   tbody th { text-align: left; padding-left: 3mm; font-weight: 700; background: var(--bg-soft); }
@@ -85,9 +85,32 @@
   td.flash { font-weight: 800; color: var(--primary-dark); }
   td.plancher { font-weight: 700; }
 
-  .notes { margin-top: 5mm; }
-  .notes li { margin-bottom: 2mm; font-size: 11.5pt; }
-  .encadre { margin-top: auto; padding: 4mm 5mm; border: 2px dashed var(--primary); border-radius: 8px; background: var(--bg-soft); font-size: 11.5pt; font-weight: 600; }
+  /* La courbe. Une seule série, donc AUCUNE légende : le titre de la figure la nomme.
+     Pas de survol non plus — le livrable est du papier ; la version .html n'est qu'un
+     aperçu avant impression, et la table ci-dessus est déjà la « vue tableau ». */
+  figure { margin: 4mm 0 0; }
+  figcaption { color: var(--muted); font-size: 10pt; font-weight: 600; margin-top: 1mm; }
+  .courbe { width: 100%; height: auto; display: block; }
+  /* Le dessin est large et bas : c'est la FORME qui informe, pas la hauteur. */
+  /* Grille et axes récessifs : ils situent, ils ne se regardent pas. */
+  .courbe .g { stroke: var(--line); stroke-width: 1; }
+  .courbe .ax { stroke: var(--muted); stroke-width: 1; }
+  .courbe .ty, .courbe .tx { fill: var(--muted); font-size: 11px; font-weight: 600; }
+  .courbe .ty { text-anchor: end; }
+  .courbe .tx { text-anchor: middle; }
+  /* La série : trait fin, aire très légère pour donner à voir « ce qui reste ». */
+  .courbe .ln { fill: none; stroke: var(--primary-dark); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .courbe .aire { fill: var(--primary); opacity: .10; }
+  .courbe .pt { fill: var(--primary-dark); stroke: #fff; stroke-width: 2; }
+  /* Le plancher est un repère, pas une seconde série : pointillés, encre neutre. */
+  .courbe .pl { stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 5 4; }
+  .courbe .labpl { fill: var(--muted); font-size: 11px; font-weight: 700; }
+  /* Les valeurs portent l'encre du texte, jamais celle de la série. */
+  .courbe .lab { fill: var(--ink); font-size: 11.5px; font-weight: 700; }
+
+  .notes { margin-top: 4mm; padding-left: 6mm; }
+  .notes li { margin-bottom: 1.5mm; font-size: 11pt; }
+  .encadre { margin-top: auto; padding: 3.5mm 5mm; border: 2px dashed var(--primary); border-radius: 8px; background: var(--bg-soft); font-size: 11.5pt; font-weight: 600; }
   footer { margin-top: 4mm; border-top: 1px solid var(--line); padding-top: 2.5mm; color: var(--muted); font-size: 9.5pt; display: flex; justify-content: space-between; }
 
   @page { size: A4; margin: 0; }
@@ -120,10 +143,9 @@
     </div>
 
     <h2>La table complète</h2>
-    <p class="sous-titre">Points gagnés pour un bloc <b>réussi</b>, selon la couleur et le nombre d'essais qu'il vous a fallu.</p>
 
     <table>
-      <caption>Les colonnes sautent certains nombres d'essais : entre deux colonnes, les points baissent régulièrement. La dernière colonne est le minimum, et on ne descend jamais en dessous.</caption>
+      <caption>Points gagnés pour un bloc <b>réussi</b>, selon sa couleur et le nombre d'essais qu'il vous a fallu. Les colonnes en sautent quelques-uns ; entre deux, les points baissent régulièrement.</caption>
       <thead>
         <tr><th>couleur</th><th>1 essai</th><th>2</th><th>3</th><th>4</th><th>5</th><th>7</th><th>10</th><th>15</th><th>20</th><th>30</th><th>50+</th></tr>
       </thead>
@@ -139,10 +161,18 @@
       </tbody>
     </table>
 
+    <figure>
+      <svg viewBox="0 0 700 185" role="img" aria-labelledby="courbe-t courbe-d" class="courbe"><title id="courbe-t">Points restants selon le nombre d'essais</title><desc id="courbe-d">La valeur d'un bloc réussi chute vite sur les premiers essais puis s'aplatit, sans jamais descendre sous 25 % de sa valeur. Les mêmes nombres figurent dans la table ci-dessus.</desc><line x1="52" y1="148" x2="684" y2="148" class="g" /><text x="44" y="152" class="ty">0 %</text><line x1="52" y1="118" x2="684" y2="118" class="g" /><text x="44" y="122" class="ty">25 %</text><line x1="52" y1="88" x2="684" y2="88" class="g" /><text x="44" y="92" class="ty">50 %</text><line x1="52" y1="58" x2="684" y2="58" class="g" /><text x="44" y="62" class="ty">75 %</text><line x1="52" y1="28" x2="684" y2="28" class="g" /><text x="44" y="32" class="ty">100 %</text><polygon points="52,148 52,28 64.9,41.2 77.8,53.2 90.69,62.8 103.59,71.2 116.49,78.4 129.39,84.4 142.29,89.2 155.18,94 168.08,97.6 180.98,100 193.88,102.4 206.78,104.8 219.67,107.2 232.57,108.4 245.47,109.6 258.37,110.8 271.27,112 284.16,113.2 297.06,114.4 309.96,114.4 322.86,115.6 335.76,115.6 348.65,115.6 361.55,115.6 374.45,116.8 387.35,116.8 400.24,116.8 413.14,116.8 426.04,116.8 438.94,116.8 451.84,118 464.73,118 477.63,118 490.53,118 503.43,118 516.33,118 529.22,118 542.12,118 555.02,118 567.92,118 580.82,118 593.71,118 606.61,118 619.51,118 632.41,118 645.31,118 658.2,118 671.1,118 684,118 684,148" class="aire" /><line x1="52" y1="118" x2="684" y2="118" class="pl" /><text x="58" y="112" class="labpl">plancher : 25 %</text><polyline points="52,28 64.9,41.2 77.8,53.2 90.69,62.8 103.59,71.2 116.49,78.4 129.39,84.4 142.29,89.2 155.18,94 168.08,97.6 180.98,100 193.88,102.4 206.78,104.8 219.67,107.2 232.57,108.4 245.47,109.6 258.37,110.8 271.27,112 284.16,113.2 297.06,114.4 309.96,114.4 322.86,115.6 335.76,115.6 348.65,115.6 361.55,115.6 374.45,116.8 387.35,116.8 400.24,116.8 413.14,116.8 426.04,116.8 438.94,116.8 451.84,118 464.73,118 477.63,118 490.53,118 503.43,118 516.33,118 529.22,118 542.12,118 555.02,118 567.92,118 580.82,118 593.71,118 606.61,118 619.51,118 632.41,118 645.31,118 658.2,118 671.1,118 684,118" class="ln" /><circle cx="52" cy="28" r="4.5" class="pt" /><circle cx="64.9" cy="41.2" r="4.5" class="pt" /><text x="73.9" y="32.2" text-anchor="start" class="lab">89 %</text><circle cx="103.59" cy="71.2" r="4.5" class="pt" /><text x="103.59" y="62.2" text-anchor="middle" class="lab">64 %</text><circle cx="168.08" cy="97.6" r="4.5" class="pt" /><text x="168.08" y="88.6" text-anchor="middle" class="lab">42 %</text><circle cx="297.06" cy="114.4" r="4.5" class="pt" /><text x="297.06" y="105.4" text-anchor="middle" class="lab">28 %</text><line x1="52" y1="148" x2="684" y2="148" class="ax" /><text x="52" y="164" class="tx">1</text><text x="103.59" y="164" class="tx">5</text><text x="168.08" y="164" class="tx">10</text><text x="297.06" y="164" class="tx">20</text><text x="426.04" y="164" class="tx">30</text><text x="555.02" y="164" class="tx">40</text><text x="684" y="164" class="tx">50</text><text x="368" y="180" text-anchor="middle" class="tx">nombre d'essais</text></svg>
+      <figcaption>
+        Ce que garde un bloc réussi, en pourcentage de sa valeur — et c'est la ligne « bleu »
+        ci-dessus, le bleu valant 100 points. <b>Cette courbe est la même pour les huit
+        couleurs</b> : voilà pourquoi une couleur plus dure rapporte toujours plus.
+      </figcaption>
+    </figure>
+
     <ul class="notes">
       <li><b>Un bloc échoué rapporte 0 point</b>, mais déclarez vos échecs quand même : à égalité parfaite, c'est le nombre total d'essais qui départage, échecs compris.</li>
       <li><b>Réussir du premier coup rapporte la valeur pleine</b> de la couleur (la colonne « 1 essai »). C'est le maximum : rien ne rapporte plus qu'un flash.</li>
-      <li><b>Une couleur plus dure rapporte toujours plus qu'une couleur plus facile</b>, quel que soit le nombre d'essais de chacun. Un noir arraché après beaucoup d'essais ne dépassera jamais un violet réussi du premier coup.</li>
     </ul>
 
     <div class="encadre">

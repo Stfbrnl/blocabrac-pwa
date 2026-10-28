@@ -86,6 +86,75 @@ const extrait = (source, regex, quoi) => {
     return `        <tr><th><span class="pastille" style="background:${teinte}"></span>${couleur}</th>${cellules}</tr>`;
   }).join('\n');
 
+  // --- La courbe ------------------------------------------------------------------------
+  // ⚠️ Les ordonnées ne sont PAS un second calcul : ce sont les points du BLEU, obtenus par
+  // le meme appel que la table. Le bleu valant 100 de base, sa ligne SE LIT directement en
+  // pourcentage — la courbe est donc litteralement la ligne « bleu » imprimee au-dessus
+  // d'elle, et le script le VERIFIE. Un graphique qui raconterait autre chose que les
+  // chiffres au-dessus de lui serait pire que pas de graphique du tout.
+  if (basePoints.bleu !== 100) {
+    throw new Error(`le bleu vaut ${basePoints.bleu} et non 100 : la courbe ne se lit plus en pourcentage, il faut changer son axe`);
+  }
+  const X_MAX = ESSAIS[ESSAIS.length - 1]; // meme borne que la derniere colonne de la table
+  const serie = [];
+  for (let n = 1; n <= X_MAX; n += 1) serie.push([n, points('bleu', n)]);
+  // L'identite courbe / table, affirmee colonne par colonne.
+  ESSAIS.forEach(n => {
+    const surLaCourbe = serie[n - 1][1];
+    const dansLaTable = points('bleu', n);
+    if (surLaCourbe !== dansLaTable) throw new Error(`à ${n} essai(s) la courbe dit ${surLaCourbe} et la table ${dansLaTable}`);
+  });
+  if (serie.length !== X_MAX) throw new Error(`la courbe a ${serie.length} points au lieu de ${X_MAX}`);
+
+  const PLANCHER_PCT = Math.round(PLANCHER_RATIO * 100);
+  // Repere : x de 1 a X_MAX essais, y de 0 a 100 % de la valeur du bloc. UN SEUL axe des
+  // ordonnees, une seule serie — donc pas de legende, le titre de la figure la nomme.
+  const X0 = 52, X1 = 684, Y0 = 28, Y1 = 148;
+  const sx = (n) => X0 + ((n - 1) / (X_MAX - 1)) * (X1 - X0);
+  const sy = (v) => Y1 - (v / 100) * (Y1 - Y0);
+  const f2 = (v) => Math.round(v * 100) / 100;
+
+  const grille = [0, 25, 50, 75, 100].map(v =>
+    `<line x1="${X0}" y1="${f2(sy(v))}" x2="${X1}" y2="${f2(sy(v))}" class="g" />`
+    + `<text x="${X0 - 8}" y="${f2(sy(v)) + 4}" class="ty">${v} %</text>`).join('');
+  const ticksX = [1, 5, 10, 20, 30, 40, 50].filter(n => n <= X_MAX).map(n =>
+    `<text x="${f2(sx(n))}" y="164" class="tx">${n}</text>`).join('');
+  const trace = serie.map(([n, v]) => `${f2(sx(n))},${f2(sy(v))}`).join(' ');
+  const aire = `${X0},${f2(sy(0))} ${trace} ${X1},${f2(sy(0))}`;
+  // Reperes directs sur quelques essais seulement — jamais un nombre sur chaque point.
+  // ⚠️ 1 essai est MARQUE mais pas ETIQUETE : son point est dans l'angle haut-gauche, et son
+  // etiquette se superposait a celle de 2 essais et a la graduation « 100 % » de l'axe —
+  // trois textes au meme endroit, vu en regardant le PDF. L'axe dit deja 100 %.
+  const ETIQUETES = [2, 5, 10, 20].filter(n => n <= X_MAX);
+  const jalons = [1, ...ETIQUETES].map(n => {
+    const v = serie[n - 1][1];
+    const point = `<circle cx="${f2(sx(n))}" cy="${f2(sy(v))}" r="4.5" class="pt" />`;
+    if (!ETIQUETES.includes(n)) return point;
+    // ⚠️ Une etiquette centree sur un point proche du bord gauche deborde sur les
+    // graduations de l'axe et s'y fond (« 100 %89 % », vu dans le PDF). REGLE, pas cas
+    // particulier : trop pres du bord, l'etiquette passe a droite du point.
+    const AU_BORD = sx(n) - 22 < X0;
+    const ancre = AU_BORD ? 'start' : 'middle';
+    const dx = AU_BORD ? 9 : 0;
+    return point + `<text x="${f2(sx(n) + dx)}" y="${f2(sy(v)) - 9}" text-anchor="${ancre}" class="lab">${v} %</text>`;
+  }).join('');
+
+  const courbe = [
+    `<svg viewBox="0 0 700 185" role="img" aria-labelledby="courbe-t courbe-d" class="courbe">`,
+    `<title id="courbe-t">Points restants selon le nombre d'essais</title>`,
+    `<desc id="courbe-d">La valeur d'un bloc réussi chute vite sur les premiers essais puis s'aplatit, sans jamais descendre sous ${PLANCHER_PCT} % de sa valeur. Les mêmes nombres figurent dans la table ci-dessus.</desc>`,
+    grille,
+    `<polygon points="${aire}" class="aire" />`,
+    `<line x1="${X0}" y1="${f2(sy(PLANCHER_PCT))}" x2="${X1}" y2="${f2(sy(PLANCHER_PCT))}" class="pl" />`,
+    `<text x="${X0 + 6}" y="${f2(sy(PLANCHER_PCT)) - 6}" class="labpl">plancher : ${PLANCHER_PCT} %</text>`,
+    `<polyline points="${trace}" class="ln" />`,
+    jalons,
+    `<line x1="${X0}" y1="${Y1}" x2="${X1}" y2="${Y1}" class="ax" />`,
+    ticksX,
+    `<text x="${f2((X0 + X1) / 2)}" y="180" text-anchor="middle" class="tx">nombre d'essais</text>`,
+    `</svg>`,
+  ].join('');
+
   const guide = fs.readFileSync(GUIDE, 'utf8');
   const fontFace = extrait(guide, /@font-face\s*\{[\s\S]*?\}/, 'La règle @font-face Dosis');
   const logo = extrait(guide, /<div class="logo-badge"><img src="(data:image\/png;base64,[A-Za-z0-9+/=]+)"/, 'Le logo');
@@ -95,6 +164,7 @@ const extrait = (source, regex, quoi) => {
   html = injecte(html, '<!--LOGO-->', logo);
   html = injecte(html, '<!--ENTETE-->', entete);
   html = injecte(html, '<!--TABLE-->', lignes.trimStart());
+  html = injecte(html, '<!--COURBE-->', courbe);
   html = injecte(html, '<!--PIED-->', `Barème en vigueur depuis le ${new Date().toLocaleDateString('fr-FR')} · minimum garanti : ${Math.round(PLANCHER_RATIO * 100)} % de la valeur du bloc`);
 
   fs.writeFileSync(OUT_HTML, html);
@@ -120,6 +190,7 @@ const extrait = (source, regex, quoi) => {
   // ⚠️ Tout script dont la raison d'être est un effet de bord ANNONCE son effet : un succès
   // silencieux est indiscernable d'un no-op.
   console.log(`✅ ${COULEURS.length} couleurs × ${ESSAIS.length} colonnes = ${COULEURS.length * ESSAIS.length} valeurs calculées par climbingPoints.ts (mode « ${MODE} »), 1 page.`);
+  console.log(`✅ courbe : ${serie.length} points (1 à ${X_MAX} essais), identiques à la ligne « bleu » de la table.`);
   console.log(`✅ ${OUT_HTML}`);
   console.log(`✅ ${OUT_PDF}`);
 })().catch((e) => { console.error(e); process.exit(1); });
