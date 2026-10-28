@@ -215,3 +215,38 @@ dès le 17ᵉ essai, contre le 31ᵉ pour un noir), au lieu de rester un oubli q
 4. **Imprimer le topo — 14 pages maintenant, plus 13.**
 5. Inchangé : relever la consommation Firestore d'une journée chargée ; rien sur la chaîne des
    niveaux avant le 6 novembre ; retour en Spark le 6.
+
+---
+
+## §11 — Ajout du même jour : la courbe (V2.76.1, `deploy/v2.76.1`)
+
+Stéphane a demandé une **courbe** en plus de la table : la table donne les chiffres, elle ne
+donne pas la **forme**. Elle est sous la table, sur la même page.
+
+⚠️ **Ses ordonnées ne sont pas un second calcul.** Ce sont les points du **bleu**, par le même
+appel que la table. Le bleu valant 100 de base, sa ligne se lit directement en pourcentage :
+**la courbe EST la ligne « bleu » imprimée au-dessus d'elle**. Le générateur l'affirme colonne
+par colonne, et un garde sur `basePoints.bleu === 100` refuse d'écrire si cette lecture
+cessait d'être vraie. Un graphique qui raconterait autre chose que les chiffres au-dessus de
+lui serait pire que pas de graphique.
+
+Une seule série, donc **aucune légende** (la légende de figure la nomme) ; grille et axes
+récessifs ; repères directs sur **4** essais, jamais un nombre par point ; le plancher est un
+repère en pointillés à l'encre neutre, **pas** une seconde série.
+
+**Deux choses que ce lot apprend, et qu'aucun garde du générateur n'aurait données :**
+
+1. ⚠️ **Les collisions d'étiquettes ne se voient qu'en REGARDANT le rendu.** Le générateur
+   vérifie que l'affiche tient sur une page ; il ne sait rien du chevauchement. Deux
+   collisions successives, au même endroit : « 100 % » (1 essai) par-dessus « 89 % » et la
+   graduation de l'axe, puis « 89 % » se fondant encore dans cette graduation
+   (« 100 %89 % »). Corrigées par une **règle** — trop près du bord, l'étiquette passe à
+   droite du point — et non par un cas particulier. 1 essai est marqué sans être étiqueté :
+   l'axe dit déjà 100 %.
+2. ⚠️ **L'axe des ordonnées n'a pas été comprimé pour faire tenir la page.** C'était le geste
+   évident quand il manquait 46 px, et il aurait fait paraître la chute **plus douce qu'elle
+   n'est** — c'est-à-dire menti sur la seule chose que la figure est là pour montrer. La place
+   a été prise sur le texte. Et une note a été **supprimée à dessein**, parce que la légende
+   de la courbe dit la même chose en mieux : *suppression annoncée, pas débordement silencieux*.
+
+Le garde de pagination a rougi **deux fois** avant que la page tienne.
