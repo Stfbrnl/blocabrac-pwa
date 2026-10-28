@@ -103,6 +103,24 @@ export default defineConfig(({ mode }) => {
           // voir src/styles/fonts.css) — sans lui elle ne serait pas précachée et
           // retomberait sur la police système hors-ligne après le premier chargement.
           globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
+          // ⚠️ `public/docs/` est servi À L'ADRESSE, pas depuis l'application : ce sont des
+          // documents qu'on ouvre ou qu'on imprime (guide de connexion, affiche du barème).
+          // Sans ce refus, le service worker traite leur ouverture comme une NAVIGATION et
+          // répond `index.html` à la place — l'application se charge, aucune route ne
+          // correspond à `/docs/...`, et il n'y a pas de route `*` : écran blanc.
+          //
+          // 🔴 Et le défaut est INVISIBLE à `curl`, qui ne passe par aucun service worker :
+          // le fichier était bien servi en 200 avec le bon type, et l'a toujours été. Seul
+          // un vrai navigateur AYANT INSTALLÉ le service worker montre le problème (vérifié
+          // le 28/10/2026 : `content-type: text/html`, titre « Blocabrac - Gestion de salle
+          // d'escalade » au lieu du PDF). Les versions `.html` des mêmes documents, elles,
+          // marchaient — parce qu'elles sont PRÉCACHÉES et ne passent donc jamais par le
+          // repli. Deux sorts opposés pour deux fichiers du même dossier.
+          //
+          // ⚠️ Le correctif ne vaut que pour les appareils ayant ACTIVÉ ce service worker-ci :
+          // c'est la version déployée qui gouverne sa propre succession. Un appareil resté
+          // sur l'ancienne continue d'avoir l'écran blanc jusqu'à sa mise à jour.
+          navigateFallbackDenylist: [/^\/docs\//],
         },
       }),
     ],
