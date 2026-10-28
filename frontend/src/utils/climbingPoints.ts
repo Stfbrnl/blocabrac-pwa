@@ -16,6 +16,37 @@ export const calculatePoints = (difficulty: string, attempts: number, success: b
   return Math.max(0, base - deduction);
 };
 
+// ✅ Mode "Blocabrac avec plancher" (compétitions UNIQUEMENT — plan du 28/10/2026).
+//
+// points = base × ( PLANCHER + (1 − PLANCHER) × TAUX^(essais − 1) ), arrondi UNE SEULE fois
+// à la fin. Une décroissance qui s'aplatit : forte sur les premiers essais (−11 % de la base
+// au 2ᵉ), négligeable ensuite (−0,6 % au 20ᵉ), et qui ne descend jamais sous le quart de la
+// base — un bloc réussi rapporte TOUJOURS des points.
+//
+// ⚠️ Ce mode existe parce que `calculatePoints` NE DOIT PAS BOUGER : ce barème-là est partagé
+// avec le classement quotidien, que `reconcile-classement-profiles.js` recalcule entièrement
+// depuis l'historique. Le modifier ne recoterait pas un bloc : il réécrirait d'un coup les
+// points de tous les grimpeurs sur tous les blocs jamais validés. Une compétition se joue et
+// se clôt, donc ses règles peuvent changer entre deux éditions ; le classement général est
+// cumulatif et recalculé, donc son barème ne peut changer proprement à aucune date.
+//
+// ⚠️ Deux chiffres FIXES, écrits ici en clair et volontairement NON paramétrables par
+// compétition : le mode `personnalise` existe déjà pour qui veut régler lui-même.
+//
+// ⚠️ La clé technique décrit la RÈGLE (« avec plancher »), jamais son rang d'apparition :
+// pas de `blocabrac_v2`, qui serait illisible dès qu'un v3 existerait.
+export const PLANCHER_RATIO = 0.25;
+export const PLANCHER_TAUX = 0.85;
+
+// Barème à plancher pour une base donnée. `attempts` est borné à 1 par le bas : à 0 essai le
+// facteur dépasserait 1, donc un bloc vaudrait PLUS que son flash — l'invariant « le flash
+// est le maximum » tient ici, pas chez l'appelant.
+export const plancherPoints = (base: number, attempts: number): number => {
+  const essais = Number.isFinite(attempts) ? Math.max(1, attempts) : 1;
+  const facteur = PLANCHER_RATIO + (1 - PLANCHER_RATIO) * Math.pow(PLANCHER_TAUX, essais - 1);
+  return Math.round(base * facteur);
+};
+
 // ✅ Modes de comptage propres aux compétitions (jamais au classement annuel — voir
 // competitionClassement.ts, seul appelant de calculateCompetitionPoints). "officiel"
 // (coupe de France/du monde, tops/zones) N'EST PAS calculé ici : ce n'est pas une
@@ -23,7 +54,7 @@ export const calculatePoints = (difficulty: string, attempts: number, success: b
 // getOfficialParticipantTotals dans competitionClassement.ts, jamais
 // calculateCompetitionPoints pour ce mode (qui renvoie 0, volontairement inutilisable
 // telle quelle plutôt que silencieusement fausse).
-export type ScoringMode = 'blocabrac' | 'blocs_valides' | 'personnalise' | 'officiel';
+export type ScoringMode = 'blocabrac' | 'blocabrac_plancher' | 'blocs_valides' | 'personnalise' | 'officiel';
 
 export interface CustomScoringEntry {
   base: number;
@@ -89,6 +120,14 @@ export const calculateCompetitionPoints = (
   // renvoyait déjà `undefined || 0`. Le comportement ne change pas ; il est désormais dit.
   // (Le mode "blocs_valides" est traité au-dessus : il ne dépend pas de la couleur.)
   if (!colorKey) return 0;
+
+  // ✅ Aucune déduction par couleur : le facteur est le MÊME pour toutes les couleurs, donc
+  // l'ordre des couleurs tient à tous les nombres d'essais et l'anomalie du blanc (déduction
+  // 50 sur base 800, donc zéro au 17ᵉ essai, moins tolérant qu'un noir) disparaît par
+  // construction — il n'y a plus de paramètre propre à chaque couleur.
+  if (mode === 'blocabrac_plancher') {
+    return plancherPoints(basePoints[colorKey] || 0, attempts);
+  }
 
   if (mode === 'personnalise') {
     const entry = customScoring?.[colorKey];

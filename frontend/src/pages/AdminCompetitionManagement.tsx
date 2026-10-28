@@ -22,7 +22,7 @@ type Level = 'jaune' | 'vert' | 'bleu' | 'violet' | 'rouge' | 'noir' | 'blanc' |
 // ✅ Liste des niveaux (pour les sélecteurs)
 const levelOptions: Level[] = ['jaune', 'vert', 'bleu', 'violet', 'rouge', 'noir', 'blanc', 'rose'];
 
-// ✅ Chantier "comptes de points" : 4 modes. "officiel" (tops/zones) ne produit pas
+// ✅ Chantier "comptes de points" : 5 modes. "officiel" (tops/zones) ne produit pas
 // de points — voir climbingPoints.ts/competitionClassement.ts. Jamais utilisé par le
 // classement annuel (classementScore.ts n'a jamais connaissance de ce champ) :
 // uniquement les écrans de classement compétition.
@@ -31,6 +31,11 @@ const scoringModeOptions: { value: ScoringMode; label: string; description: stri
     value: 'blocabrac',
     label: 'Barème par couleur (essais comptabilisés)',
     description: 'Le barème par couleur utilisé partout ailleurs, avec dégression selon le nombre d\'essais.'
+  },
+  {
+    value: 'blocabrac_plancher',
+    label: 'Barème par couleur avec plancher (essais comptabilisés)',
+    description: 'Même ordre de couleurs que le barème habituel, mais un bloc réussi rapporte toujours au moins un quart de sa valeur : les points baissent vite sur les premiers essais, puis de moins en moins. Jamais zéro sur une réussite.'
   },
   {
     value: 'blocs_valides',

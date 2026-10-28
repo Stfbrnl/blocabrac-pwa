@@ -70,7 +70,7 @@ const entete = (openLabel: string, competitionName: string): string =>
   `🏆 Classement ${openLabel} - ${competitionName} 🏆\n\n`;
 
 /**
- * Modes à points (`blocabrac`, `blocs_valides`, `personnalise`).
+ * Modes à points (`blocabrac`, `blocabrac_plancher`, `blocs_valides`, `personnalise`).
  *
  * ⚠️ Les rangs viennent de `rankedEntries`, donc du MÊME calcul que les tableaux à l'écran,
  * départage des ex æquo compris. Une annonce qui numéroterait autrement que l'écran serait la

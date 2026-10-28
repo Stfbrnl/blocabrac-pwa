@@ -13,6 +13,16 @@ export interface ChangelogEntry {
 // les commits git.
 export const changelog: ChangelogEntry[] = [
   {
+    version: '2.76',
+    date: '2026-10-28',
+    title: 'En compétition, un bloc réussi rapporte toujours des points',
+    items: [
+      'Nouveau barème pour les compétitions, à partir du contest du 5 novembre : un bloc réussi rapporte toujours des points, quel que soit le nombre d\'essais — au minimum un quart de sa valeur. Les points baissent vite sur les premiers essais, puis de moins en moins. Un noir arraché en cinquante essais ne rapporte donc plus 0 point, mais 150.',
+      'La table complète est affichée à l\'accueil de la salle : pour chaque couleur, ce que rapporte un bloc selon le nombre d\'essais. Plus aucune couleur ne « s\'éteint » avant les autres — une couleur plus dure rapporte toujours plus, quel que soit le nombre d\'essais.',
+      'Ce barème ne concerne QUE les compétitions. Le classement des grimpeurs et vos points de tous les jours ne changent pas, et aucun de vos scores passés n\'a été recalculé.',
+    ],
+  },
+  {
     version: '2.74.2',
     date: '2026-10-18',
     title: 'Mini-compétitions des cours : les points ne bougent plus',

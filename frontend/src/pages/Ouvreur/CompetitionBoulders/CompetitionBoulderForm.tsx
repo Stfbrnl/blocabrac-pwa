@@ -14,6 +14,7 @@ import { auth, db } from '../../../services/firebaseConfig';
 import { walls, colorGrades, difficultyTypes, difficultyLevels } from '../../../config/gymConfig';
 import { uploadBoulderImage, getBoulderImageUrl } from '../../../services/imageStorage';
 import { buildOuvreurOptions, type StaffAccountOption } from '../../../utils/staffAccounts';
+import type { ScoringMode } from '../../../utils/climbingPoints';
 
 interface RelativeHold {
   x: number;
@@ -65,7 +66,7 @@ interface Competition {
   name: string;
   date: string;
   walls: string[];
-  scoring_mode?: 'blocabrac' | 'blocs_valides' | 'personnalise'; // ✅ Nouveau
+  scoring_mode?: ScoringMode;
 }
 
 interface ColorRating {

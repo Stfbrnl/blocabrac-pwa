@@ -15,6 +15,7 @@ import {
 import { collection, query, where, getDocs, orderBy, updateDoc, doc, writeBatch, deleteField } from 'firebase/firestore';
 import { db } from '../../../services/firebaseConfig';
 import { walls, colorGrades } from '../../../config/gymConfig';
+import type { ScoringMode } from '../../../utils/climbingPoints';
 
 interface Competition {
   id: string;
@@ -22,7 +23,7 @@ interface Competition {
   date: string;
   status: string;
   walls: string[];
-  scoring_mode?: 'blocabrac' | 'blocs_valides' | 'personnalise' | 'officiel'; // ✅ Nouveau
+  scoring_mode?: ScoringMode;
 }
 
 interface Boulder {

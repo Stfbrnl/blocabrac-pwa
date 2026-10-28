@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<title>Blocabrac — Barème des compétitions</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  /* ⚠️ CE FICHIER EST UN GABARIT, PAS LE DOCUMENT FINAL.
+     `frontend/scripts/regen-affiche-bareme.cjs` (npm run affiche:bareme) remplace cinq
+     marqueurs de commentaire, chacun exactement une fois (le script le COMPTE et échoue
+     sinon — ce qui est pourquoi ils ne sont pas répétés ici) :
+       FONT-FACE : la règle @font-face "Dosis", extraite de
+                   frontend/public/docs/aide-connexion-installation.html ;
+       LOGO      : le logo en base64, extrait du même fichier ;
+       ENTETE    : la ligne d'en-tête des nombres d'essais ;
+       TABLE     : les lignes du barème, CALCULÉES par le code de l'application
+                   (frontend/src/utils/climbingPoints.ts), jamais saisies à la main ;
+       PIED      : la date et le plancher, lus dans ce même module.
+     ⚠️ Ne jamais recopier des chiffres de barème dans ce gabarit : la table publiée aux
+     grimpeurs et celle que le code calcule doivent être LA MÊME, et c'est l'import du
+     module qui le garantit — pas une relecture. */
+  <!--FONT-FACE-->
+  :root {
+    /* Charte du site vitrine (www.blocabrac.fr) — mêmes valeurs que gymConfig.ts, dupliquées
+       ici parce qu'un document statique de public/docs/ n'a pas accès à ce module. */
+    --primary: #27B142;
+    --primary-dark: #177038;
+    --ink: #1a1a1a;
+    --muted: #5f6b7a;
+    --line: #d9e2ec;
+    --bg-soft: #f4f8fc;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: 'Dosis', 'Trebuchet MS', 'Segoe UI', sans-serif;
+    color: var(--ink);
+    background: #e8eef5;
+    font-size: 12pt;
+    line-height: 1.35;
+  }
+  .toolbar { text-align: center; padding: 10px; }
+  .toolbar button {
+    font-family: inherit; font-size: 13pt; font-weight: 700; cursor: pointer;
+    padding: 10px 22px; border: 0; border-radius: 8px;
+    background: var(--primary); color: #fff;
+  }
+  .page {
+    width: 210mm; min-height: 297mm; margin: 0 auto 10mm;
+    padding: 12mm 14mm 9mm; background: #fff;
+    display: flex; flex-direction: column;
+  }
+  .masthead { display: flex; align-items: center; gap: 14px; border-bottom: 3px solid var(--primary); padding-bottom: 8px; }
+  /* Le symbole du logo est BLANC : sans le fond vert de la charte il est invisible sur
+     du papier (constaté a la premiere generation). Meme reglage que le guide de connexion. */
+  .logo-badge { width: 54px; height: 54px; flex: 0 0 54px; border-radius: 12px; background: var(--primary); display: flex; align-items: center; justify-content: center; padding: 6px; }
+  .logo-badge img { width: 100%; height: 100%; object-fit: contain; }
+  h1 { margin: 0; font-size: 22pt; font-weight: 800; color: var(--primary-dark); letter-spacing: -0.3px; }
+  .masthead p { margin: 2px 0 0; color: var(--muted); font-size: 11.5pt; font-weight: 600; }
+
+  /* Les deux phrases du §5 : l'intention, avant les chiffres. */
+  .annonce { margin: 6mm 0 5mm; padding: 4mm 6mm; background: var(--bg-soft); border-left: 5px solid var(--primary); border-radius: 0 8px 8px 0; }
+  .annonce p { margin: 0 0 2mm; font-size: 14pt; font-weight: 700; }
+  .annonce p:last-child { margin-bottom: 0; font-weight: 600; color: var(--muted); font-size: 12.5pt; }
+
+  h2 { margin: 0 0 3mm; font-size: 14pt; font-weight: 800; color: var(--primary-dark); }
+  .sous-titre { margin: 0 0 4mm; color: var(--muted); font-size: 11pt; font-weight: 600; }
+
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  caption { caption-side: top; text-align: left; padding-bottom: 3mm; color: var(--muted); font-size: 10.5pt; font-weight: 600; }
+  th, td { border: 1px solid var(--line); padding: 2.6mm 1mm; text-align: center; font-size: 11.5pt; }
+  thead th { background: var(--primary-dark); color: #fff; font-weight: 700; font-size: 11pt; }
+  thead th:first-child { text-align: left; padding-left: 3mm; }
+  tbody th { text-align: left; padding-left: 3mm; font-weight: 700; background: var(--bg-soft); }
+  /* La pastille reprend la couleur réelle du bloc : la ligne se retrouve d'un coup d'œil
+     sur un document affiché au mur, sans avoir à lire le nom. */
+  .pastille { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 6px; border: 1px solid rgba(0,0,0,.28); vertical-align: -1px; }
+  tbody tr:nth-child(even) td { background: #fafcfe; }
+  td.flash { font-weight: 800; color: var(--primary-dark); }
+  td.plancher { font-weight: 700; }
+
+  .notes { margin-top: 5mm; }
+  .notes li { margin-bottom: 2mm; font-size: 11.5pt; }
+  .encadre { margin-top: auto; padding: 4mm 5mm; border: 2px dashed var(--primary); border-radius: 8px; background: var(--bg-soft); font-size: 11.5pt; font-weight: 600; }
+  footer { margin-top: 4mm; border-top: 1px solid var(--line); padding-top: 2.5mm; color: var(--muted); font-size: 9.5pt; display: flex; justify-content: space-between; }
+
+  @page { size: A4; margin: 0; }
+  @media print {
+    body { background: #fff; }
+    .toolbar { display: none; }
+    .page { margin: 0; box-shadow: none; }
+  }
+</style>
+</head>
+<body>
+
+  <div class="toolbar">
+    <button onclick="window.print()">🖨️ Imprimer / Enregistrer en PDF</button>
+  </div>
+
+  <div class="page">
+
+    <header class="masthead">
+      <div class="logo-badge"><img src="<!--LOGO-->" alt="Logo Blocabrac" /></div>
+      <div>
+        <h1>Barème des compétitions</h1>
+        <p>Combien rapporte un bloc réussi, selon le nombre d'essais</p>
+      </div>
+    </header>
+
+    <div class="annonce">
+      <p>Un bloc réussi rapporte toujours des points, quel que soit le nombre d'essais — au minimum un quart de sa valeur.</p>
+      <p>Les points baissent vite sur les premiers essais, puis de moins en moins.</p>
+    </div>
+
+    <h2>La table complète</h2>
+    <p class="sous-titre">Points gagnés pour un bloc <b>réussi</b>, selon la couleur et le nombre d'essais qu'il vous a fallu.</p>
+
+    <table>
+      <caption>Les colonnes sautent certains nombres d'essais : entre deux colonnes, les points baissent régulièrement. La dernière colonne est le minimum, et on ne descend jamais en dessous.</caption>
+      <thead>
+        <tr><!--ENTETE--></tr>
+      </thead>
+      <tbody>
+        <!--TABLE-->
+      </tbody>
+    </table>
+
+    <ul class="notes">
+      <li><b>Un bloc échoué rapporte 0 point</b>, mais déclarez vos échecs quand même : à égalité parfaite, c'est le nombre total d'essais qui départage, échecs compris.</li>
+      <li><b>Réussir du premier coup rapporte la valeur pleine</b> de la couleur (la colonne « 1 essai »). C'est le maximum : rien ne rapporte plus qu'un flash.</li>
+      <li><b>Une couleur plus dure rapporte toujours plus qu'une couleur plus facile</b>, quel que soit le nombre d'essais de chacun. Un noir arraché après beaucoup d'essais ne dépassera jamais un violet réussi du premier coup.</li>
+    </ul>
+
+    <div class="encadre">
+      ⚠️ Ce barème est celui des <b>compétitions</b>. Vos points de tous les jours et le classement des grimpeurs ne changent pas, et aucun de vos scores passés n'a été recalculé.
+    </div>
+
+    <footer>
+      <span>Blocabrac — blocabrac.web.app</span>
+      <span><!--PIED--></span>
+    </footer>
+
+  </div>
+
+</body>
+</html>

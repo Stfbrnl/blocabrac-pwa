@@ -69,7 +69,9 @@ export interface BoulderInput {
 // de la compétition, et non par sa couleur. C'est volontaire : en mode "blocs_valides" la
 // cotation ne reflète plus la difficulté (elle est cachée pendant l'épreuve, l'ouvreur pose
 // un `points_value` à la place), donc une règle fondée sur la couleur y serait fausse. Une
-// seule définition qui reste juste dans les trois modes à points.
+// seule définition qui reste juste dans les quatre modes à points. (Dans le mode à plancher,
+// un bloc réussi au premier essai vaut exactement sa base — le facteur y est 1 — donc la
+// dureté s'y lit comme dans "blocabrac" : rien à inventer.)
 //
 // ⚠️ Ce départage ne s'applique QU'À L'INTÉRIEUR d'un groupe à points égaux, ce qui borne
 // son effet : on ne peut pas y voir un grimpeur ayant réussi un seul bloc dur dépasser
