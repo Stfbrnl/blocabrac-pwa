@@ -10,6 +10,64 @@
 
 ---
 
+## `public/docs/` et le repli de navigation — l'écran blanc du 28/10/2026
+
+Les documents statiques (`frontend/public/docs/` : le guide de connexion, l'affiche du
+barème) sont ouverts **par leur adresse**, `blocabrac.web.app/docs/<fichier>`. Rien dans
+l'application n'y renvoie : on tape l'URL, ou on suit un lien depuis le topo.
+
+**Le symptôme.** Stéphane ouvre l'affiche du barème en ligne : **écran blanc**. Il doit
+aller chercher le fichier sur son disque.
+
+**Le mécanisme.** `vite-plugin-pwa` en `generateSW` enregistre une `NavigationRoute` avec
+`createHandlerBoundToURL("index.html")` — c'est ce qui fait marcher les URL profondes
+d'une application monopage. Sans refus explicite, **toute navigation** y passe, y compris
+vers un PDF. Le service worker répond donc `index.html` ; l'application se charge ; aucune
+route ne correspond à `/docs/...` ; et comme `AppRoutes.tsx` n'a **aucune route `*`**, il
+ne reste rien à l'écran.
+
+**Ce qui rend le défaut difficile à voir, et qui est le vrai enseignement :**
+
+- 🔴 **`curl` ne passe par aucun service worker.** Mes deux vérifications de déploiement
+  (`200`, `application/pdf`, octets identiques au dépôt) étaient **justes et sans rapport
+  avec la question**. J'avais mesuré la couche HTTP et conclu sur le navigateur — la même
+  faute que « un contrôle validé sur une méthode d'une API ne se transfère pas à une autre
+  méthode de la même API ». La tentation du transfert est maximale là où il est invalide.
+- ⚠️ **Les deux fichiers du même dossier avaient des sorts opposés.** Le `.html` est
+  **précaché** (`globPatterns` contient `html`), donc servi depuis le précache et jamais
+  soumis au repli : il marchait. Le `.pdf` n'est pas précaché (`pdf` absent des patterns),
+  donc il tombait dans le repli : écran blanc. Constater que « le document est accessible »
+  sur l'un ne dit **rien** de l'autre.
+- ⚠️ **Le guide de connexion était cassé depuis sa création**, sans que personne le
+  remarque — et la mémoire de projet le décrivait comme « servi en ligne ». Un document
+  que personne n'a encore eu besoin d'ouvrir peut être cassé depuis toujours.
+
+**Le correctif** : `navigateFallbackDenylist: [/^\/docs\//]` dans le bloc `workbox` de
+`vite.config.ts` (V2.76.2). Le service worker décline ces URL, qui repartent au réseau —
+vérifié dans un navigateur piloté, service worker **aux commandes** : `application/pdf` et
+`fromServiceWorker: false`, là où l'on avait `text/html` et le titre de l'app shell.
+
+⚠️ **La vérification demande deux précautions**, sans quoi elle ne mesure rien : un profil
+de navigateur **neuf** (sinon l'ancien service worker répond), et un **rechargement** après
+la première ouverture — sous `registerType: 'prompt'` le service worker ne contrôle pas la
+page au premier chargement, donc un test fait sans recharger passe au vert en ne traversant
+aucun service worker.
+
+⚠️ **Et le correctif ne vaut que pour les appareils ayant ACTIVÉ ce service worker-ci** :
+c'est toujours la version déployée qui gouverne sa propre succession. Un appareil resté sur
+l'ancienne continue d'avoir l'écran blanc jusqu'à sa mise à jour. Ne pas en conclure que le
+correctif ne marche pas.
+
+**Points ouverts, non traités ici** :
+
+- 🟠 **Il n'existe aucune route `*`.** L'écran blanc n'est pas propre aux PDF : c'est ce que
+  voit n'importe qui sur n'importe quelle URL inconnue, une faute de frappe comprise. Une
+  page terminale (du genre de `components/AccessDenied.tsx`, avec une sortie qui ne soit pas
+  elle-même une redirection) fermerait toute la classe.
+- 🟠 **Rien dans l'application ne renvoie vers ces documents.** Ils n'existent que par leur
+  URL, écrite dans le topo. Un emplacement d'administration qui les liste serait le bon
+  endroit — suggéré par l'utilisateur le 28/10/2026.
+
 ## Firestore persistent cache (IndexedDB) and the two cache layers
 
 `firebaseConfig.ts` initializes Firestore with `persistentLocalCache({ tabManager: persistentMultipleTabManager() })` (Chantier 3) instead of the default in-memory cache — decisive on competition day so re-opening the app doesn't re-transfer unchanged boulder images, and so validations queue locally and replay on reconnect if the venue's indoor coverage drops. `persistentMultipleTabManager()` is mandatory: without it, activation throws as soon as a second tab is open, which is exactly the admin's TV-display setup (two windows). Persistence is force-disabled (falls back to plain `initializeFirestore(app, {})`) whenever `MODE === 'test'` or `VITE_USE_EMULATOR === 'true'` — Firestore security rules aren't re-checked against cached reads, so a stale cache entry could silently pass what a live read would reject, masking a real permission bug in Playwright.
