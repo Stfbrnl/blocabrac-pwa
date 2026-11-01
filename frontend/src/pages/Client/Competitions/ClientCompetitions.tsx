@@ -757,12 +757,6 @@ const ClientCompetitions: React.FC = () => {
                       >
                         {registeredCompIds.has(competition.id) ? "Valider mes blocs" : "S'inscrire"}
                       </Button>
-                      <Button
-                        variant="outlined"
-                        onClick={() => loadBoulders(competition)}
-                      >
-                        Voir les détails
-                      </Button>
                     </Box>
                   </CardContent>
                 </Card>

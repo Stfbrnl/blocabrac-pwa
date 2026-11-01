@@ -13,6 +13,14 @@ export interface ChangelogEntry {
 // les commits git.
 export const changelog: ChangelogEntry[] = [
   {
+    version: '2.76.3',
+    date: '2026-11-01',
+    title: 'Un bouton qui ne faisait rien a été retiré',
+    items: [
+      'Dans « Mes compétitions », la fiche d\'une compétition portait un bouton « Voir les détails » qui n\'ouvrait aucun écran. Il est retiré : seul reste le bouton « S\'inscrire », qui devient « Valider mes blocs » une fois votre inscription prise.',
+    ],
+  },
+  {
     version: '2.76',
     date: '2026-10-28',
     title: 'En compétition, un bloc réussi rapporte toujours des points',
