@@ -252,6 +252,36 @@ procédure** : rattacher un mur neuf **le plus tard possible**, pas dès son ouv
 Grotte c'est gratuit, elle ouvre jeudi. Pour Grande Face et Dalle, deux jours de premières sont
 en jeu.
 
+### 5.1 — L'enjeu, chiffré (mesuré le 03/11 au soir)
+
+L'utilisateur a précisé que **la saisie est échelonnée exprès** : aujourd'hui, demain, et jeudi
+pour la Grotte. L'arrêt que j'avais relevé à 15 h 52 n'était donc pas une interruption. Ce qui
+rend l'arbitrage décidable, puisque les blocs arrivent par vagues :
+
+| | valeur |
+|---|---|
+| blocs à **couleur dure** saisis aujourd'hui sur les murs neufs | **6** (Grande Face n°1/n°3/n°13 noirs, n°12 blanc ; Dalle n°1/n°3 noirs) |
+| places de premières ascensions **déjà prises** sur ces 6 | **0** |
+| places encore libres | **30** |
+| votes de méthode déjà posés | **0** |
+
+**Rien n'est encore perdu.** Et les 3 blocs durs de la Grotte datent du **01/09** : ce sont les
+**anciens**, pas ceux de jeudi.
+
+**Le rattachement par vagues est SÛR**, vérifié dans le code plutôt que supposé : la liste des
+candidats écarte les blocs déjà activement rattachés à cette compétition —
+`candidates.filter(b => !(b.competition_active && b.competition_id === selectedCompetition))`,
+et son commentaire anticipait explicitement le cas. Donc **« Tout sélectionner » sur une seconde
+vague ne peut pas re-rattacher la première, et ne peut donc pas effacer ses ×2.** C'était le
+risque le plus plausible de perte silencieuse du multiplicateur avant jeudi ; il est fermé.
+
+⚠️ **Un piège à surveiller jeudi, d'une autre nature** : si la Grotte est **ré-ouverte** (nouveaux
+blocs physiques), ses **8 blocs actuels** doivent passer `is_active: false`, sinon ils seraient
+rattachés au Contest comme **blocs fantômes** — présents à l'écran, absents du mur. L'employée l'a
+fait sur les murs neufs (Grande Face : 26 inactifs pour 13 actifs ; Dalle : 19 pour 3), donc elle
+connaît le geste ; c'est une **vérification**, pas une inquiétude. `node scripts/mesure-blocs-contest.js`
+la rend immédiate : le compte de la Grotte doit valoir le nouveau jeu, pas anciens + nouveaux.
+
 **La forme générale, qui vaut au-delà de ce cas, et que j'ai écrite dans
 `docs/architecture/competitions.md` :** *une règle écrite pour une exception change de nature
 quand l'exception devient la règle.* Ici l'exclusion des blocs de compétition était une petite
@@ -321,9 +351,16 @@ l'utilisateur ; ma recommandation est devenue tiède après la mesure.
 
 1. **`e13e74d` : garder ou revert ?** Mon argument en §3 ; le volet « plafond » est de
    l'assurance, le volet « renumérotation » est un vrai correctif. Isolé dans un seul commit.
-2. **Les premières ascensions des murs neufs (§5)** : accepte-t-on qu'elles soient attribuées à
-   des grimpeurs d'après le contest, ou retarde-t-on le rattachement de Grande Face et Dalle à
-   jeudi ? C'est un arbitrage de valeur, pas technique — je ne le tranche pas.
+2. **Les premières ascensions des murs neufs (§5)** — la question a maintenant des chiffres
+   (§5.1) : **6 blocs durs, 0 place prise, 30 libres**. Et comme le rattachement par vagues est
+   sûr, l'arbitrage se réduit à **quand** rattacher, sans contrainte technique dans aucun sens.
+   **Ma recommandation : tout rattacher JEUDI, en une ou deux fois, dès que les blocs de la Grotte
+   sont saisis** — l'après-midi, pas à 17 h 55. Trois raisons : les 6 listes de premières restent
+   ouvertes aux grimpeurs de mercredi et jeudi (c'est tout leur intérêt sur un mur neuf) ; un seul
+   passage de ×2 au lieu de trois, donc moins d'occasions d'oublier un mur ; et la Grotte impose
+   de toute façon un geste jeudi, donc rattacher mercredi ne fait économiser aucun passage.
+   **Reste un arbitrage de valeur** — si le gérant préfère voir les blocs dans l'onglet
+   Compétitions dès demain pour rassurer les inscrits, c'est un argument que je ne peux pas peser.
 3. **Veut-on un filet sur la demi-clôture de §4.2 ?** Les 3 blocs sont soldés, mais la *cause*
    reste : une compétition passée en `terminée` côté admin peut laisser ses blocs
    `competition_active`, et **rien n'avertit** — deux fonctionnalités restent suspendues sans
