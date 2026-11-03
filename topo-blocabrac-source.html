@@ -169,11 +169,12 @@
     À distribuer ou consulter pendant la présentation. Le contenu reflète le
     fonctionnement réel de l'application au moment de l'impression — en cas de
     doute sur un réglage, vérifier directement dans l'application avant
-    d'agir. Version de l'application au moment de la génération : V2.71.2.
+    d'agir. Version de l'application au moment de la génération :
+    <span data-topo-version>{{APP_VERSION}}</span>.
   </div>
   <footer class="pagefoot">
     <span>Topo Blocabrac — édition papier</span>
-    <span>Généré le 25 septembre 2026</span>
+    <span data-topo-date>Généré le {{GENERATED_ON}}</span>
   </footer>
 </section>
 
@@ -390,9 +391,15 @@
   </footer>
 </section>
 
-<!-- PAGE 9 : 06 SUITE -->
+<!-- PAGE 10 : 06 SUITE — CATEGORIES, SAISON, FINALE.
+     ⚠️ 03/11/2026 : cette page n'avait NI en-tete courant NI titre, alors que les pages 9
+     et 11 qui l'encadrent portent les deux. Elle demarrait sur un paragraphe en corps de
+     texte, et son pied affichait « 06 · Barème de points » — l'etiquette de la page 8, pas
+     son contenu. Invisible au filet des pieds (qui mesure les DEBORDEMENTS, pas les
+     disparitions), visible a l'oeil. Le paragraphe en gras est devenu le titre. -->
 <section class="page">
-  <p style="font-weight:600; margin-bottom:6px;">Classement de compétition par catégorie</p>
+  <div class="eyebrow">06 &middot; Compétitions &amp; classement (suite)</div>
+  <h2 class="section-title">Classement par catégorie, saison et Finale</h2>
   <p style="color:var(--muted); font-size:12.5px; margin-top:0;">
     Tranches d'âge FFME (au 31 décembre de la saison) et genre, en plus du
     classement général « Open » :
@@ -442,7 +449,7 @@
   </div>
   <footer class="pagefoot">
     <span>Topo Blocabrac — édition papier</span>
-    <span>06 · Barème de points</span>
+    <span>06 · Catégories, saison et Finale</span>
   </footer>
 </section>
 

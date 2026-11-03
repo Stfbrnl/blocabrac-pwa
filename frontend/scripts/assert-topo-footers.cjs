@@ -25,7 +25,8 @@
 const { chromium } = require('playwright');
 const { pathToFileURL } = require('url');
 const { resolve, basename } = require('path');
-const { existsSync } = require('fs');
+const { existsSync, rmSync } = require('fs');
+const { preparerSourceEstampillee } = require('./topo-stamp.cjs');
 
 // 297 mm à 96 dpi, l'unité CSS de référence : c'est la hauteur que `.page` déclare en
 // `min-height`, donc une section PLUS HAUTE que ça déborde sur la suivante.
@@ -52,7 +53,17 @@ const CIBLES = process.argv.length > 2
       echec = true;
       continue;
     }
-    await page.goto(pathToFileURL(chemin).href, { waitUntil: 'networkidle' });
+    // ⚠️ 03/11/2026 — ON MESURE LA SOURCE ESTAMPILLÉE, pas la source brute. Depuis que
+    // l'estampille est dérivée, la source porte des jetons (`{{APP_VERSION}}`) plus longs
+    // que la valeur réelle (`V2.77`) : mesurer la source brute, c'est mesurer un document
+    // que PERSONNE n'imprime, et un retour à la ligne près du bord pourrait différer. Un
+    // filet ne garantit que ce qu'il mesure — il doit donc mesurer le document imprimé.
+    const { cheminTemp } = preparerSourceEstampillee(chemin);
+    try {
+      await page.goto(pathToFileURL(cheminTemp).href, { waitUntil: 'networkidle' });
+    } finally {
+      rmSync(cheminTemp, { force: true });
+    }
     // ⚠️ Mesurer en média `print` : c'est celui que `page.pdf()` applique, et une feuille
     // `@media print` pourrait changer les hauteurs. Mesurer à l'écran répondrait à côté.
     await page.emulateMedia({ media: 'print' });
