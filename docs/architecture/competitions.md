@@ -262,6 +262,84 @@ terminée — ou c'est un défaut réel. **Noté, pas touché** : ce n'est pas l
 semaine, et le gel tient.
 
 
+## Le plafond de 500 opérations par lot, et l’échelle qui l’a rendu atteignable (03/11/2026)
+
+Le 3 novembre, à J-2 du contest, le gérant a changé une hypothèse de conception sans le
+savoir : la compétition du 5 novembre porterait **tous les blocs de la salle** — dix murs —
+et non les quelques dizaines envisagées. Les murs Grande Face et Dalle venaient d’être
+ouverts (23 blocs, tous ×2), la Grotte devait suivre le jeudi.
+
+Rien dans le multiplicateur ne bronche à cette échelle. Ce qui bronche, c’est l’écran qui le
+règle. **`CompetitionBouldersList.tsx` a quatre gestes qui écrivent une opération PAR BLOC** :
+le rattachement de blocs quotidiens existants, l’application en masse du multiplicateur, la
+clôture (« Terminer la compétition »), et la renumérotation. Les trois premiers étaient un
+`writeBatch` unique et non borné ; le quatrième était une boucle de `updateDoc` séquentiels.
+
+### Pourquoi c’est la pire forme de panne, et non une lenteur
+
+Un `writeBatch` Firestore accepte **au maximum 500 opérations**, et son échec est
+**tout-ou-rien** : au-delà, `commit()` lève et absolument rien n’est écrit. Le défaut
+appartient donc exactement à la classe décrite dans
+`docs/architecture/tests-et-fiabilite.md` — une panne **permanente et déterministe**
+(chaque nouvelle tentative échoue à l’identique) **déguisée en panne transitoire** par un
+« Une erreur est survenue » générique. Celui qui clique le soir d’un contest rechargerait,
+recliquerait, et conclurait que l’application est cassée.
+
+Le geste le plus exposé est **la clôture**, et c’est aussi le moins rattrapable : un échec
+total y laisse tous les blocs `competition_active`, donc la cotation cachée invisible et la
+salle entière encore en compétition.
+
+### Ce qui a été fait, et la raison de la forme choisie
+
+`utils/firestoreBatchChunks.ts` — `decouperEnLots`, pure, sans aucun import Firestore (donc
+testable sans émulateur, même discipline que `classementFlushWrites.ts`), et
+`MAX_OPS_PAR_LOT = 450`. Le motif n’est pas neuf : il existait **déjà en ligne** dans
+`AdminUsers.tsx` (`setLevelOverrideForAll`), avec le même 450 et le même commentaire. Ce
+module le nomme une fois au lieu de le recopier — ce n’est pas un second chiffre à tenir
+synchronisé.
+
+> ⚠️ **C’est un garde de SEUIL, pas une optimisation.** Sous 450, `decouperEnLots` rend un
+> lot unique : le geste est identique à l’ancien, atomicité comprise. Il ne change quelque
+> chose que dans le cas qui, sans lui, ne marcherait pas du tout. C’est ce qui rend son ajout
+> sans risque à J-2 — et c’est la propriété qu’un test épingle en premier, parce qu’un
+> découpage qui rendrait deux lots de 75 pour 150 blocs casserait l’atomicité de la clôture
+> sans qu’aucun autre test ne s’en aperçoive : l’écran continuerait de « marcher ».
+
+### La contrepartie, qui devait être dite et non cachée
+
+> ⚠️ **Le découpage échange « rien n’est écrit » contre « peut-être une partie ».** Un garde
+> qui améliore le pire cas dégrade donc le cas moyen de l’échec, et le message d’erreur doit
+> le DIRE.
+
+Le cas le plus net était l’action en masse, dont le message affirmait **« Aucun bloc n’a été
+modifié »** : vrai avec un lot unique, **faux** dès qu’il y en a deux. Un message faux sur un
+écran qui règle des points vaut pire que pas de message — l’ouvreur se fierait à une salle
+qu’il croit intacte. Les quatre gestes comptent désormais leurs lots commités et distinguent
+« rien écrit » de « une partie écrite », en nommant la réparation : les trois écritures sont
+**idempotentes**, relancer la même sélection est sans danger.
+
+### L’effet de bord de l’échelle que personne n’aurait vu — et qui n’est PAS un bug
+
+`firestore.rules` refuse **côté serveur** les premiers ascensionnistes et les votes de
+méthode sur tout bloc portant `competition_active` (« la méthode employée renseigne sur la
+difficulté, qui reste cachée pendant une grosse compétition »). La règle a été écrite pour
+quelques blocs ; avec toute la salle engagée elle s’applique à **tous les blocs noir, blanc
+et rose de la salle** pendant toute la durée de l’épreuve.
+
+Les votes de méthode se rattrapent — on vote après. **Les premiers ascensionnistes ne se
+rattrapent pas** : `shouldRecordFirstAscent` est évalué à l’instant de la validation, et
+rien n’est rétroactif. La liste n’est pas perdue (le document n’est jamais supprimé, et les
+cinq places se rouvrent dès la clôture) : elle est **mal attribuée**. Sur les murs ouverts
+la veille du contest, les cinq noms finiront par être ceux des grimpeurs d’après le
+5 novembre, pas ceux qui ont réellement fait les premières.
+
+> ⚠️ **Ce n’est pas un défaut à corriger dans le code, c’est une conséquence à arbitrer dans
+> la PROCÉDURE** : rattacher un mur neuf à une compétition le plus tard possible, et non dès
+> son ouverture. Forme générale, qui vaut au-delà de ce cas : **une règle écrite pour une
+> exception change de nature quand l’exception devient la règle.** Ici l’exclusion des blocs
+> de compétition était une petite réserve ; « tous les blocs de la salle » en fait une
+> suspension générale de deux fonctionnalités, sans qu’une seule ligne de code ait bougé.
+
 ## `competitions.registered_count` — le seul document partagé du chemin du contest (19/10/2026)
 
 Question posée par ClaudeNav (`docs/handoffs/2026-10-19-CN-apres-mesures.md` §2) : **existe-t-il

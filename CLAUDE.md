@@ -309,6 +309,31 @@ compétition démarre** (demande explicite). Le changer en cours d'épreuve chan
 tout le monde rétroactivement : à régler **avant** le coup d'envoi et **avant** la publication du
 palmarès, qui est immuable. Tenu par la procédure, pas par les règles.
 
+### ⚠️ Un `writeBatch` plafonne à 500 opérations, et son échec est tout-ou-rien
+
+📖 **Récit complet (l'échelle qui l'a rendu atteignable, et l'effet de bord qu'elle a produit sur les premiers ascensionnistes) : [`docs/architecture/competitions.md`](docs/architecture/competitions.md).**
+
+Tout geste qui écrit **une opération par bloc** (ou par compte) passe par
+`utils/firestoreBatchChunks.ts`'s `decouperEnLots`, jamais par un lot unique non borné.
+Au-delà de 500, `commit()` lève et **rien** n'est écrit : c'est la classe de panne que ce
+dépôt redoute le plus — **permanente et déterministe** (chaque nouvelle tentative échoue à
+l'identique) sous un « Une erreur est survenue » qui la fait passer pour transitoire.
+
+⚠️ **`decouperEnLots` est un garde de SEUIL, pas une optimisation** : sous 450 il rend un lot
+unique, donc le geste est inchangé, atomicité comprise. Il ne change quelque chose que dans
+le cas qui, sans lui, ne marcherait pas du tout.
+
+⚠️ **Le découpage échange « rien n'est écrit » contre « peut-être une partie » : le message
+d'erreur doit le DIRE.** Un message qui affirme « Aucun bloc n'a été modifié » est vrai avec
+un lot et **faux** avec deux — et un message faux sur un écran qui règle des points est pire
+que pas de message, puisque l'ouvreur se fie alors à une salle qu'il croit intacte. Les quatre
+gestes de `CompetitionBouldersList.tsx` comptent donc leurs lots commités et distinguent les
+deux cas.
+
+⚠️ **Et une boucle de `updateDoc` séquentiels n'est pas une solution de repli** : c'est un
+aller-retour réseau par document, soit une demi-minute d'écran figé sur une salle entière,
+sans aucune atomicité ni retour visuel. C'était le cas de « Réorganiser les numéros ».
+
 ### Bloc Roulette — a free, stateless daily-challenge draw
 
 📖 **Récit complet (le catalogue, les familles, les traversées, les bornes de niveau) : [`docs/architecture/jeu-et-missions.md`](docs/architecture/jeu-et-missions.md).**

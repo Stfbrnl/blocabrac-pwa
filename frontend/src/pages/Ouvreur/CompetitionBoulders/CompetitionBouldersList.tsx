@@ -16,6 +16,7 @@ import { collection, query, where, getDocs, orderBy, updateDoc, doc, writeBatch,
 import { db } from '../../../services/firebaseConfig';
 import { walls, colorGrades } from '../../../config/gymConfig';
 import type { ScoringMode } from '../../../utils/climbingPoints';
+import { decouperEnLots, MAX_OPS_PAR_LOT } from '../../../utils/firestoreBatchChunks';
 
 interface Competition {
   id: string;
@@ -233,17 +234,25 @@ export default function CompetitionBouldersList(): JSX.Element {
     setBoulderToRemove(null);
   };
 
+  // ⚠️ 03/11/2026 — ÉTAIT une boucle de `updateDoc` séquentiels, un aller-retour réseau PAR
+  // BLOC. Correct à 23 blocs, intenable à l'échelle de la salle entière : ~150 blocs font
+  // autant d'allers-retours, soit une demi-minute d'écran figé sans aucun retour visuel — et
+  // un échec à mi-parcours laissait une renumérotation à MOITIÉ FAITE sans le dire.
   const handleReorder = async (): Promise<void> => {
+    let lotsFaits = 0;
     try {
-      for (const boulder of boulders) {
-        await updateDoc(doc(db, 'boulders', boulder.id), {
-          number: boulder.number
-        });
+      for (const lot of decouperEnLots(boulders)) {
+        const batch = writeBatch(db);
+        lot.forEach((boulder) => batch.update(doc(db, 'boulders', boulder.id), { number: boulder.number }));
+        await batch.commit();
+        lotsFaits += 1;
       }
       alert('Numéros réorganisés avec succès !');
     } catch (error: unknown) {
       console.error('Erreur lors de la réorganisation :', error);
-      alert('Une erreur est survenue lors de la réorganisation.');
+      alert(lotsFaits === 0
+        ? 'Une erreur est survenue lors de la réorganisation. Aucun numéro n\'a été modifié.'
+        : 'Une erreur est survenue EN COURS de réorganisation : une partie des numéros a été écrite, l\'autre non. Rechargez la page et relancez — l\'opération se rejoue sans dommage.');
     }
   };
 
@@ -270,25 +279,34 @@ export default function CompetitionBouldersList(): JSX.Element {
   // normale de bloc quotidien.
   const handleConfirmAddExisting = async (): Promise<void> => {
     if (selectedExistingIds.size === 0) return;
+    // ⚠️ 03/11/2026 — DÉCOUPÉ EN LOTS : le contest du 5 novembre porte TOUS les blocs de la
+    // salle (10 murs) et non les quelques dizaines prévues, et « Tout sélectionner » rattache
+    // le vivier entier d'un coup — une opération par bloc. Au-delà de 500, `commit()` lève et
+    // RIEN n'est écrit : une panne permanente et déterministe sous un message générique.
+    // Sous le seuil, `decouperEnLots` rend UN lot : le geste est inchangé, atomicité comprise.
+    let lotsFaits = 0;
     try {
       setIsAddingExisting(true);
-      const batch = writeBatch(db);
-      selectedExistingIds.forEach((id) => {
-        // ✅ 2026-11-03-CN-plan-multiplicateur-v2.md §0 : LA REMISE À ZÉRO DU MULTIPLICATEUR
-        // EST ICI, au rattachement — pas à la clôture. `points_multiplier` est conservé à la
-        // fin d'une compétition (c'est le seul moyen de recalculer juste le classement d'une
-        // épreuve terminée, puisque `competition_results` ne stocke aucun point), donc un
-        // bloc quotidien qui a déjà servi dans une compétition doublée le porte encore. Sans
-        // cet effacement, il hériterait silencieusement du ×2 dans la compétition SUIVANTE.
-        // C'est le seul endroit où un bloc change de compétition, et la clé est une de plus
-        // dans un objet déjà écrit : coût nul.
-        batch.update(doc(db, 'boulders', id), {
-          competition_id: selectedCompetition,
-          competition_active: true,
-          points_multiplier: deleteField(),
+      for (const lot of decouperEnLots([...selectedExistingIds])) {
+        const batch = writeBatch(db);
+        lot.forEach((id) => {
+          // ✅ 2026-11-03-CN-plan-multiplicateur-v2.md §0 : LA REMISE À ZÉRO DU MULTIPLICATEUR
+          // EST ICI, au rattachement — pas à la clôture. `points_multiplier` est conservé à la
+          // fin d'une compétition (c'est le seul moyen de recalculer juste le classement d'une
+          // épreuve terminée, puisque `competition_results` ne stocke aucun point), donc un
+          // bloc quotidien qui a déjà servi dans une compétition doublée le porte encore. Sans
+          // cet effacement, il hériterait silencieusement du ×2 dans la compétition SUIVANTE.
+          // C'est le seul endroit où un bloc change de compétition, et la clé est une de plus
+          // dans un objet déjà écrit : coût nul.
+          batch.update(doc(db, 'boulders', id), {
+            competition_id: selectedCompetition,
+            competition_active: true,
+            points_multiplier: deleteField(),
+          });
         });
-      });
-      await batch.commit();
+        await batch.commit();
+        lotsFaits += 1;
+      }
 
       const added = existingCandidates
         .filter(b => selectedExistingIds.has(b.id))
@@ -300,7 +318,12 @@ export default function CompetitionBouldersList(): JSX.Element {
       setOpenAddExistingDialog(false);
     } catch (error: unknown) {
       console.error('Erreur lors de l\'ajout des blocs quotidiens :', error);
-      alert('Une erreur est survenue lors de l\'ajout des blocs quotidiens.');
+      // ⚠️ Le découpage échange « rien n'est écrit » contre « peut-être une partie » : le
+      // message doit le DIRE. Un rattachement est idempotent, relancer la même sélection
+      // est sans danger — c'est ce qui rend la réparation évidente pour l'ouvreur.
+      alert(lotsFaits === 0
+        ? 'Une erreur est survenue lors de l\'ajout des blocs quotidiens. Aucun bloc n\'a été rattaché.'
+        : 'Une erreur est survenue APRÈS le rattachement d\'une partie des blocs. Rechargez la page, puis relancez la même sélection : les blocs déjà rattachés ne seront pas affectés.');
     } finally {
       setIsAddingExisting(false);
     }
@@ -325,34 +348,45 @@ export default function CompetitionBouldersList(): JSX.Element {
   // appartient au groupe de `competition_id` (conservé pour l'historique), pas à celui de
   // `points_value` (effacé). La remise à zéro vit au RATTACHEMENT (handleConfirmAddExisting),
   // ce qui ferme le défaut inverse — l'héritage du ×2 par une compétition future.
+  // ⚠️ 03/11/2026 — DÉCOUPÉ EN LOTS, même raison qu'au rattachement, et c'est ICI que
+  // l'enjeu est le plus grand : « Terminer la compétition » écrit une opération par bloc de
+  // l'épreuve. Avec toute la salle engagée, un lot unique pouvait dépasser 500 et ÉCHOUER
+  // ENTIÈREMENT, à chaque tentative, le soir du contest — laissant tous les blocs
+  // `competition_active` et la cotation cachée invisible.
   const handleConfirmMigrate = async (): Promise<void> => {
+    let lotsFaits = 0;
     try {
       setIsMigrating(true);
-      const batch = writeBatch(db);
-      boulders.forEach((boulder) => {
-        if (isReusedDailyBoulder(boulder)) {
-          // ✅ Même raison que dans handleConfirmRemove : la valeur en points ne
-          // vaut que pour cette compétition, elle doit repartir avec elle.
-          batch.update(doc(db, 'boulders', boulder.id), { competition_active: deleteField(), points_value: deleteField() });
-        } else {
-          // ✅ Ce bloc devient un bloc quotidien ordinaire : s'il est un jour
-          // réutilisé dans une future compétition en mode "Blocs validés", sa
-          // valeur en points doit être ressaisie pour cette nouvelle épreuve,
-          // jamais hériter de celle d'une compétition passée déjà terminée.
-          batch.update(doc(db, 'boulders', boulder.id), {
-            type: 'daily',
-            color: boulder.difficulty,
-            points_value: deleteField(),
-          });
-        }
-      });
-      await batch.commit();
+      for (const lot of decouperEnLots(boulders)) {
+        const batch = writeBatch(db);
+        lot.forEach((boulder) => {
+          if (isReusedDailyBoulder(boulder)) {
+            // ✅ Même raison que dans handleConfirmRemove : la valeur en points ne
+            // vaut que pour cette compétition, elle doit repartir avec elle.
+            batch.update(doc(db, 'boulders', boulder.id), { competition_active: deleteField(), points_value: deleteField() });
+          } else {
+            // ✅ Ce bloc devient un bloc quotidien ordinaire : s'il est un jour
+            // réutilisé dans une future compétition en mode "Blocs validés", sa
+            // valeur en points doit être ressaisie pour cette nouvelle épreuve,
+            // jamais hériter de celle d'une compétition passée déjà terminée.
+            batch.update(doc(db, 'boulders', boulder.id), {
+              type: 'daily',
+              color: boulder.difficulty,
+              points_value: deleteField(),
+            });
+          }
+        });
+        await batch.commit();
+        lotsFaits += 1;
+      }
       setBoulders([]);
       setOpenMigrateDialog(false);
       alert('La compétition est terminée : les blocs créés pour l\'épreuve sont maintenant des blocs quotidiens (à recoter depuis "Gérer les blocs quotidiens"), et les blocs quotidiens réutilisés ont simplement quitté la compétition.');
     } catch (error: unknown) {
       console.error('Erreur lors du basculement en blocs quotidiens :', error);
-      alert('Une erreur est survenue lors du basculement en blocs quotidiens.');
+      alert(lotsFaits === 0
+        ? 'Une erreur est survenue lors du basculement en blocs quotidiens. Aucun bloc n\'a été modifié.'
+        : 'Une erreur est survenue APRÈS le basculement d\'une partie des blocs. Rechargez la page et relancez « Terminer la compétition » : les blocs déjà basculés ne seront pas affectés.');
     } finally {
       setIsMigrating(false);
     }
@@ -406,20 +440,31 @@ export default function CompetitionBouldersList(): JSX.Element {
   const handleBulkMultiplier = async (value: number): Promise<void> => {
     if (selectedForMultiplier.size === 0) return;
     const cibles = [...selectedForMultiplier];
+    let lotsFaits = 0;
     try {
       setIsApplyingBulk(true);
-      const batch = writeBatch(db);
-      cibles.forEach((id) => {
-        batch.update(doc(db, 'boulders', id), {
-          points_multiplier: value === 1 ? deleteField() : value,
+      // ⚠️ Découpé comme les autres gestes de cet écran : « tout sélectionner puis ×2 » sur
+      // une salle entière dépasserait la limite de 500 opérations par lot.
+      for (const lot of decouperEnLots(cibles)) {
+        const batch = writeBatch(db);
+        lot.forEach((id) => {
+          batch.update(doc(db, 'boulders', id), {
+            points_multiplier: value === 1 ? deleteField() : value,
+          });
         });
-      });
-      await batch.commit();
+        await batch.commit();
+        lotsFaits += 1;
+      }
       setBoulders(prev => prev.map(b => (selectedForMultiplier.has(b.id) ? { ...b, points_multiplier: value } : b)));
       setSelectedForMultiplier(new Set());
     } catch (error: unknown) {
       console.error('Erreur lors de l\'application en masse du multiplicateur :', error);
-      alert('Les multiplicateurs n\'ont pas pu être enregistrés. Aucun bloc n\'a été modifié.');
+      // ⚠️ Le message affirmait « Aucun bloc n'a été modifié » : vrai avec un lot unique,
+      // FAUX dès qu'il y en a deux. Un message faux sur un écran de réglage de points est
+      // pire que pas de message — l'ouvreur se fierait à une salle qu'il croit intacte.
+      alert(lotsFaits === 0
+        ? 'Les multiplicateurs n\'ont pas pu être enregistrés. Aucun bloc n\'a été modifié.'
+        : 'Une partie seulement des multiplicateurs a été enregistrée (' + (lotsFaits * MAX_OPS_PAR_LOT) + ' bloc(s) au plus). Rechargez la page pour voir l\'état réel avant de relancer.');
     } finally {
       setIsApplyingBulk(false);
     }
