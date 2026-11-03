@@ -41,6 +41,11 @@ interface Boulder {
   is_active: boolean;
   difficulty_level?: 'Plus' | 'Égal' | 'Moins';
   points_value?: number; // ✅ Mode de comptage "Blocs validés" uniquement
+  // ✅ docs/plans/2026-11-03-CN-plan-multiplicateur-v2.md : multiplicateur de points pour
+  // CETTE compétition. Absent = ×1. Un nombre et non un booléen pour n'avoir jamais à migrer
+  // la donnée le jour d'un ×3 ; l'interface n'expose que ×1 et ×2, et `firestore.rules`
+  // (isValidPointsMultiplier) porte la liste blanche qui fait foi.
+  points_multiplier?: number;
   openedBy?: { uid: string; displayName: string } | null; // ✅ docs/plans/PLAN-ouvreur-createur-bloc.md
 }
 
@@ -211,6 +216,10 @@ export default function CompetitionBouldersList(): JSX.Element {
       // ✅ Une valeur en points n'a de sens que pour CETTE compétition (mode "Blocs
       // validés") — la laisser survivrait sur un bloc redevenu purement quotidien.
       points_value: deleteField(),
+      // ✅ Même raison, et même moment : un bloc retiré de l'épreuve ne doit pas rester
+      // doublé. Contrairement à "Terminer la compétition" (voir handleConfirmMigrate), ce
+      // geste est une CORRECTION d'ajout — il n'y a pas d'histoire à préserver.
+      points_multiplier: deleteField(),
     });
     setBoulders(boulders.filter(b => b.id !== boulderToRemove));
     setOpenRemoveDialog(false);
@@ -258,13 +267,28 @@ export default function CompetitionBouldersList(): JSX.Element {
       setIsAddingExisting(true);
       const batch = writeBatch(db);
       selectedExistingIds.forEach((id) => {
-        batch.update(doc(db, 'boulders', id), { competition_id: selectedCompetition, competition_active: true });
+        // ✅ 2026-11-03-CN-plan-multiplicateur-v2.md §0 : LA REMISE À ZÉRO DU MULTIPLICATEUR
+        // EST ICI, au rattachement — pas à la clôture. `points_multiplier` est conservé à la
+        // fin d'une compétition (c'est le seul moyen de recalculer juste le classement d'une
+        // épreuve terminée, puisque `competition_results` ne stocke aucun point), donc un
+        // bloc quotidien qui a déjà servi dans une compétition doublée le porte encore. Sans
+        // cet effacement, il hériterait silencieusement du ×2 dans la compétition SUIVANTE.
+        // C'est le seul endroit où un bloc change de compétition, et la clé est une de plus
+        // dans un objet déjà écrit : coût nul.
+        batch.update(doc(db, 'boulders', id), {
+          competition_id: selectedCompetition,
+          competition_active: true,
+          points_multiplier: deleteField(),
+        });
       });
       await batch.commit();
 
       const added = existingCandidates
         .filter(b => selectedExistingIds.has(b.id))
-        .map(b => ({ ...b, competition_id: selectedCompetition, competition_active: true }));
+        // ✅ `points_multiplier: undefined` et non l'omission : l'état local doit refléter
+        // l'effacement qui vient d'être écrit, sinon le sélecteur afficherait ×2 sur un bloc
+        // redevenu ×1 en base.
+        .map(b => ({ ...b, competition_id: selectedCompetition, competition_active: true, points_multiplier: undefined }));
       setBoulders(prev => [...prev, ...added].sort((a, b) => (a.number || 0) - (b.number || 0)));
       setOpenAddExistingDialog(false);
     } catch (error: unknown) {
@@ -284,6 +308,16 @@ export default function CompetitionBouldersList(): JSX.Element {
   // conservé dans les deux cas : les pages de résultats/classement (déjà basées
   // uniquement sur ce champ, sans filtre de type) doivent pouvoir reconstituer
   // l'historique d'une compétition terminée.
+  //
+  // ⚠️ 2026-11-03-CN-plan-multiplicateur-v2.md §0 — `points_multiplier` est VOLONTAIREMENT
+  // ABSENT des deux `batch.update` ci-dessous, et cette absence est le cœur du chantier :
+  // `competition_results` ne stocke QUE des faits bruts (succès, essais, note, cotation
+  // proposée) et jamais de points — les points sont recalculés à chaque affichage depuis le
+  // bloc et le mode. Effacer le multiplicateur ici rendrait donc au simple, pour toujours, les
+  // blocs doublés d'une compétition terminée : l'histoire changerait après coup. Le champ
+  // appartient au groupe de `competition_id` (conservé pour l'historique), pas à celui de
+  // `points_value` (effacé). La remise à zéro vit au RATTACHEMENT (handleConfirmAddExisting),
+  // ce qui ferme le défaut inverse — l'héritage du ×2 par une compétition future.
   const handleConfirmMigrate = async (): Promise<void> => {
     try {
       setIsMigrating(true);

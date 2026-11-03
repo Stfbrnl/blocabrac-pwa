@@ -42,6 +42,28 @@ service cloud.firestore {
              (data.openerNote is string && data.openerNote.size() <= 300);
     }
 
+    // ✅ docs/plans/2026-11-03-CN-plan-multiplicateur-v2.md §D1 : multiplicateur de points
+    // d'un bloc de compétition. LISTE BLANCHE, pas un simple `is number` : sans elle un `0`
+    // ou un `0.5` posé par erreur annulerait des points sans rien afficher d'anormal — le
+    // champ ne se lit nulle part avant d'avoir déjà faussé un classement.
+    //
+    // L'absence du champ et `null` valent ×1 (piège V2.27, même court-circuit que
+    // isValidOpenerNote) — c'est l'état de l'immense majorité des blocs, et c'est aussi ce
+    // qu'écrit `deleteField()` au rattachement et au retrait de l'épreuve.
+    //
+    // ⚠️ Élargir plus tard (×3) = une valeur de plus ici et une option de plus dans le menu :
+    // aucune migration, aucun changement de calcul. C'est la raison pour laquelle le champ est
+    // un nombre et non un booléen.
+    //
+    // ⚠️ Aucun get() ici, donc appliquée inconditionnellement à chaque écriture du staff sans
+    // la borner à affectedKeys() : le coût est nul.
+    function isValidPointsMultiplier(data) {
+      return !('points_multiplier' in data) ||
+             data.points_multiplier == null ||
+             (data.points_multiplier is number &&
+              (data.points_multiplier == 1 || data.points_multiplier == 2));
+    }
+
     // ========== Carnet de méthodes (PLAN-anecdote-methodes-missions.md §B) ==========
     // ✅ Vocabulaire FIXE et COURT (§B.3, §B.5) — c'est précisément ce qui rend les règles
     // ci-dessous étanches, contrairement à `firstAscents` (liste libre, non bornable par clé).
@@ -512,7 +534,8 @@ service cloud.firestore {
       allow create: if request.auth != null &&
                       (isUserRole("ouvreur") || isUserRole("admin")) &&
                       isValidOpenedBy(request.resource.data) &&
-                      isValidOpenerNote(request.resource.data);
+                      isValidOpenerNote(request.resource.data) &&
+                      isValidPointsMultiplier(request.resource.data);
       allow delete: if request.auth != null &&
                       (isUserRole("ouvreur") ||
                        isUserRole("admin"));
@@ -537,7 +560,12 @@ service cloud.firestore {
                        // ✅ PLAN-anecdote-methodes-missions.md §A.2 : pas de get() dans
                        // isValidOpenerNote(), donc pas besoin de la borner à affectedKeys()
                        // pour préserver le coût — appliquée à chaque écriture staff.
-                       isValidOpenerNote(request.resource.data) ||
+                       isValidOpenerNote(request.resource.data) &&
+                       // ✅ 2026-11-03-CN-plan-multiplicateur-v2.md §D1 : même raison, liste
+                       // blanche [1, 2] sans get(). Les deux branches `client` ci-dessous
+                       // sont bornées par hasOnly([...]) : un client ne peut donc jamais
+                       // toucher ce champ, aucune règle supplémentaire n'est nécessaire.
+                       isValidPointsMultiplier(request.resource.data) ||
                        (isUserRole("client") &&
                         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['firstAscents']) &&
                         resource.data.type == 'daily' &&

@@ -72,10 +72,19 @@ beforeEach(async () => {
 });
 
 // Reproduit exactement handleConfirmAddExisting() de CompetitionBouldersList.tsx.
+//
+// ⚠️ Ceci TRANSCRIT le handler, donc ne peut pas détecter que le handler a changé : c'est
+// `test/contrats/pointsMultiplier.test.ts` qui garde le cycle de vie de `points_multiplier`
+// sur les sources elles-mêmes. Ce qui est vérifié ICI est une autre question, que seul
+// l'émulateur tranche : les RÈGLES acceptent-elles cette écriture.
 async function addExistingToCompetition(db: Firestore, boulderIds: string[]) {
   const batch = writeBatch(db);
   boulderIds.forEach((id) => {
-    batch.update(doc(db, 'boulders', id), { competition_id: COMPETITION_ID, competition_active: true });
+    batch.update(doc(db, 'boulders', id), {
+      competition_id: COMPETITION_ID,
+      competition_active: true,
+      points_multiplier: deleteField(),
+    });
   });
   await batch.commit();
 }
@@ -170,5 +179,103 @@ describe('Ouvreur : ajout de blocs quotidiens existants à une compétition', ()
     expect(d2?.competition_id).toBeUndefined();
     expect(d2?.competition_active).toBeUndefined();
     expect(d2).toMatchObject({ type: 'daily', color: 'rouge' });
+  });
+});
+
+// ✅ docs/plans/2026-11-03-CN-plan-multiplicateur-v2.md §D1 et §4 — multiplicateur de points.
+//
+// Deux choses distinctes sont vérifiées ici, et aucune des deux ne l'est ailleurs :
+//   1. la LISTE BLANCHE des règles ([1, 2], l'absence et null valant ×1) — c'est le seul
+//      rempart contre un `0` ou un `0.5` qui annulerait des points sans rien afficher
+//      d'anormal, puisque le champ ne se lit nulle part avant d'avoir faussé un classement ;
+//   2. que les RÈGLES laissent passer les trois gestes du cycle de vie du §0. Le cycle de vie
+//      lui-même (quel geste écrit quoi) est gardé par `test/contrats/pointsMultiplier.test.ts`
+//      sur les sources : un test d'émulateur qui pose lui-même l'écriture ne peut pas dire si
+//      l'application la fait — « un test ne doit jamais créer la donnée dont il teste
+//      l'existence ».
+describe('Multiplicateur de points : liste blanche et cycle de vie', () => {
+  it("accepte ×1 et ×2, l'absence du champ, et null", async () => {
+    const ouvreurDb = testEnv.authenticatedContext(OUVREUR_UID).firestore();
+    await addExistingToCompetition(ouvreurDb, ['d2']);
+
+    await assertSucceeds(updateDoc(doc(ouvreurDb, 'boulders', 'd2'), { points_multiplier: 2 }));
+    expect((await getDoc(doc(ouvreurDb, 'boulders', 'd2'))).data()?.points_multiplier).toBe(2);
+
+    await assertSucceeds(updateDoc(doc(ouvreurDb, 'boulders', 'd2'), { points_multiplier: 1 }));
+    await assertSucceeds(updateDoc(doc(ouvreurDb, 'boulders', 'd2'), { points_multiplier: null }));
+    await assertSucceeds(updateDoc(doc(ouvreurDb, 'boulders', 'd2'), { points_multiplier: deleteField() }));
+    // Une écriture qui ne mentionne pas le champ reste libre, comme avant.
+    await assertSucceeds(updateDoc(doc(ouvreurDb, 'boulders', 'd2'), { instructions: 'départ assis' }));
+  });
+
+  it("REFUSE 0, 0.5, 3, un négatif, une chaîne et un booléen — y compris à l'ouvreur", async () => {
+    const ouvreurDb = testEnv.authenticatedContext(OUVREUR_UID).firestore();
+    await addExistingToCompetition(ouvreurDb, ['d2']);
+
+    for (const valeur of [0, 0.5, 3, -2, '2', true]) {
+      await assertFails(updateDoc(doc(ouvreurDb, 'boulders', 'd2'), { points_multiplier: valeur }));
+    }
+    // Le refus n'a rien laissé passer : le champ est resté effacé par le rattachement.
+    expect((await getDoc(doc(ouvreurDb, 'boulders', 'd2'))).data()?.points_multiplier).toBeUndefined();
+  });
+
+  it("refuse une valeur hors liste À LA CRÉATION d'un bloc, pas seulement en modification", async () => {
+    const ouvreurDb = testEnv.authenticatedContext(OUVREUR_UID).firestore();
+    const base = {
+      wall: 'Dalle', number: 9, difficulty: 'rouge', type: 'competition',
+      competition_id: COMPETITION_ID, is_active: true,
+    };
+    await assertFails(setDoc(doc(ouvreurDb, 'boulders', 'neuf-faux'), { ...base, points_multiplier: 0 }));
+    await assertSucceeds(setDoc(doc(ouvreurDb, 'boulders', 'neuf-bon'), { ...base, points_multiplier: 2 }));
+  });
+
+  it("un client ne peut pas poser de multiplicateur, même ×2, même sur un bloc de la compétition", async () => {
+    const ouvreurDb = testEnv.authenticatedContext(OUVREUR_UID).firestore();
+    await addExistingToCompetition(ouvreurDb, ['d2']);
+
+    const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+    await assertFails(updateDoc(doc(clientDb, 'boulders', 'd2'), { points_multiplier: 2 }));
+    await assertFails(updateDoc(doc(clientDb, 'boulders', 'd2'), { points_multiplier: 1 }));
+  });
+
+  it("la CLÔTURE conserve le multiplicateur, alors qu'elle efface points_value — l'inversion du §0", async () => {
+    const ouvreurDb = testEnv.authenticatedContext(OUVREUR_UID).firestore();
+    await addExistingToCompetition(ouvreurDb, ['d2']);
+    await updateDoc(doc(ouvreurDb, 'boulders', 'd2'), { points_multiplier: 2, points_value: 400 });
+
+    // Reproduit handleConfirmMigrate() sur un bloc quotidien réutilisé.
+    await assertSucceeds(updateDoc(doc(ouvreurDb, 'boulders', 'd2'), {
+      competition_active: deleteField(), points_value: deleteField(),
+    }));
+
+    const d2 = (await getDoc(doc(ouvreurDb, 'boulders', 'd2'))).data();
+    // ⚠️ L'assertion qui protège l'histoire : les points d'une épreuve terminée se
+    // recalculent depuis le bloc (competition_results ne stocke aucun point), donc le
+    // multiplicateur doit survivre à la clôture — c'est celle que la v1 du plan aurait fait
+    // échouer.
+    expect(d2?.points_multiplier).toBe(2);
+    // Et ce qui doit DIFFÉRER : points_value, lui, repart avec la compétition.
+    expect(d2?.points_value).toBeUndefined();
+    expect(d2?.competition_active).toBeUndefined();
+    expect(d2?.competition_id).toBe(COMPETITION_ID);
+  });
+
+  it('le RATTACHEMENT à une NOUVELLE compétition efface le multiplicateur hérité', async () => {
+    const ouvreurDb = testEnv.authenticatedContext(OUVREUR_UID).firestore();
+    // d2 sort d'une compétition passée, terminée, où il comptait double : il porte encore ×2
+    // (c'est exactement ce que la clôture a conservé au test précédent).
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), 'boulders', 'd2'), {
+        competition_id: 'comp-passee', points_multiplier: 2,
+      });
+    });
+
+    await assertSucceeds(addExistingToCompetition(ouvreurDb, ['d2']));
+
+    const d2 = (await getDoc(doc(ouvreurDb, 'boulders', 'd2'))).data();
+    expect(d2?.points_multiplier).toBeUndefined();
+    // Ce qui doit DIFFÉRER : le rattachement a bien eu lieu.
+    expect(d2?.competition_id).toBe(COMPETITION_ID);
+    expect(d2?.competition_active).toBe(true);
   });
 });
