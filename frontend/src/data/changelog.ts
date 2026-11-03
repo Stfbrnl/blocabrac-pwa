@@ -12,14 +12,33 @@ export interface ChangelogEntry {
 // à chaque nouvelle fonctionnalité visible côté client — l'historique complet vit dans
 // les commits git.
 export const changelog: ChangelogEntry[] = [
+  // ⚠️ EXCEPTION ASSUMÉE À LA RÈGLE CI-DESSUS, et la raison, pour qu'on ne la « corrige » pas :
+  // cette entrée-ci RAPPELLE délibérément des consignes déjà annoncées en 2.73, 2.74 et 2.76.
+  //
+  // Ce n'est PAS le vieux contournement que 2.71.2 a supprimé (recopier les nouveautés de la
+  // version précédente parce qu'une seule entrée s'affichait). La raison est différente et
+  // tient à `changelogEntriesToShow` : un appareil qui n'a jamais validé « Compris » ne voit
+  // QUE `changelog[0]`, et un grimpeur qui a validé à la 2.76.3 ne voit QUE la 2.77. **Seule
+  // l'entrée [0] est garantie d'être lue**, et les consignes d'une compétition datée doivent
+  // l'être AVANT l'épreuve, pas être retrouvables par celui qui pense à dérouler.
+  //
+  // Ce sont des consignes opérationnelles pour un événement daté, pas la description d'une
+  // fonctionnalité : chaque rappel est préfixé « Rappel — » pour que celui qui les a déjà lues
+  // le voie tout de suite. **Après le contest du 5 novembre, ces rappels n'ont plus lieu
+  // d'être** : la prochaine entrée ne les reprend pas, et ne recopie rien d'ici.
   {
     version: '2.77',
     date: '2026-11-03',
-    title: 'En compétition, certains blocs peuvent compter double',
+    title: 'Contest du 5 novembre : des blocs qui comptent double, et les consignes',
     items: [
-      'En compétition, l’organisateur peut désormais décider que certains blocs comptent double. Un bloc concerné porte la mention « Ce bloc compte ×2 » dans l’écran de validation, et ses points y sont affichés déjà doublés, avec le détail du calcul.',
-      'Un bloc doublé compte double partout dans la compétition, y compris pour séparer deux grimpeurs à égalité de points. En revanche il garde sa couleur : le classement par niveau n’en est pas modifié.',
-      'Cela ne concerne QUE les compétitions. Les mêmes blocs validés en dehors d’une compétition rapportent leur valeur normale, celle de leur couleur, et aucun de vos scores passés n’a été recalculé.',
+      'NOUVEAU — En compétition, l’organisateur peut désormais décider que certains blocs comptent double. Un bloc concerné porte la mention « Ce bloc compte ×2 » dans l’écran de validation, et ses points y sont affichés déjà doublés, avec le détail du calcul. Pour le contest du 5 novembre, ce sont les blocs du mur neuf — annoncés sur place.',
+      'Un bloc doublé compte double partout dans la compétition, y compris pour séparer deux grimpeurs à égalité de points. En revanche il garde sa couleur : le classement par niveau max n’en est pas modifié.',
+      'Et le double vaut POUR LA COMPÉTITION SEULEMENT. Les mêmes blocs validés en dehors du contest, dans « Blocs du jour », rapportent leur valeur normale, celle de leur couleur. Aucun de vos scores passés n’a été recalculé.',
+      'Rappel — Inscrivez-vous dès maintenant, dans l’onglet Compétitions. L’inscription reste possible le soir même, mais s’inscrire à l’avance nous évite la file d’attente au comptoir au moment du coup d’envoi.',
+      'Rappel — Enregistrez vos échecs, pas seulement vos réussites. Quand tout le reste est à égalité (mêmes points, mêmes blocs réussis, mêmes essais sur chacun), c’est le nombre total d’essais qui tranche, échecs compris. Rien n’est vérifié : ce départage repose sur votre honnêteté, et ne pas déclarer ses échecs avantagerait mécaniquement.',
+      'Rappel — Vérifiez votre niveau dans votre profil avant jeudi. Il est figé au coup d’envoi et sert au classement par niveau max, qui vous range avec les grimpeurs de votre niveau. Si vous réussissez pendant l’épreuve un bloc d’une couleur plus dure que votre niveau, c’est cette couleur qui vous classe.',
+      'Rappel — En compétition, un bloc réussi rapporte toujours des points, quel que soit le nombre d’essais : au minimum un quart de sa valeur. La table complète est affichée à l’accueil de la salle.',
+      'Rappel — Si un bandeau « Une nouvelle version est disponible » apparaît d’ici jeudi, acceptez-la. Sans la mise à jour, votre téléphone continue de faire tourner l’ancienne version : vous ne verriez pas les blocs qui comptent double, et les points affichés sur votre écran ne seraient pas ceux du classement.',
     ],
   },
   {
