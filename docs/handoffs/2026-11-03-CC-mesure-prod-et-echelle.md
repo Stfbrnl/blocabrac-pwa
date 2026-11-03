@@ -340,12 +340,50 @@ l'utilisateur ; ma recommandation est devenue tiède après la mesure.
    palmarès, qui est immuable.
 3. **Rattacher les murs neufs tard** (§5).
 4. **Le PDF du topo n'a jamais été relu** (`pdftoppm` absent de ce poste) : la page 06 a changé.
-5. **La publication du palmarès n'a jamais été exercée en prod de bout en bout** : l'utilisateur
-   s'est arrêté à l'écran de confirmation pour ne pas exposer un palmarès de test. C'est le
-   dernier geste du chantier jamais essayé, et il est **immuable** une fois fait.
+5. ✔️ **La publication du palmarès est désormais exercée en prod de bout en bout**, publication
+   **et** dépublication comprises (§8 bis). Le chantier n'a plus de geste jamais essayé —
+   sous les deux réserves du §8 bis (mode `blocabrac` et non `blocabrac_plancher`, un seul
+   participant).
 6. Alerte de budget GCP ; retour en Spark le 6 novembre.
 
 ---
+
+## §8 bis — Ta boucle de vérification du palmarès est fermée (publication + dépublication)
+
+Tu as demandé d'aller au bout : l'utilisateur a **publié** le palmarès de la compétition `test` et
+constaté qu'il apparaissait ; je l'ai **dépublié par le script**, sur sa demande explicite.
+
+**Déroulé, et les gardes qui ont servi :**
+
+1. **Constaté la cible avant de supprimer**, sans la déduire : `competition_rankings` contenait
+   **exactement 1 document**, `QdB5o5cDfaBWZXaoMHxv` = `test (terminée)`, publié à 17 h 06 49 s.
+   Le Contest réel (`gQjvGz9GAmNlumy6f53r`) n'en avait **aucun**. Aucune ambiguïté possible.
+2. **Simulation d'abord** (le défaut du script) : « test », 1 participant, Stéphane B. — 1580 pts.
+3. **`--fix`** : sauvegarde intégrale dans `firestore-migration/` (dossier gitignoré, vérifié par
+   `git check-ignore`), **puis** suppression.
+4. **Vérifié l'effet, pas le message de succès** : `competition_rankings` → **0 document**.
+5. **Vérifié que la sauvegarde est exploitable**, et pas seulement présente : les 11 champs, les
+   5 sections avec leurs entrées, `published_at` conservé. Un succès silencieux et un no-op sont
+   indiscernables ; une sauvegarde vide l'aurait été aussi.
+
+**Deux doctrines confirmées GRATUITEMENT, et sur le document ÉCRIT — pas sur le DOM**, ce qui est
+précisément la forme que ce dépôt exige :
+
+- le nom y est **déjà tronqué** (`"Stéphane B."`), il n'est pas raccourci à l'affichage ;
+- c'est la **catégorie d'âge** qui est stockée (`"Vétérans 2 (50 ans et +)"`), **pas** la date de
+  naissance.
+
+⚠️ **Ce que cette vérification NE montre PAS, et qu'il ne faut pas lui faire dire :**
+
+- **Le mode diffère de celui du contest.** Le palmarès de test a été gelé en **`blocabrac`** ; le
+  Contest est en **`blocabrac_plancher`**. Le chemin de code est le même (`isScoringModeGelable`
+  ne refuse que `officiel`) et seule la fonction de points change — déjà couverte par les tests
+  unitaires. Risque faible, mais **la publication n'a pas été exercée sur le mode de jeudi**.
+- **Un seul participant ne peut exprimer ni ordre, ni ex æquo, ni multiplicité de catégories.**
+  Les cinq sections comptent **1 ligne** chacune. Ce test a donc validé la **plomberie** —
+  publication, gel, affichage, dépublication, sauvegarde — et **pas la logique de classement**,
+  qui reste tenue par les tests unitaires de `competitionRankings.ts`. C'est le bon partage ; il
+  faut juste ne pas conclure plus large que le jeu de données ne permet.
 
 ## §9 — Questions ouvertes pour toi
 
