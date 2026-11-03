@@ -132,6 +132,12 @@ deux murs, **il en manque ~7**. La Grotte (8 actifs) n'a rien de neuf : ce sont 
 qu'on le lisait. **Re-mesurer juste avant de rattacher** — c'est précisément pour ça que j'ai
 commité le script plutôt que de te donner seulement le nombre. `node scripts/mesure-blocs-contest.js`.
 
+**Relevé de contrôle, deux heures plus tard** : toujours **78**, Dalle toujours à **3**, dernier
+bloc saisi toujours celui de 15 h 52. La saisie **n'a pas reprise** depuis. Donc soit les ~7 blocs
+manquants de Dalle restent à entrer, soit le « 23 » annoncé couvrait autre chose que ces deux murs.
+**C'est la seule question de ce document dont la réponse n'est pas dans la base** — elle est chez
+le gérant ou chez l'employée.
+
 ### 4.2 — La compétition de test a laissé un résidu en production
 
 **3 blocs portaient encore `competition_active: true` ET `points_multiplier: 2`**, pointant la
@@ -145,6 +151,13 @@ ne touche jamais l'autre. Il a fait une moitié de la clôture, celle que l'écr
 ⚠️ **Mais la conséquence était vivante** : `firestore.rules` refuse **côté serveur** les premiers
 ascensionnistes et les votes de méthode sur tout bloc `competition_active`. Ces 3 blocs avaient
 donc **deux fonctionnalités suspendues, silencieusement et sans terme**.
+
+**Correction de ma propre formulation, après vérification des couleurs** : la règle refusait bien
+les deux sur les trois, mais les premières ascensions ne concernent que `noir`/`blanc`/`rose`
+(`gymConfig.firstAscentColors`). Or ces blocs sont **violet** (Güllich n°19), **vert** (Réta n°2)
+et **noir** (Réta n°12). La suspension des **votes de méthode** portait donc sur **3** blocs, celle
+des **premières ascensions** sur **un seul**. J'avais laissé entendre trois : l'effet réel était
+plus étroit. Aucun des trois n'avait d'ailleurs de premier ascensionniste enregistré.
 
 **✔️ VÉRIFIÉ APRÈS COUP.** L'utilisateur a terminé la compétition `test` sur l'écran ouvreur
 pendant la rédaction, et j'ai relancé la mesure :
@@ -173,6 +186,46 @@ script.
 la moyenne de 656 à 655 o — la disparition de `competition_active` sur 3 documents. L'instrument
 **bouge avec la donnée** ; il ne transcrit pas un total littéral. C'est le contre-exemple exact
 du harnais d'écritures, qui rendrait le même nombre quarante-cinq versions plus tard.
+
+**Vérification complète des quatre effets de `handleConfirmMigrate`**, et pas seulement du plus
+visible — parce qu'un critère de sortie doit prédire *toutes* les grandeurs observables :
+
+| effet attendu | observé |
+|---|---|
+| `competition_active` retiré | ✔️ **0** bloc en porte, dans toute la base |
+| `points_value` retiré | ✔️ absent des 3 |
+| `type` reste `daily`, couleur publique inchangée | ✔️ violet / vert / noir, intacts |
+| `points_multiplier` **conservé** | ✔️ **2** sur les 3 — le contrat de ton §0 |
+| `competition_id` conservé pour l'historique | ✔️ les 3 pointent encore `QdB5o5cDfaBWZXaoMHxv` |
+| règle rouverte (`type=='daily' && !competition_active`) | ✔️ les 3 |
+
+### 4.3 — Et une trouvaille de plus, inerte, que je ne touche pas
+
+En vérifiant le point 2 ci-dessus j'ai compté **7 blocs encore en `type: 'competition'` et
+`is_active: true`**, rattachés à **deux compétitions qui n'existent plus** dans la collection
+`competitions` (`q2QabuVYwTi8pGvfGHi5` : 6 blocs ; `comp_test_20260516` : 2 blocs). Elles ont été
+supprimées sans que « Terminer la compétition » ait été passé d'abord.
+
+**Le `competition_id` pendant est un état NORMAL et documenté** — `purge-orphan-competition-refs.js`
+l'écrit noir sur blanc, et c'est pourquoi `audit-prod-catalog.js` ne le signale pas, à raison : les
+pages de statistiques reconstruisent une compétition depuis ce seul champ.
+
+**Ce qui est différent ici, c'est le `type`.** Ces blocs n'ont jamais achevé leur cycle de vie :
+leur cotation est restée **cachée pour toujours**, ils n'apparaissent **ni** dans « Blocs du jour »
+(`type != 'daily'`) **ni** dans aucune compétition (la leur n'existe plus). Ils sont invisibles
+partout, donc inoffensifs — et **inatteignables depuis l'interface**, l'écran ouvreur se peuplant
+en choisissant une compétition dans une liste où la leur ne figure plus. Même forme de verrue que
+le ×2 détaché, en plus durable.
+
+⚠️ **Le seul vrai risque est latent, et il est dans la DONNÉE** : leurs `difficulty` valent
+`"noire"`, `"Rouge"`, `"blanc"`, `"violet"`… — **non canoniques** (`colorGrades` attend `noir`,
+`rouge`, en minuscules). Si quelqu'un les ressuscitait un jour, la clôture écrirait
+`color: boulder.difficulty`, donc des **couleurs invalides** qui ne correspondraient à aucune
+entrée de `colorGrades` : barème, badges et classement les traiteraient comme inconnues.
+
+**Je n'y touche pas**, et surtout pas par une suppression — « ne jamais supprimer un document
+`boulders` » est un invariant du dépôt. **Rien avant le 6 novembre.** À verser au même paquet que
+la question §9.3.
 
 ---
 
