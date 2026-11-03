@@ -83,6 +83,10 @@ export default function CompetitionBouldersList(): JSX.Element {
   const [isLoadingCandidates, setIsLoadingCandidates] = useState(false);
   const [isAddingExisting, setIsAddingExisting] = useState(false);
 
+  // ✅ Sélection de lignes pour l'application en masse du multiplicateur (§3 du plan).
+  const [selectedForMultiplier, setSelectedForMultiplier] = useState<Set<string>>(new Set());
+  const [isApplyingBulk, setIsApplyingBulk] = useState(false);
+
   useEffect(() => {
     const fetchCompetitions = async (): Promise<void> => {
       const q = query(collection(db, 'competitions'), orderBy('date', 'desc'));
@@ -101,6 +105,9 @@ export default function CompetitionBouldersList(): JSX.Element {
         setBoulders([]);
         return;
       }
+      // ✅ Une sélection de lignes n'a aucun sens d'une compétition à l'autre : la garder
+      // ferait porter une action en masse sur des identifiants qui ne sont plus à l'écran.
+      setSelectedForMultiplier(new Set());
 
       try {
         // ✅ Deux requêtes fusionnées plutôt qu'un `type in [...]` : les blocs créés
@@ -358,6 +365,74 @@ export default function CompetitionBouldersList(): JSX.Element {
   // blocs quotidiens réutilisés, seuls à ne pas passer par ce formulaire.
   const isBlocsValidesMode = competitions.find(c => c.id === selectedCompetition)?.scoring_mode === 'blocs_valides';
 
+  // ✅ 2026-11-03-CN-plan-multiplicateur-v2.md §3 — le multiplicateur de points.
+  //
+  // Affiché pour LES DEUX formes de bloc (créé pour l'épreuve et quotidien rattaché), et
+  // modifiable à tout moment pendant la compétition : les règles ne verrouillent pas les blocs
+  // sur le statut de la compétition, et le gérant peut décider du mur doublé la veille comme
+  // en cours de soirée.
+  //
+  // ⚠️ MASQUÉ en mode "Officiel" : ce mode ne produit pas de points mais un tri
+  // (tops/zones/essais), `calculateCompetitionPoints` y rend 0, donc un multiplicateur y
+  // serait sans aucun effet. Afficher un réglage inopérant est pire que ne rien afficher —
+  // même raison que l'absence de "Points: 0" dans le dialogue de validation du grimpeur.
+  const isOfficielMode = competitions.find(c => c.id === selectedCompetition)?.scoring_mode === 'officiel';
+
+  const persistMultiplier = async (boulderId: string, value: number): Promise<void> => {
+    // ✅ `deleteField()` pour ×1 plutôt que d'écrire le littéral 1 : l'absence du champ EST
+    // ×1 partout (calcul, règles), et ne pas semer de 1 inutiles garde la donnée lisible —
+    // un bloc portant `points_multiplier` est un bloc que quelqu'un a réglé.
+    await updateDoc(doc(db, 'boulders', boulderId), {
+      points_multiplier: value === 1 ? deleteField() : value,
+    });
+  };
+
+  const handleMultiplierChange = async (boulderId: string, value: number): Promise<void> => {
+    const avant = boulders.find(b => b.id === boulderId)?.points_multiplier;
+    // Optimiste, puis annulé en cas d'échec : une écriture par changement, négligeable, mais
+    // un sélecteur qui resterait sur la valeur choisie après un refus mentirait à l'ouvreur.
+    setBoulders(prev => prev.map(b => (b.id === boulderId ? { ...b, points_multiplier: value } : b)));
+    try {
+      await persistMultiplier(boulderId, value);
+    } catch (error: unknown) {
+      console.error('Erreur lors de la sauvegarde du multiplicateur :', error);
+      setBoulders(prev => prev.map(b => (b.id === boulderId ? { ...b, points_multiplier: avant } : b)));
+      alert('Le multiplicateur n\'a pas pu être enregistré.');
+    }
+  };
+
+  // ✅ Action en masse : poser 23 drapeaux jeudi soir sans 23 clics. C'est un confort d'écran,
+  // pas une règle de calcul — elle passe par exactement la même écriture, bloc par bloc.
+  const handleBulkMultiplier = async (value: number): Promise<void> => {
+    if (selectedForMultiplier.size === 0) return;
+    const cibles = [...selectedForMultiplier];
+    try {
+      setIsApplyingBulk(true);
+      const batch = writeBatch(db);
+      cibles.forEach((id) => {
+        batch.update(doc(db, 'boulders', id), {
+          points_multiplier: value === 1 ? deleteField() : value,
+        });
+      });
+      await batch.commit();
+      setBoulders(prev => prev.map(b => (selectedForMultiplier.has(b.id) ? { ...b, points_multiplier: value } : b)));
+      setSelectedForMultiplier(new Set());
+    } catch (error: unknown) {
+      console.error('Erreur lors de l\'application en masse du multiplicateur :', error);
+      alert('Les multiplicateurs n\'ont pas pu être enregistrés. Aucun bloc n\'a été modifié.');
+    } finally {
+      setIsApplyingBulk(false);
+    }
+  };
+
+  const toggleSelectedForMultiplier = (id: string): void => {
+    setSelectedForMultiplier(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
   const handlePointsValueChange = (boulderId: string, rawValue: string): void => {
     const value = rawValue === '' ? undefined : parseInt(rawValue, 10) || 0;
     setBoulders(prev => prev.map(b => (b.id === boulderId ? { ...b, points_value: value } : b)));
@@ -442,12 +517,55 @@ export default function CompetitionBouldersList(): JSX.Element {
               )}
             </Box>
 
+            {/* ✅ Action en masse du multiplicateur — n'apparaît que quand des lignes sont
+                cochées, pour ne pas alourdir l'écran le reste du temps. */}
+            {!isOfficielMode && selectedForMultiplier.size > 0 && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2, flexWrap: 'wrap' }}>
+                <Typography variant="body2">
+                  {selectedForMultiplier.size} bloc{selectedForMultiplier.size > 1 ? 's' : ''} sélectionné{selectedForMultiplier.size > 1 ? 's' : ''} :
+                </Typography>
+                <Button
+                  variant="contained"
+                  size="small"
+                  disabled={isApplyingBulk}
+                  onClick={() => { void handleBulkMultiplier(2); }}
+                >
+                  Compter double (×2)
+                </Button>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  disabled={isApplyingBulk}
+                  onClick={() => { void handleBulkMultiplier(1); }}
+                >
+                  Revenir au simple (×1)
+                </Button>
+                <Button size="small" onClick={() => setSelectedForMultiplier(new Set())}>
+                  Tout décocher
+                </Button>
+              </Box>
+            )}
+
             {boulders.length > 0 ? (
-              // ✅ Scroll horizontal de secours pour ce tableau à 6 colonnes
+              // ✅ Scroll horizontal de secours : 7 à 10 colonnes selon le mode de comptage
+              // (la case de sélection et le multiplicateur s'ajoutent hors mode « Officiel »,
+              // la colonne Points seulement en « Blocs validés »).
               <TableContainer sx={{ overflowX: 'auto' }}>
-                <Table sx={{ minWidth: 700 }}>
+                <Table sx={{ minWidth: 900 }}>
                   <TableHead>
                     <TableRow>
+                      {!isOfficielMode && (
+                        <TableCell padding="checkbox">
+                          <Checkbox
+                            slotProps={{ input: { 'aria-label': 'Tout sélectionner pour le multiplicateur' } }}
+                            checked={boulders.length > 0 && selectedForMultiplier.size === boulders.length}
+                            indeterminate={selectedForMultiplier.size > 0 && selectedForMultiplier.size < boulders.length}
+                            onChange={() => setSelectedForMultiplier(prev =>
+                              prev.size === boulders.length ? new Set() : new Set(boulders.map(b => b.id))
+                            )}
+                          />
+                        </TableCell>
+                      )}
                       <TableCell>N°</TableCell>
                       <TableCell>Mur</TableCell>
                       <TableCell>Origine</TableCell>
@@ -455,12 +573,22 @@ export default function CompetitionBouldersList(): JSX.Element {
                       <TableCell>Types</TableCell>
                       <TableCell>Ouvert par</TableCell>
                       {isBlocsValidesMode && <TableCell>Points</TableCell>}
+                      {!isOfficielMode && <TableCell>Multiplicateur</TableCell>}
                       <TableCell>Actions</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {boulders.map((boulder: Boulder) => (
                       <TableRow key={boulder.id}>
+                        {!isOfficielMode && (
+                          <TableCell padding="checkbox">
+                            <Checkbox
+                              slotProps={{ input: { 'aria-label': `Sélectionner le bloc n°${boulder.number}` } }}
+                              checked={selectedForMultiplier.has(boulder.id)}
+                              onChange={() => toggleSelectedForMultiplier(boulder.id)}
+                            />
+                          </TableCell>
+                        )}
                         <TableCell>
                           <TextField
                             type="number"
@@ -520,6 +648,37 @@ export default function CompetitionBouldersList(): JSX.Element {
                               />
                             ) : (
                               boulder.points_value ?? '—'
+                            )}
+                          </TableCell>
+                        )}
+                        {!isOfficielMode && (
+                          <TableCell>
+                            {/* ⚠️ L'identifiant est DÉRIVÉ DE LA DONNÉE, jamais un littéral
+                                figé : dans une boucle de rendu, un littéral produit N
+                                identifiants en double et `aria-label`/`aria-labelledby`
+                                résoudraient alors sur la première ligne pour toutes les
+                                autres — un défaut échangé contre un autre, invisible aux
+                                avertissements du navigateur. */}
+                            <Select
+                              id={`points-multiplier-${boulder.id}`}
+                              name={`points-multiplier-${boulder.id}`}
+                              inputProps={{ 'aria-label': `Multiplicateur de points du bloc n°${boulder.number}` }}
+                              value={boulder.points_multiplier ?? 1}
+                              size="small"
+                              sx={{ minWidth: 90 }}
+                              onChange={(e: SelectChangeEvent<number>): void => {
+                                void handleMultiplierChange(boulder.id, Number(e.target.value));
+                              }}
+                            >
+                              {/* L'interface n'expose que ×1 et ×2 ; le champ est un nombre et
+                                  `firestore.rules` porte la liste blanche, donc un ×3 sera un
+                                  jour une option de plus ici et une valeur de plus là-bas —
+                                  aucune migration de donnée. */}
+                              <MenuItem value={1}>×1</MenuItem>
+                              <MenuItem value={2}>×2</MenuItem>
+                            </Select>
+                            {boulder.points_multiplier === 2 && (
+                              <Chip label="compte double" size="small" color="warning" sx={{ ml: 1 }} />
                             )}
                           </TableCell>
                         )}
