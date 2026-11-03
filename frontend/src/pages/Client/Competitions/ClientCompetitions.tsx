@@ -9,7 +9,7 @@ import { useDebouncedFlushQueue } from '../../../utils/useDebouncedFlushQueue';
 import {
   Container, Typography, Box, Button, CircularProgress, Alert,
   Dialog, DialogTitle, DialogContent, DialogActions,
-  Grid, Card, CardContent, CardMedia, Rating,
+  Grid, Card, CardContent, CardMedia, Rating, Chip,
   FormControl, InputLabel, Select, MenuItem,
   useMediaQuery
 } from '@mui/material';
@@ -907,6 +907,21 @@ const ClientCompetitions: React.FC = () => {
                       />
                       <CardContent>
                         <Typography>Bloc n°{boulder.number} - {boulder.wall}</Typography>
+                        {/* ✅ 2026-11-03-CN-plan-multiplicateur-v2.md §3 — CE N'EST PAS
+                            COSMÉTIQUE. L'aperçu de points ci-dessous affiche déjà le double
+                            pour ce bloc : sans légende, le grimpeur lit un bug, et il vient le
+                            dire au comptoir un soir de contest. Partout où la valeur d'un bloc
+                            est montrée au grimpeur, le multiplicateur doit être montré avec
+                            elle. Rien n'est rendu quand le champ est absent, ce qui est le cas
+                            de l'immense majorité des blocs. */}
+                        {!isOfficialMode && (boulder.points_multiplier ?? 1) !== 1 && (
+                          <Chip
+                            label={`Ce bloc compte ×${boulder.points_multiplier}`}
+                            size="small"
+                            color="warning"
+                            sx={{ mt: 1 }}
+                          />
+                        )}
                         <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
                           <Button
                             variant={result.success ? "contained" : "outlined"}
@@ -1028,6 +1043,15 @@ const ClientCompetitions: React.FC = () => {
                         {!isOfficialMode && (
                           <Typography sx={{ mt: 1, fontWeight: 'bold' }}>
                             Points: {points}
+                            {/* ✅ Le détail du calcul, et non seulement son résultat : c'est
+                                la seule façon pour le grimpeur de retrouver de tête le barème
+                                affiché à l'accueil, qui porte la valeur des couleurs et qu'un
+                                bloc doublé contredit. */}
+                            {(boulder.points_multiplier ?? 1) !== 1 && points > 0 && (
+                              <Typography component="span" variant="body2" sx={{ fontWeight: 'normal', ml: 1 }}>
+                                ({points / (boulder.points_multiplier ?? 1)} × {boulder.points_multiplier})
+                              </Typography>
+                            )}
                           </Typography>
                         )}
                       </CardContent>
