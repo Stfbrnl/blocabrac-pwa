@@ -272,6 +272,43 @@ Une compétition choisit un mode de comptage parmi cinq, stocké dans `competiti
 
 Comme `liveDisplayEnabled`, `scoring_mode`/`custom_scoring` sont **verrouillés côté serveur** dès que la compétition quitte `status: 'à venir'` : changer le mode en cours d'épreuve changerait rétroactivement le score de tout le monde.
 
+### Multiplicateur de points par bloc (`boulders.points_multiplier`, V2.77)
+
+📖 **Récit complet : [`docs/architecture/competitions.md`](docs/architecture/competitions.md).**
+
+Un bloc de compétition peut compter double. Champ **nombre** (absent ou `null` = ×1), liste
+blanche `[1, 2]` dans `firestore.rules` — l'interface n'expose que ×1/×2, mais un ×3 futur ne
+demandera **aucune migration**. Pas de repli dans le code : un `0` annulerait des points en
+silence, et c'est la règle serveur qui l'interdit.
+
+🔴 **LE CYCLE DE VIE EST INVERSÉ PAR RAPPORT À `points_value` : le multiplicateur est CONSERVÉ
+à la clôture, et effacé au RATTACHEMENT.** `competition_results` ne stocke **aucun point** (des
+faits bruts seulement) : les points sont recalculés à chaque affichage, donc effacer le
+multiplicateur à la clôture rendrait au simple, pour toujours, les blocs doublés d'une épreuve
+terminée. Effacer au rattachement (`handleConfirmAddExisting`) ferme le défaut symétrique —
+l'héritage du ×2 par une compétition future. ⚠️ **Deux des trois clauses sont des ABSENCES**,
+qu'aucun test d'exécution n'attrape : le filet est `frontend/test/contrats/pointsMultiplier.test.ts`,
+qui lit les **sources**, comme le contrat de `registered_count`.
+
+⚠️ **Le multiplicateur s'applique APRÈS l'arrondi**, dans un **emballage** de
+`calculateCompetitionPoints` (son corps a cinq retours anticipés : il n'y a pas de « fin » où
+glisser une ligne). Couvre les cinq modes uniformément. L'ordre inverse décale 86 des 160
+combinaisons couleur × essais et ferait afficher 158 pour un crédit de 317.
+
+⚠️ **CINQ sites composent un bloc pour le calcul, chacun mappant ses champs un par un** : les
+quatre écrans de classement (live TV, palmarès gelé, stats admin, stats ouvreur) et l'aperçu du
+grimpeur. **Tout nouveau lecteur doit transmettre ce champ** — un seul qui l'oublie compte le
+simple pendant que les autres comptent le double, sur la même compétition.
+
+⚠️ **Il COULE dans le départage** (la dureté d'un bloc *est* sa valeur en points dans un mode à
+points), et **PAS** dans le classement par niveau max (qui partitionne par couleur). Annonçable
+tel quel : *un bloc doublé compte double partout, départage compris ; il garde sa couleur.*
+
+⚠️ **Asymétrie assumée : contrairement à `scoring_mode`, ce champ n'est PAS verrouillé quand la
+compétition démarre** (demande explicite). Le changer en cours d'épreuve change donc le score de
+tout le monde rétroactivement : à régler **avant** le coup d'envoi et **avant** la publication du
+palmarès, qui est immuable. Tenu par la procédure, pas par les règles.
+
 ### Bloc Roulette — a free, stateless daily-challenge draw
 
 📖 **Récit complet (le catalogue, les familles, les traversées, les bornes de niveau) : [`docs/architecture/jeu-et-missions.md`](docs/architecture/jeu-et-missions.md).**

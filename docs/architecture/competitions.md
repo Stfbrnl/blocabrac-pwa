@@ -130,6 +130,138 @@ Official/regular competitions (not the annual `classement des grimpeurs`) can pi
 Like `liveDisplayEnabled`, `scoring_mode`/`custom_scoring` are locked once a competition leaves `status: 'à venir'` — enforced **server-side** in `firestore.rules` (not just disabled in the UI), same `affectedKeys().hasAny([...])` pattern, same rationale: changing the mode mid-event would retroactively change everyone's score, not just future validations.
 
 
+## Le multiplicateur de points par bloc (`points_multiplier`, V2.77, 03/11/2026)
+
+Plan : `docs/plans/2026-11-03-CN-plan-multiplicateur-v2.md`. Le gérant a annoncé aux grimpeurs
+que les blocs d'un mur neuf compteraient double, sans consultation, à deux jours du contest du
+5 novembre — mais il le voudra à l'avenir. D'où une **fonctionnalité durable** et non un
+correctif de 48 heures : un sélecteur ×1/×2 en face de chaque bloc de la liste des blocs d'une
+compétition, pour les deux formes de bloc, modifiable à tout moment pendant l'épreuve.
+
+### Pourquoi un nombre et non un booléen
+
+Un correctif de 48 heures veut un booléen, qu'on ne peut pas mal poser. Une fonctionnalité
+durable veut le nombre, pour n'avoir **jamais à migrer la donnée** le jour d'un ×3. Le champ
+est donc un nombre ; l'interface n'expose que ×1 et ×2 ; et `firestore.rules` porte une **liste
+blanche** (`isValidPointsMultiplier`, valeur absente, `null`, 1 ou 2). Élargir plus tard, c'est
+une valeur dans la liste et une option dans le menu.
+
+⚠️ **La liste blanche n'est pas décorative.** Sans elle, un `0` ou un `0,5` posé par erreur
+annulerait des points **sans rien afficher d'anormal** : le champ ne se lit nulle part avant
+d'avoir déjà faussé un classement. Et c'est aussi pourquoi il n'y a **aucun repli dans le
+code** — un `Math.max` ou une normalisation silencieuse rendrait aveugle au défaut qu'il
+compense. La règle serveur fait foi, comme pour le verrou de `competition_results`.
+
+### 🔴 Le cycle de vie, et l'inversion qu'une lecture a révélée
+
+`ClientCompetitions.tsx` porte depuis le chantier « comptes de points » ce commentaire sur
+`scoring_mode` : « n'affecte que l'aperçu de points affiché ici pendant la validation, **pas ce
+qui est écrit dans `competition_results`** ». Et l'interface `ValidationResult` le confirme :
+`competition_results` stocke `success`, `attempts`, `rating`, `proposedDifficulty`, `zone`,
+`attemptsToZone` — **des faits bruts, aucun point**. Les points sont **recalculés à chaque
+affichage** depuis le mode et le bloc.
+
+**Conséquence**, et c'est tout le chantier : si le multiplicateur était supprimé à la clôture —
+comme l'est `points_value`, et comme la première version du plan le prescrivait — alors tout
+recalcul postérieur d'une compétition terminée rendrait les blocs doublés **au simple**.
+L'histoire changerait après coup. Le champ n'appartient donc **pas** au groupe de
+`points_value` (effacé à la clôture) mais à celui de **`competition_id` (conservé pour
+l'historique)**.
+
+Mais conserver le champ ouvre le défaut inverse : un bloc quotidien réutilisé dans une
+compétition future hériterait du ×2. **Les deux exigences ne se contredisent qu'en apparence :
+la remise à zéro ne va pas à la clôture, elle va au RATTACHEMENT.**
+
+| moment | `points_value` | `points_multiplier` |
+|---|---|---|
+| **Rattachement** (`handleConfirmAddExisting`) | — | **effacer** ← la ligne nouvelle |
+| **Retrait de l'épreuve** (`handleConfirmRemove`) | effacé | **effacer** |
+| **Clôture** (`handleConfirmMigrate`) | effacé | **CONSERVER** ← l'inversion |
+
+`handleConfirmAddExisting` écrase déjà `competition_id` et pose `competition_active` dans son
+`batch.update` : la remise à zéro y est une clé de plus dans un objet déjà écrit, et c'est le
+**seul** endroit où un bloc change de compétition.
+
+⚠️ **Deux des trois clauses sont des ABSENCES, et une absence ne s'observe pas en exécutant un
+geste.** Le défaut n'apparaîtrait qu'à la consultation d'un classement passé, des semaines plus
+tard, et il ressemblerait **trait pour trait** à un classement normal — aucun écran n'affiche
+« ×1 » là où il y avait « ×2 ». D'où `frontend/test/contrats/pointsMultiplier.test.ts`, qui lit
+les **sources** (même doctrine que `registeredCount.test.ts`) : le contrat est statique, il se
+garde statiquement, et il échoue à `npm test` pendant qu'on écrit le code.
+
+### Le multiplicateur s'applique APRÈS l'arrondi
+
+`calculateCompetitionPoints` est devenue un **emballage d'une ligne** autour du calcul
+historique, inchangé mot pour mot et désormais interne (`pointsAvantMultiplicateur`) :
+
+```ts
+export const calculateCompetitionPoints = (...) =>
+  pointsAvantMultiplicateur(...) * (boulder.points_multiplier ?? 1);
+```
+
+Un emballage et non une ligne glissée dans le corps, parce que le corps a **cinq retours
+anticipés** — il n'y a pas de « fin » où glisser quoi que ce soit. Cette position couvre les
+cinq modes **uniformément** (`blocs_valides` et `officiel` compris, où elle est un no-op) et
+`success: false` rend 0, dont le multiple est 0 : aucun cas particulier, aucune branche par
+mode à tenir à jour le jour où un sixième mode arrive.
+
+⚠️ **L'ordre vaut un point.** En `blocabrac_plancher`, arrondir **puis** doubler rend
+exactement le double de ce que l'écran affiche — une propriété que le grimpeur vérifie de tête.
+L'ordre inverse décale **86 des 160 combinaisons** couleur × essais (mesuré) : un violet à
+3 essais afficherait 158 et créditerait 317 au lieu de 316, un écart de 1 point inexplicable au
+micro.
+
+⚠️ **Les chiffres du §D3 du plan étaient faux, et c'est le test qui l'a dit** : il annonçait
+« violet, 3 essais → 144, donc 288 contre 289 », la valeur réelle étant 158, donc 316 contre
+317. Écrits dans le test **avant** exécution, les chiffres fournis se sont manifestés comme
+faux au lieu d'être recopiés depuis le code — même forme d'erreur que la cellule du barème à
+plancher du 28/10. La **conclusion** du plan, elle, tenait entièrement.
+
+### ⚠️ CINQ sites composent un bloc pour le calcul, pas deux
+
+Le §3 du plan annonçait « les deux déclarations : l'ouvreur et `ClientCompetitions.tsx` ». Il y
+en a **cinq**, parce que chacun mappe ses champs **un par un** plutôt que par étalement :
+`AdminCompetitionLiveDisplay.tsx` (écran live TV), `AdminCompetitionManagement.tsx`
+(publication du palmarès gelé), `AdminCompetitionStats.tsx`,
+`Ouvreur/CompetitionBoulders/CompetitionStats.tsx`, et `ClientCompetitions.tsx` (l'aperçu du
+grimpeur). **Un seul qui oublie le champ compte le SIMPLE pendant que les autres comptent le
+double, sur la même compétition** — et c'est l'écran de l'admin qui proclame.
+
+### Ce que le multiplicateur fait au classement, et ce qu'il n'y fait pas
+
+- **Il COULE DANS LE DÉPARTAGE**, et c'est voulu : `getParticipantScores` mesure la dureté d'un
+  bloc par `calculateCompetitionPoints(bloc, 1, true, mode)`, donc un violet ×2 (400) se mesure
+  aussi dur qu'un rouge (400). Dans un mode à **points**, la dureté *est* la valeur en points —
+  c'est déjà le choix accepté pour `blocs_valides`, où la cotation ne reflète plus la
+  difficulté. Une seconde voie de calcul de la dureté serait une divergence de plus.
+  **C'est annonçable : un bloc doublé compte double partout, départage compris.**
+- **Le classement PAR NIVEAU MAX n'est PAS affecté** : il partitionne par `boulderColorKey` (la
+  couleur du bloc), jamais par ses points. Un violet ×2 reste un violet et ne fait monter
+  personne dans le paquet rouge.
+
+Les deux moitiés sont testées, parce qu'une seule d'entre elles ne décrirait pas le système. En
+supprimant la multiplication, les tests à points rougissent et **ceux de niveau max restent
+verts** — c'est cela qui montre leur indépendance plutôt que de la supposer.
+
+### L'asymétrie assumée avec `scoring_mode`
+
+`scoring_mode` est **verrouillé côté serveur** dès que la compétition quitte `status: 'à
+venir'`, précisément parce que le changer en cours d'épreuve changerait rétroactivement le
+score de tout le monde. **`points_multiplier` ne l'est pas**, et c'est une demande explicite du
+plan (« activable et modifiable à tout moment pendant la compétition ») : le gérant peut décider
+du mur doublé la veille comme en cours de soirée. L'asymétrie est réelle et tenue par la
+procédure, pas par les règles — le topo le dit : **régler les multiplicateurs avant le coup
+d'envoi, et avant de publier le palmarès**, qui est immuable.
+
+### Le défaut latent que cette lecture révèle, et qu'il ne faut pas corriger avant le 6
+
+Si rien ne stocke les points et que `points_value` est **supprimé à la clôture**, alors une
+compétition `blocs_valides` terminée se recalcule **déjà aujourd'hui** avec des valeurs
+disparues. C'est peut-être sans effet — si seul le palmarès gelé est affiché pour une épreuve
+terminée — ou c'est un défaut réel. **Noté, pas touché** : ce n'est pas le chantier de cette
+semaine, et le gel tient.
+
+
 ## `competitions.registered_count` — le seul document partagé du chemin du contest (19/10/2026)
 
 Question posée par ClaudeNav (`docs/handoffs/2026-10-19-CN-apres-mesures.md` §2) : **existe-t-il
