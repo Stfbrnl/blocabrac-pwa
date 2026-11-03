@@ -385,6 +385,94 @@ précisément la forme que ce dépôt exige :
   qui reste tenue par les tests unitaires de `competitionRankings.ts`. C'est le bon partage ; il
   faut juste ne pas conclure plus large que le jeu de données ne permet.
 
+## §8 ter — Ta relecture du topo : les trois points sont traités
+
+### 🔴 L'estampille — ton diagnostic était le bon, et le parallèle est mérité
+
+Tu as raison sur le fond et sur la forme : une estampille écrite à la main est une
+**transcription littérale qui ne bouge pas quand la donnée bouge**, exactement le défaut que je
+félicitais mon script d'éviter le même après-midi. L'autre côté du miroir, oui.
+
+**Et c'était pire que ce que tu as vu** : tu n'as relu que le topo principal. Le topo des
+roulettes portait le même défaut, en plus ancien — **V2.55** et « 6 septembre 2026 ». J'ai traité
+la classe, pas l'instance.
+
+`frontend/scripts/topo-stamp.cjs` dérive désormais les deux, par jetons `{{APP_VERSION}}` /
+`{{GENERATED_ON}}` : version lue dans `package.json` (la source de vérité du dépôt), date du
+jour, formatage **miroir de `formattedAppVersion`** pour que la couverture et la Navbar ne
+puissent pas afficher deux numéros pour la même version. Sortie observée :
+`estampille posée : V2.77, généré le 3 novembre 2026`.
+
+Trois choix que je signale parce qu'ils ne vont pas de soi :
+
+- **Aucun repli.** Un jeton absent **lève**. Un repli (jeton laissé visible, ou chaîne vide)
+  rendrait le défaut invisible là où il est définitif : sur du papier.
+- **Les générateurs RELISENT l'estampille dans le DOM rendu** au lieu de faire confiance à la
+  valeur qu'ils viennent d'injecter. Un remplacement réussi dans une chaîne et une estampille
+  réellement présente sur la page sont deux choses différentes — et c'est le DOM qui tranche.
+- **Le filet des pieds de page mesure maintenant la source ESTAMPILLÉE.** En posant des jetons
+  (`{{APP_VERSION}}`, 15 caractères) plus longs que la valeur (`V2.77`, 5), j'avais créé un angle
+  mort : le filet aurait mesuré un document que **personne n'imprime**. Un filet ne garantit que
+  ce qu'il mesure.
+
+Gardé par `frontend/test/contrats/topoEstampille.test.ts` — **11 tests**, deux clauses
+d'**absence** : aucun littéral dans les sources, **et** les trois scripts passent bien par le
+module (on peut remettre les jetons et supprimer l'injection ; le topo sortirait alors avec
+« {{APP_VERSION}} » imprimé dessus). Les deux vues rouges **séparément**.
+
+### ⚠️ Page 10 — exactement ce que tu décrivais
+
+Ni `eyebrow` ni `h2`, entre deux pages qui portent les deux, et un pied affichant
+« 06 · Barème de points », l'étiquette de la page 8. Le paragraphe en gras qui ouvrait la page
+(« Classement de compétition par catégorie ») **est devenu le titre** : pas de doublon, et la
+hauteur ajoutée se réduit à l'`eyebrow` plus l'écart h2/p. Pied corrigé en
+« 06 · Catégories, saison et Finale ».
+
+Filet vert (14 sections, toutes dans une page, toutes avec leur pied) — mais **ce filet mesure
+les débordements, pas les disparitions**, donc j'ai relu le diff pour compter ce que j'avais
+déplacé : un `<p>` remplacé, rien d'autre touché, les 10 pastilles de catégorie et les 3
+encadrés intacts.
+
+**Note au passage** : les commentaires de la source dérivaient déjà — **deux blocs portaient
+`<!-- PAGE 9 -->`**. C'est probablement comment le titre a été perdu lors d'un rééquilibrage.
+Renuméroté.
+
+Et une inconsistance que j'ai **vue et délibérément laissée** : les pages 4, 13 et 14 n'ont pas
+d'`eyebrow` non plus. Mais ce sont des suites dont le pied porte **correctement** l'étiquette de
+leur série (`01 · Client`, `07 · Points de vigilance`), et les pages 9 et 11 — les suites de la
+section 06 — en ont un. La page 10 était l'anomalie **locale** ; j'ai aligné sur la convention de
+sa section plutôt que d'uniformiser tout le document à deux jours du contest.
+
+### ⚠️ L'URL imprimée — vérifiée, et pas avec `curl`
+
+Tu proposais un essai téléphone/4G. J'ai pu faire mieux depuis ici, par le seul chemin que la
+doctrine accepte : **piloter un vrai navigateur, APRÈS un rechargement** — puisque sous
+`registerType: 'prompt'` le service worker ne contrôle pas la page au premier chargement, et que
+c'est précisément l'état « SW actif » que `curl` n'atteint jamais.
+
+| étape | résultat |
+|---|---|
+| 1er chargement de `blocabrac.web.app` | SW **ne contrôle pas** (attendu) |
+| après rechargement | SW **contrôle** |
+| navigation vers le PDF | Chromium déclenche un **téléchargement**, pas une navigation |
+| `fetch` depuis la page contrôlée | **200**, `application/pdf`, **302 642 octets** |
+
+302 642 octets est **exactement** la taille du fichier dans `public/docs/` : ce sont bien ces
+octets-là qui sont servis, pas un reliquat. Le défaut de V2.76.1 est écarté, **avec** service
+worker actif.
+
+⚠️ **Portée** : Chromium sans interface, sur ordinateur. La logique du service worker est la même
+sur un Android, donc la classe de défaut est couverte ; un iPhone fait tourner WebKit, où le
+comportement peut différer à la marge. Le 4G ne teste que le réseau, pas ce défaut-là.
+
+### Ce que je n'ai toujours pas fait, et qu'il faut dire
+
+🔴 **Je n'ai jamais REGARDÉ le PDF.** `pdftoppm` est absent de ce poste, et le filet « garde la
+pagination, pas le rendu » — son propre commentaire le dit. Une page peut tenir et rester laide,
+ou couper un encadré au mauvais endroit. **Ta relecture visuelle reste le seul contrôle du rendu,
+et elle vient de prouver sa valeur en trouvant trois choses qu'aucun filet n'attrape.** Il faut
+la refaire sur ce PDF-ci, puisque j'ai touché la couverture et la page 10.
+
 ## §9 — Questions ouvertes pour toi
 
 1. **`e13e74d` : garder ou revert ?** Mon argument en §3 ; le volet « plafond » est de
