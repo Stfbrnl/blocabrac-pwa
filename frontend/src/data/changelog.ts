@@ -13,6 +13,16 @@ export interface ChangelogEntry {
 // les commits git.
 export const changelog: ChangelogEntry[] = [
   {
+    version: '2.77',
+    date: '2026-11-03',
+    title: 'En compétition, certains blocs peuvent compter double',
+    items: [
+      'En compétition, l’organisateur peut désormais décider que certains blocs comptent double. Un bloc concerné porte la mention « Ce bloc compte ×2 » dans l’écran de validation, et ses points y sont affichés déjà doublés, avec le détail du calcul.',
+      'Un bloc doublé compte double partout dans la compétition, y compris pour séparer deux grimpeurs à égalité de points. En revanche il garde sa couleur : le classement par niveau n’en est pas modifié.',
+      'Cela ne concerne QUE les compétitions. Les mêmes blocs validés en dehors d’une compétition rapportent leur valeur normale, celle de leur couleur, et aucun de vos scores passés n’a été recalculé.',
+    ],
+  },
+  {
     version: '2.76.3',
     date: '2026-11-01',
     title: 'Un bouton qui ne faisait rien a été retiré',
