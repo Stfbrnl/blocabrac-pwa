@@ -384,6 +384,10 @@ const AdminCompetitionManagement: React.FC = () => {
         color: d.data().color,
         difficulty: d.data().difficulty,
         points_value: d.data().points_value,
+        // ✅ 2026-11-03-CN-plan-multiplicateur-v2.md : à transmettre PARTOUT où un bloc est
+        // composé pour le calcul. Un seul site qui l'oublie compte le SIMPLE pendant que les
+        // autres comptent le double, sur la même compétition.
+        points_multiplier: d.data().points_multiplier,
       }));
 
       const payload = buildFrozenRankings({

@@ -51,6 +51,7 @@ interface Boulder {
   number: number;
   wall: string;
   points_value?: number; // ✅ Mode de comptage "Blocs validés" uniquement
+  points_multiplier?: number; // ✅ 2026-11-03-CN-plan-multiplicateur-v2.md
 }
 
 interface Participant {
@@ -205,7 +206,11 @@ const AdminCompetitionStats: React.FC = () => {
           color: doc.data().color, // ✅ Charger aussi le champ color
           number: doc.data().number || 0,
           wall: doc.data().wall || '',
-          points_value: doc.data().points_value
+          points_value: doc.data().points_value,
+          // ✅ 2026-11-03-CN-plan-multiplicateur-v2.md : à transmettre PARTOUT où un bloc est
+          // composé pour le calcul. Un seul site qui l'oublie compte le SIMPLE pendant que les
+          // autres comptent le double, sur la même compétition.
+          points_multiplier: doc.data().points_multiplier
         }));
         setBoulders(bouldersData);
 

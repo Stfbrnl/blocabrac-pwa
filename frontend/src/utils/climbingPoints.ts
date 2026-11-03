@@ -81,6 +81,11 @@ export interface CompetitionScoringBoulder {
   // l'ouvreur/l'admin (la cotation étant cachée en compétition, un barème par couleur
   // ne reflèterait pas la difficulté réelle perçue).
   points_value?: number;
+  // ✅ docs/plans/2026-11-03-CN-plan-multiplicateur-v2.md : multiplicateur de points de ce
+  // bloc pour CETTE compétition. Absent (ou null) = ×1, soit l'immense majorité des blocs.
+  // S'applique aux CINQ modes, et seulement aux compétitions : `calculatePoints` ne le
+  // connaît pas, donc il ne peut pas fuir dans le classement quotidien.
+  points_multiplier?: number;
 }
 
 // ✅ La couleur qui sert de clé au barème : `color` pour un bloc du jour, `difficulty` pour un
@@ -94,10 +99,11 @@ export interface CompetitionScoringBoulder {
 export const boulderColorKey = (boulder: CompetitionScoringBoulder): string | undefined =>
   boulder.color || boulder.difficulty;
 
-// Calcule les points d'un bloc de compétition selon le mode choisi pour cette
-// compétition. `calculatePoints` reste le seul calcul utilisé par le classement
-// quotidien et les mini-compétitions — cette fonction ne s'y substitue jamais.
-export const calculateCompetitionPoints = (
+// Les points d'un bloc AVANT son multiplicateur : le calcul historique, mot pour mot, pour
+// les cinq modes. Volontairement NON exporté — tout appelant doit passer par
+// `calculateCompetitionPoints` ci-dessous, sans quoi un écran afficherait le simple quand le
+// classement crédite le double.
+const pointsAvantMultiplicateur = (
   boulder: CompetitionScoringBoulder,
   attempts: number,
   success: boolean,
@@ -138,3 +144,35 @@ export const calculateCompetitionPoints = (
 
   return calculatePoints(colorKey, attempts, success);
 };
+
+// Calcule les points d'un bloc de compétition selon le mode choisi pour cette
+// compétition. `calculatePoints` reste le seul calcul utilisé par le classement
+// quotidien et les mini-compétitions — cette fonction ne s'y substitue jamais.
+//
+// ✅ docs/plans/2026-11-03-CN-plan-multiplicateur-v2.md §D3 — LE MULTIPLICATEUR S'APPLIQUE
+// APRÈS L'ARRONDI, en une seule ligne, à la toute fin. L'ordre vaut un point, et c'est
+// pourquoi c'est un emballage et non une ligne glissée dans le corps ci-dessus :
+//
+//   violet à 3 essais, mode à plancher :
+//     Math.round(base × facteur × 2) = 289  → l'écran affiche 144, le total crédite 289
+//     Math.round(base × facteur) × 2 = 288  → EXACTEMENT le double de la valeur affichée
+//
+// Un seul arrondi subsiste dans les deux cas, mais seul le second préserve la propriété que le
+// grimpeur vérifie de tête. L'autre produit des écarts de 1 point inexplicables au micro.
+//
+// ✅ Cette position couvre les cinq modes UNIFORMÉMENT, `blocs_valides` et `officiel`
+// compris, et `success: false` rend 0 dont le multiple est 0 : aucun cas particulier, aucune
+// branche par mode à tenir à jour le jour où un sixième mode arrive.
+//
+// ⚠️ Pas de garde-fou sur la valeur : un `0` ou un `0.5` annulerait des points, et c'est
+// `firestore.rules` (isValidPointsMultiplier, liste blanche [1, 2]) qui l'interdit — pas un
+// repli silencieux ici, qui rendrait aveugle au défaut qu'il compense.
+export const calculateCompetitionPoints = (
+  boulder: CompetitionScoringBoulder,
+  attempts: number,
+  success: boolean,
+  mode: ScoringMode = 'blocabrac',
+  customScoring?: CustomScoringTable
+): number =>
+  pointsAvantMultiplicateur(boulder, attempts, success, mode, customScoring) *
+  (boulder.points_multiplier ?? 1);

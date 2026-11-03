@@ -51,6 +51,18 @@ export interface BoulderInput {
   difficulty?: string;
   // Mode "Blocs validés" uniquement — voir climbingPoints.ts.
   points_value?: number;
+  // ✅ 2026-11-03-CN-plan-multiplicateur-v2.md §D2 — le multiplicateur COULE dans le
+  // départage, et c'est voulu : `calculateCompetitionPoints` mesure aussi la dureté
+  // (`hardness`), donc un violet ×2 (400) se mesure aussi dur qu'un rouge (400). Dans un
+  // mode à POINTS, la dureté EST la valeur en points — c'est déjà le choix accepté pour
+  // `blocs_valides`, où la cotation ne reflète plus la difficulté. Une seconde voie de
+  // calcul serait une divergence de plus. Mais c'est ANNONÇABLE : un bloc doublé compte
+  // double partout, départage compris.
+  //
+  // ⚠️ Le classement PAR NIVEAU MAX, lui, n'est PAS affecté : il partitionne par
+  // `boulderColorKey` (la couleur du bloc), jamais par ses points. Un violet ×2 reste un
+  // violet pour le niveau, et ne rend personne « arrivé par sa performance » en rouge.
+  points_multiplier?: number;
 }
 
 // ✅ Départage des ex æquo dans les modes à POINTS (règle fixée par l'utilisateur le

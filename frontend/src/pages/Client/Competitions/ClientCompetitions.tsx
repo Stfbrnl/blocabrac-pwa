@@ -109,6 +109,7 @@ interface Boulder {
   is_active: boolean;
   color?: string;
   points_value?: number; // ✅ Mode de comptage "Blocs validés" uniquement
+  points_multiplier?: number; // ✅ 2026-11-03-CN-plan-multiplicateur-v2.md
 }
 
 const ClientCompetitions: React.FC = () => {
@@ -322,7 +323,11 @@ const ClientCompetitions: React.FC = () => {
     competition_id: docSnap.data().competition_id as string | undefined,
     is_active: (docSnap.data().is_active as boolean) || false,
     color: docSnap.data().color as string | undefined,
-    points_value: docSnap.data().points_value as number | undefined
+    points_value: docSnap.data().points_value as number | undefined,
+    // ✅ 2026-11-03-CN-plan-multiplicateur-v2.md : à transmettre PARTOUT où un bloc est
+    // composé pour le calcul. Un seul site qui l'oublie compte le SIMPLE pendant que les
+    // autres comptent le double, sur la même compétition.
+    points_multiplier: docSnap.data().points_multiplier as number | undefined
   });
 
   const loadBoulders = async (competition: Competition) => {
