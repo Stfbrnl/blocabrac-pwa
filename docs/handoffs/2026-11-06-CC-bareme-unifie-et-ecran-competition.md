@@ -241,3 +241,59 @@ Et les points ouverts de la veille, intacts : « Mes stats » et ses lectures, l
 `levelSync` depuis `ClientDaily` (avec la question jamais vérifiée de la Roulette quand aucun
 bloc ouvert ne correspond au niveau du grimpeur), et les retours de grimpeurs sur le mode
 compétition dont la partie B ne traite que la **lisibilité**.
+
+---
+
+## 8. Ajout du soir : les mini-compétitions ont été alignées aussi
+
+L'utilisateur a demandé : *« il n'y a jamais eu de mini-compétitions véritablement déroulées, ne
+serait-ce pas pertinent de les aligner aussi ? »* **Mesure en prod** : 1 mini-compétition créée
+(« Adulte Toussaint », 35 blocs, rattachée à 1 séance), et **0 document portant un
+`miniCompetitionId`** sur les 3 `client_course_results` existants. Ton §A.1 point 2 gardait donc
+`calculatePoints` pour une raison — *« une mini-compétition a été proclamée le soir même, elle se
+fige »* — **qui ne protégeait encore rien**.
+
+🔴 **Et le fait qui a rendu le moment décisif n'était écrit nulle part, ni dans ton plan ni dans
+`CLAUDE.md`** : les points d'une mini-compétition **ne sont pas stockés**.
+`buildMiniCompetitionRanking` les recalcule à chaque affichage depuis `boulderColor` +
+`attempts`. Le gel porte donc sur la **couleur** — immunité contre une **recotation**, qui est ce
+que la doctrine visait réellement — et **pas sur les points**. Aligner le barème *après* la
+première vraie mini-compétition aurait réécrit un classement proclamé devant des élèves :
+exactement l'interdit. **C'était le seul moment où c'était gratuit, et il ne se représentera
+pas.**
+
+⚠️ **La leçon dépasse le barème, et je la note pour nous deux** : *vérifier qu'une exception
+doctrinale protège encore quelque chose avant de la reconduire.* Celle-ci était juste à l'écrit
+et vide dans les faits ; la reconduire par fidélité au document aurait rendu le même changement
+**impossible pour toujours**. Une exception vide qui se remplit devient une contrainte.
+
+Corollaire d'écriture : une exception consignée devrait dire **ce qu'elle protège**, pour qu'on
+puisse vérifier qu'elle protège encore. « Proclamé = figé » ne le disait pas ; « figé parce que
+N classements ont été annoncés » l'aurait dit.
+
+**Ce que ça change concrètement.** Deux sites basculent — `miniCompetitionRanking.ts` et
+l'affichage de `ClientCourseSession.tsx` — et ils basculent **ensemble**, parce que l'écran du
+moniteur et celui de l'élève ont déjà divergé une fois sur la même validation (80 points contre
+900, 18/10/2026).
+
+✔️ **`calculatePoints` n'a désormais plus qu'UN SEUL APPELANT** dans toute l'application : la
+branche du mode `blocabrac`, pour que les compétitions **passées** s'affichent juste. Nouveau
+contrat, qui balaie toutes les sources de `src/` et affirme la **taille** avant le contenu
+(exactement 1 fichier, exactement 1 appel), puis que cet appel est bien le repli de mode.
+⚠️ **Un diff qui supprime `calculatePoints` est faux, et un diff qui lui AJOUTE un appelant
+l'est aussi** — ce serait une troisième courbe, soit ce que le critère d'uniformité écarte.
+Quatre cassures, chacune vue rouge séparément.
+
+✔️ **Et un contrôle gratuit sur l'alignement lui-même** : la seule valeur de
+`miniCompetitionRanking.test.ts` qui a bougé est celle du seul essai **non-flash** (480 → 455,
+rouge au 2ᵉ essai). Les flashs et les zéros n'ont pas bronché — c'est la signature attendue d'un
+changement de courbe, et de rien d'autre.
+
+Trois passages écrits **quelques heures plus tôt le même jour** ont dû être corrigés : le tableau
+et la doctrine de `CLAUDE.md`, la page 8 du topo et sa ligne « Mini-compétitions », et le récit
+d'architecture. Topo régénéré, 14 sections toutes dans une page, **tous les comptes structurels
+identiques** (seule la prose a changé). L'affiche ne mentionnait plus les mini-compétitions
+depuis son raccourcissement : rien à y changer.
+
+**553 tests verts.** Le compte de commits locaux passe à **7** — la procédure du §6 est
+inchangée.
