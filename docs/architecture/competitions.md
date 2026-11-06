@@ -541,3 +541,239 @@ sur « hier » est sûr ; un tableau de bord affichant « aujourd'hui » montrer
 dérive à la hausse pendant des minutes, sans jamais dire qu'il n'est pas terminé. Cela condamne
 la variante « écran qui interroge l'API en direct » et confirme la forme proposée par ClaudeNav :
 un script nocturne qui écrit **un** document par journée révolue.
+
+---
+
+## Le barème unifié, et pourquoi ce fichier affirmait l'inverse la veille (V2.80, 06/11/2026)
+
+Plan : `docs/plans/2026-11-06-CN-plan-bareme-unifie-et-ecran-competition.md`, partie A.
+
+### Le renversement, et ce qui l'a produit
+
+Le 28/10/2026, `blocabrac_plancher` est né **pour les compétitions seulement**, et la raison
+était écrite partout : `calculatePoints` est partagé avec le classement quotidien, que
+`reconcile-classement-profiles.js` **rejoue sur tout l'historique**, donc le modifier ne
+recoterait pas un bloc — il réécrirait d'un coup les points de tous les grimpeurs sur tous les
+blocs jamais validés. `CLAUDE.md` en tirait une conséquence plus forte : l'anomalie du blanc
+« **n'a de bon moment pour être corrigée à aucune date** ».
+
+Cette phrase était **juste sur le coût et muette sur le critère**. Le 06/11 l'utilisateur a
+nommé celui qui gouverne :
+
+> **Quand on compte des points avec les essais, il doit y avoir une seule façon de le faire,
+> quel que soit le processus compétitif.**
+
+Et il a écarté la variante la **moins perturbante** (la « variante C » : le classique borné au
+quart de la base, mesurée à +738 points et **0 compte en baisse**), pourtant recommandée la
+veille, pour deux raisons qui primaient :
+
+1. **le compteur général ne qualifie à rien** — ni badge, ni niveau, ni classement de
+   compétition. C'est un totaliseur de vitrine : les 26 comptes qui baissent ne coûtent rien de
+   réel, seulement une annonce ;
+2. **une troisième courbe aurait contredit exactement le critère d'uniformité** qui motivait le
+   chantier.
+
+⚠️ **La leçon à garder n'est pas « on peut changer un barème »** : c'est qu'un argument de
+**coût** ne tranche pas une question de **principe**, et qu'un document qui écrit « à aucune
+date » déguise un arbitrage en loi de la nature. La partie de l'argument qui est restée vraie :
+la bascule a bien réécrit tout le passé, et c'est pour ça qu'elle s'est faite **une fois**,
+annoncée, en déployant l'application et le script **ensemble**.
+
+### Les chiffres, prédits puis mesurés
+
+Prédiction écrite **avant** de lancer la réconciliation, depuis une base relue à l'instant (et
+non reprise du handoff de la veille) :
+
+| grandeur | prédit | mesuré |
+|---|---|---|
+| somme des scores | 212 655 → 206 787 | identique |
+| comptes en écart (sur 71 profils) | 29 | **29** |
+| en baisse / en hausse / inchangés (sur 34 actifs) | 26 / 3 / 5 | identique |
+| rangs qui bougent | 9, dont le 6ᵉ/7ᵉ | identique |
+| saison | 3 grimpeurs, 2 460 → 2 344 | identique |
+| `colorCounts` / `bestColorRank` | **aucun mouvement** | **aucun diff** |
+
+⚠️ **La dernière ligne est celle qui compte le plus** : un critère de sortie doit prédire
+*toutes* les grandeurs observables, **y compris celles dont on n'attend aucun mouvement**. Sans
+elle, un recalcul qui aurait aussi abimé les compteurs de couleurs serait passé pour un succès.
+
+✔️ Et un acquis gratuit : le recoupement du recalcul classique contre les scores **stockés**
+donnait **0 écart sur 34 comptes** avant la bascule — le compteur incrémental n'avait aucune
+dérive, donc **tout** l'écart observé ensuite est attribuable au changement de barème, et à rien
+d'autre. Une attribution, pas une supposition.
+
+### Deux lectures qui ont fermé des questions ouvertes du plan
+
+- **`season.baseScore` : 63 profils en portent un, et ils sont TOUS à zéro** (8 n'en ont pas, et
+  la réconciliation saute leur saison). Le plan craignait qu'un total de saison devienne un
+  **mélange permanent des deux barèmes** si les bases restaient figées à l'ancien ; la lecture
+  montre qu'il n'y a **rien à décider**. La question était bonne, la réponse était dans la base.
+- **Le garde-fou de dérive** (30 % **et** ≥ 3 comptes) se déclenche : 29/71 = 40,8 %. Le `--fix`
+  demande donc `--force`, **une fois**, et c'est le comportement voulu — un réalignement de masse
+  doit être confirmé explicitement.
+
+### La forme du livrable, et le défaut le plus grave du lot
+
+`calculateDailyPoints` appelle `plancherPoints` et `basePoints`, **le même code** que la branche
+`blocabrac_plancher` — pas une copie de la formule. Et `calculatePoints` **n'a pas bougé d'un
+caractère** : elle reste la formule des **mini-compétitions** (proclamées le soir même, donc
+figées) et du mode `blocabrac` des compétitions passées.
+
+🔴 **Le défaut le plus grave était déjà en place, pas introduit par ce chantier** :
+`reconcile-classement-profiles.js` portait **sa propre copie** du barème, en ligne. Si elle
+avait gardé l'ancienne formule, sa prochaine passe mensuelle aurait remis **toute la base** à
+l'ancien barème — **en croyant la réparer**, sans qu'aucun écran ne s'en plaigne. La copie est
+**inévitable** (un script Node CommonJS ne peut pas importer un module TypeScript) ; ce qui se
+choisit, c'est **combien** il y en a et si elle est **vérifiée**. Elle vit désormais une seule
+fois, dans `scripts/lib/bareme-quotidien.cjs`, et les **deux** implémentations consomment **la
+même table figée** (`frontend/test/contrats/baremeQuotidien.test.ts`, 8 couleurs × 60 essais).
+
+⚠️ **Le test d'uniformité ne compare pas une fonction à elle-même.** `calculateDailyPoints`
+prend une couleur ; `calculateCompetitionPoints` traverse la lecture de la couleur du bloc
+(`color` ou `difficulty`), le choix de la branche de mode et l'application du multiplicateur.
+C'est l'accord de ces deux **chemins** qui est affirmé. S'il avait été écrit comme un alias
+(`calculateDailyPoints = (c, a, s) => calculateCompetitionPoints({color: c}, a, s, '...')`), le
+test aurait été **structurellement incapable de rougir** — le cas dégénéré où l'on compare la
+chose à elle-même. Vu rouge en faisant pointer la branche de compétition sur `calculatePoints` :
+480 cas.
+
+### Ce que les documents imprimés disaient, et ce que ça a appris
+
+Le plan ne les mentionnait pas, et **deux documents disaient le contraire de ce qui venait
+d'être livré** :
+
+- l'**affiche d'accueil** portait « Ce barème est celui des **compétitions**. Vos points de tous
+  les jours et le classement des grimpeurs ne changent pas, et aucun de vos scores passés n'a
+  été recalculé. » — **les trois affirmations fausses le jour même**. Sa *table*, elle, était
+  déjà juste : elle est **générée** depuis `climbingPoints.ts` ;
+- la **page 8 du topo papier** portait la table classique à quatre colonnes et un encadré
+  affirmant « **C'est voulu et ça ne change pas** ».
+
+⚠️ **Le générateur de l'affiche a refusé d'écrire trois fois** : le premier texte la faisait
+déborder sur 2 pages, où son encadré de bas de page disparaît. **La marge était de moins d'une
+ligne** — tout ajout doit en retirer autant, et la phrase de réassurance (« il ne commande ni
+badge, ni niveau ») a dû migrer vers le changelog et le bandeau d'annonces. Une tentative de
+financer la place en raccourcissant la légende de la courbe **n'a pas suffi** : la légende est
+plus étroite que l'encadré, donc une ligne gagnée là ne vaut pas une ligne dépensée ici.
+
+⚠️ **Et la différence de nature entre les deux documents est la leçon durable** : l'affiche est
+générée, donc elle ne peut pas mentir ; le topo **recopie à la main**, donc c'est une
+transcription, et *une transcription littérale ne bouge pas quand la donnée bouge*. À défaut
+d'une génération, la recopie est désormais **vérifiée** contre la même table figée, plancher
+compris. Vue rouge sur **un seul chiffre** changé (533 → 532) et sur **une ligne entière**
+supprimée.
+
+---
+
+## L'écran de validation rangé par mur (V2.80, 06/11/2026)
+
+Plan : même document, partie B. Six grimpeurs devant **92 blocs** dans une liste plate, au
+contest du 5 novembre.
+
+### Le diagnostic, plus précis que « pas de numéros »
+
+**Les numéros existaient.** Ils sont attachés au **mur**, pas à la salle. Le tri global
+`a.number - b.number` mettait donc tous les n°1 des sept murs ensemble : il **entrelaçait les
+murs**. Ça avait un sens pour 30 blocs créés pour une épreuve, et aucun pour toute la salle.
+
+✔️ **Conséquence de conception qui a évité un chantier entier** : le regroupement par mur rend
+les numéros par mur non ambigus. Il n'y avait donc **rien à renuméroter** — la section porte le
+mur, la ligne porte le numéro, et ça correspond à ce qui est écrit sur la prise.
+
+### Le signal d'alarme, et pourquoi il ne s'observe pas à l'exécution
+
+🔴 Replier une section la **démonte** (`unmountOnExit`), et le débounce est à **2 500 ms** : un
+grimpeur règle ses essais, replie dans la foulée, et la validation pourrait être perdue — sans
+message, sur l'écran où l'on ne perd jamais une validation.
+
+Lecture faite plutôt que supposée : `validationQueue` (`useDebouncedFlushQueue`) et
+`validationResults` vivent dans **le composant**, et les cartes sont du **JSX inline** dans un
+`.map()`. **Il n'existe aucun composant par ligne à démonter.** La propriété est donc
+**structurelle** — et une propriété structurelle ne s'observe pas en exécutant un geste, elle
+s'observe en lisant **qui possède quoi**.
+
+⚠️ Ce que garde `test/contrats/ecranCompetition.test.ts` n'est donc pas le présent : c'est **le
+jour où quelqu'un extraira « proprement » une carte en composant et y emmènera la file**. Ce
+jour-là le défaut sera invisible — l'écran marchera, et seules les validations suivies d'un
+repli dans les 2,5 s manqueront. Trois clauses, dont une qui vérifie que `unmountOnExit` est
+bien là : **sans démontage, les deux autres ne garderaient rien, et un filet qui ne garde rien
+est pire qu'un filet absent, parce qu'il rassure.**
+
+### Les deux ensembles qui se ressemblent et ne sont pas le même
+
+`groupBouldersByWall` reçoit **séparément** :
+
+- `validatedIds` — les réussis **vivants**, pour **compter** dans l'en-tête ;
+- `hiddenIds` — un **instantané**, pour **masquer**.
+
+⚠️ **Deux paramètres plutôt qu'un drapeau, exprès.** Les confondre fait disparaître la ligne
+**sous le doigt** à l'instant où on la valide, et aucun test ne pourrait même **écrire**
+l'assertion contraire s'ils étaient un seul paramètre. L'instantané se reprend à **deux moments
+et deux seulement** : au basculement du filtre, et à l'ouverture d'un mur.
+
+⚠️ **Le dénominateur ne rétrécit jamais** : `total` compte les blocs **du mur**, pas ceux qui
+restent après filtrage. Un dénominateur qui bougerait ferait croire que des blocs ont disparu de
+l'épreuve. C'est la grandeur dont on n'attend aucun mouvement, et elle a son assertion.
+
+### Le tri par couleur : tout ou rien, dérivé de la donnée
+
+🔴 Il n'est offert que si **tous** les blocs portent une couleur de `levelOrder`. En format mixte
+— la forme réelle du contest : des blocs déjà en place plus un mur neuf — un tri par couleur
+**placerait quelque part** les blocs à cotation cachée, et leur **position** révélerait leur
+cotation. Le tri deviendrait la fuite exacte que « Mystère » existe pour empêcher.
+
+⚠️ **La condition se lit sur le contenu de la liste, jamais sur un réglage de compétition** : un
+réglage peut être posé à tort par un ouvreur pressé, une condition lue sur la donnée ne peut pas
+mentir. Même forme que la décision prise pour le multiplicateur. Défense en profondeur : le
+module **refuse de trier même si l'écran le demande**, *et* l'écran ne le demande pas.
+
+Deux pièges fermés au passage : une **liste vide** (`[].every(...)` rend `true`, ce qui serait
+faux ici) et une **cotation non canonique** — sept blocs de prod portent `"noire"` ou `"Rouge"`,
+qu'un `every` sur la simple présence du champ aurait acceptés.
+
+### L'écart assumé avec le plan
+
+Le plan proposait de propager le `a.wall.localeCompare(b.wall)` de `fetchCandidates`. L'ordre
+retenu est celui de **`gymConfig.walls`**, qui est le **circuit physique réel** de la salle : ces
+sections s'ouvrent pendant qu'on **marche** dans la salle, et « Dalle » avant « Dévers 15° » n'a
+de sens que pour un lecteur de dictionnaire. Un mur absent du tableau (renommé, retiré de la
+configuration sans l'être des blocs) passe **après** les autres, par alphabet — jamais écarté en
+silence.
+
+### Le numéro écrit sur la prise : un interdit qui n'était pas gardé
+
+Le §B.3 du plan dit « **jamais sur des blocs quotidiens réutilisés** ». Or `handleReorder`
+écrivait `number` sur **tous** les blocs rattachés — blocs quotidiens compris, dont le numéro est
+celui **écrit sur la prise**. Un clic désynchronisait l'application du physique (« un grimpeur
+chercherait le bloc 47 devant une étiquette qui dit 3 »), **et le geste ne le disait pas**.
+
+- Le périmètre est calculé par un module **pur** (`utils/competitionRenumbering.ts`), pas par un
+  `filter` en ligne : c'est une **opération de donnée** (une écriture par bloc dans un
+  `writeBatch`), et **V2.79 a appris dans ce même fichier qu'un périmètre d'opération ne doit
+  jamais dériver d'un affichage.**
+- **Liste BLANCHE** sur `type === 'competition'`, et non liste noire sur `'daily'` : un troisième
+  type qui apparaîtrait serait alors **protégé par défaut**, plutôt que renuméroté en silence
+  parce que personne n'a pensé à l'exclure.
+- **Les deux messages annoncent leur périmètre**, succès comme no-op : un succès silencieux sur
+  un sous-ensemble est **indiscernable** d'un succès sur l'ensemble, et l'ouvreur repartirait en
+  croyant toute la liste renumérotée.
+- Le champ du numéro est **grisé** sur un bloc protégé, pas absent : pour qu'on voie qu'il
+  existe. Il reste modifiable dans « Blocs quotidiens », sans quoi ce champ deviendrait le seul
+  endroit où l'application refuse une correction légitime.
+
+⚠️ **Et le détail à penser une fois, consigné dans le topo** : si l'ouvreur numérote dans
+l'ordre où il ouvre et qu'il ouvre du facile au dur, **le numéro devient un indice de cotation**
+sur une épreuve à cotations cachées.
+
+### Le rééquilibrage du topo, et ce qu'un filet ne mesure pas
+
+L'ajout des deux points de vigilance a fait **déborder** la page « Points de vigilance » de
+**56 px**, ce que le filet des pieds de page a attrapé. ⚠️ **Mais ce filet mesure les
+DÉBORDEMENTS, pas les DISPARITIONS** — c'est exactement comme ça qu'un groupe entier de points
+de vigilance a déjà été **supprimé au lieu d'être remis**, le 19/10/2026, avec un document
+régénéré **vert et parfait**.
+
+Le rééquilibrage a donc été fait par un script qui **retire exactement ce qu'il réinsère** et
+**compte avant/après** (24 → 24 points de vigilance), puis tous les comptes structurels ont été
+vérifiés contre `HEAD` : +2 « warns », +1 titre de groupe, +1 ligne de tableau, et **14 sections
+/ 15 pieds de page inchangés**. *Après tout déplacement de bloc, compter ce qu'on a déplacé.*
