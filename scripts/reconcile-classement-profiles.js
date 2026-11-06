@@ -94,13 +94,18 @@ const uidArgIndex = process.argv.indexOf('--uid');
 const SINGLE_UID = uidArgIndex !== -1 ? process.argv[uidArgIndex + 1] : null;
 const BATCH_SIZE = 200;
 
-// ✅ Réimplémentation fidèle de climbingPoints.ts (basePoints/deductions) et
-// competitionEligibility.ts (levelOrder) — tenir ces deux copies synchronisées si le
-// barème change un jour (rare : le barème quotidien n'a pas changé depuis la création
-// de l'app).
+// ✅ Réimplémentation fidèle de competitionEligibility.ts (levelOrder).
 const LEVEL_ORDER = ['jaune', 'vert', 'bleu', 'violet', 'rouge', 'noir', 'blanc', 'rose'];
-const BASE_POINTS = { jaune: 25, vert: 50, bleu: 100, violet: 200, rouge: 400, noir: 600, blanc: 800, rose: 1000 };
-const DEDUCTIONS = { jaune: 10, vert: 10, bleu: 10, violet: 10, rouge: 20, noir: 20, blanc: 50, rose: 50 };
+
+// ✅ 06/11/2026 : le barème ne vit plus EN LIGNE ici. Il a été sorti dans
+// `lib/bareme-quotidien.cjs`, seule copie CommonJS, dont l'accord avec
+// `frontend/src/utils/climbingPoints.ts` est verrouillé par une table figée que les deux
+// consomment (`frontend/test/contrats/baremeQuotidien.test.ts`, dans `npm test`).
+//
+// 🔴 Ce que ça protège : ce script réécrit le score de TOUS les comptes. Une formule restée
+// en arrière ici remettrait toute la base à l'ancien barème **en croyant la réparer**, et
+// aucun écran ne s'en plaindrait.
+const { calculateDailyPoints } = require('./lib/bareme-quotidien.cjs');
 
 // ✅ Réimplémentation fidèle de gymConfig.ts (ageBands) et utils/ageCategory.ts
 // (getSeasonAge/getFfmeCategory) — tenir synchronisée si les tranches FFME changent.
@@ -153,12 +158,6 @@ async function loadSeasonWindow() {
   if (data.cloturee) return null; // saison clôturée, en attente de reconfiguration : season.* hors de portée
   if (!data.debut || !data.fin) return null;
   return { debut: data.debut, fin: data.fin };
-}
-
-function calculatePoints(color, attempts) {
-  const base = BASE_POINTS[color] || 0;
-  const deduction = attempts > 1 ? (attempts - 1) * (DEDUCTIONS[color] || 0) : 0;
-  return Math.max(0, base - deduction);
 }
 
 // ✅ client_boulder_results ne stocke PAS la couleur du bloc (voir ClientDaily.tsx) :
@@ -225,11 +224,11 @@ async function computeExpectedProfile(uid, colorById, seasonWindow, storedBase) 
     if (!color || !LEVEL_ORDER.includes(color)) return; // couleur illisible : ignoré, pas cassé
 
     colorCounts[color] = (colorCounts[color] || 0) + 1;
-    score += calculatePoints(color, attempts);
+    score += calculateDailyPoints(color, attempts);
 
     if (doSeason && isWithinSeasonWindow(data.createdAt, seasonWindow.debut, seasonWindow.fin)) {
       seasonColorCounts[color] = (seasonColorCounts[color] || 0) + 1;
-      seasonScore += calculatePoints(color, attempts);
+      seasonScore += calculateDailyPoints(color, attempts);
     }
   });
 

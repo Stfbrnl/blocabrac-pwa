@@ -36,7 +36,11 @@ describe('summarizeValidatedResults', () => {
 
   it('applique la déduction liée au nombre d\'essais', () => {
     const summary = summarizeValidatedResults([{ color: 'bleu', attempts: 3 }]);
-    expect(summary.score).toBe(80); // 100 - 2*10, cohérent avec climbingPoints.test.ts
+    // ⚠️ 79 depuis le 06/11/2026 : le barème quotidien est passé à la courbe à plancher
+    // (bleu à 3 essais : 100 × (0,25 + 0,75 × 0,85²) = 79,19 → 79), et plus 100 − 2×10 = 80.
+    // Les valeurs de ce fichier sont désormais celles de TABLE_PLANCHER dans
+    // test/contrats/baremeQuotidien.test.ts, qui est leur source.
+    expect(summary.score).toBe(79);
   });
 });
 
@@ -76,8 +80,8 @@ describe('scoreDeltaForValidation', () => {
   });
 
   it('delta reflète un changement du nombre d\'essais sur le même bloc', () => {
-    // 1er essai (100) -> 3e essai (80) : delta -20
-    expect(scoreDeltaForValidation('bleu', 1, 3)).toBe(-20);
+    // 1er essai (100) -> 3e essai (79, barème à plancher) : delta -21
+    expect(scoreDeltaForValidation('bleu', 1, 3)).toBe(-21);
   });
 });
 
@@ -165,7 +169,7 @@ describe('cohérence incrémental vs recalcul complet', () => {
       { boulderId: 'b1', color: 'rouge', attempts: 4 }, // corrigé après coup
     ]);
     expect(incremental).toEqual(full);
-    expect(incremental.score).toBe(400 - 3 * 20); // dégression rouge
+    expect(incremental.score).toBe(284); // rouge à 4 essais, barème à plancher (et non 400 − 3×20)
   });
 
   it('converge sur une séquence longue et désordonnée, plusieurs blocs et couleurs', () => {
@@ -195,11 +199,11 @@ describe('recomputeSeasonBaseline (V2.56 — crédit de départ au redémarrage)
     const { score, colorCounts } = recomputeSeasonBaseline(
       [
         { boulderId: 'b-vert', attempts: 1 }, // 50
-        { boulderId: 'b-rouge', attempts: 3 }, // 400 - 2*20 = 360
+        { boulderId: 'b-rouge', attempts: 3 }, // 317 au barème à plancher (et non 400 − 2×20)
       ],
       colorById,
     );
-    expect(score).toBe(50 + 360);
+    expect(score).toBe(50 + 317);
     expect(colorCounts).toEqual({ vert: 1, rouge: 1 });
   });
 

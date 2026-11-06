@@ -1,4 +1,11 @@
-import { calculatePoints } from './climbingPoints';
+// ⚠️ `calculateDailyPoints`, jamais `calculatePoints`, depuis le 06/11/2026
+// (docs/plans/2026-11-06-CN-plan-bareme-unifie-et-ecran-competition.md partie A) : le
+// classement quotidien compte avec la MÊME courbe que les compétitions (plancher au quart de
+// la base), parce que « quand on compte des points avec les essais, il doit y avoir une seule
+// façon de le faire, quel que soit le processus compétitif ». `calculatePoints` existe
+// toujours, mais pour les mini-compétitions et les compétitions passées en mode `blocabrac` —
+// les trois sites de ce fichier ne doivent plus jamais l'appeler.
+import { calculateDailyPoints } from './climbingPoints';
 import { levelOrder, type Level } from './competitionEligibility';
 
 export interface ValidatedBoulderResult {
@@ -23,7 +30,7 @@ export const summarizeValidatedResults = (results: ValidatedBoulderResult[]): Sc
   let score = 0;
   let bestColorRank = -1;
   results.forEach((result) => {
-    score += calculatePoints(result.color, result.attempts, true);
+    score += calculateDailyPoints(result.color, result.attempts, true);
     const rank = levelOrder.indexOf(result.color as Level);
     if (rank > bestColorRank) bestColorRank = rank;
   });
@@ -62,8 +69,8 @@ export const scoreDeltaForValidation = (
   oldAttempts: number | null,
   newAttempts: number | null
 ): number => {
-  const oldPoints = oldAttempts !== null ? calculatePoints(color, oldAttempts, true) : 0;
-  const newPoints = newAttempts !== null ? calculatePoints(color, newAttempts, true) : 0;
+  const oldPoints = oldAttempts !== null ? calculateDailyPoints(color, oldAttempts, true) : 0;
+  const newPoints = newAttempts !== null ? calculateDailyPoints(color, newAttempts, true) : 0;
   return newPoints - oldPoints;
 };
 
@@ -96,7 +103,7 @@ export const recomputeSeasonBaseline = (
   results.forEach(({ boulderId, attempts }) => {
     const color = colorById.get(boulderId);
     if (!color || levelOrder.indexOf(color as Level) === -1) return; // bloc inconnu/hors barème : ignoré
-    score += calculatePoints(color, attempts, true);
+    score += calculateDailyPoints(color, attempts, true);
     colorCounts[color as Level] = (colorCounts[color as Level] || 0) + 1;
   });
   return { score, colorCounts };

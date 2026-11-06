@@ -7,8 +7,18 @@ export const deductions: Record<string, number> = {
 };
 
 // Points obtenus pour un bloc réussi, dégressifs selon le nombre d'essais.
-// ✅ Reste le barème par défaut (classement quotidien, mini-compétitions, et le mode
-// "Blocabrac" des grosses compétitions) — signature inchangée pour ne rien casser.
+//
+// ⚠️ DEPUIS LE 06/11/2026 (docs/plans/2026-11-06-CN-plan-bareme-unifie-et-ecran-competition.md
+// partie A) CE N'EST PLUS LE BARÈME DU CLASSEMENT QUOTIDIEN — voir `calculateDailyPoints`
+// ci-dessous. Cette fonction reste la formule de DEUX choses, et elle ne bouge pas d'un
+// caractère :
+//   - les **mini-compétitions** (`miniCompetitionRanking.ts`, `ClientCourseSession.tsx`) ;
+//   - le mode de compétition `blocabrac`, conservé **lisible** pour les compétitions passées
+//     qui l'utilisent (il n'est plus sélectionnable à la création).
+//
+// La doctrine qui sépare les deux : *une mini-compétition a été **proclamée** le soir même,
+// elle se fige ; le classement général **mesure**, il se recalcule.* Un diff qui supprime
+// `calculatePoints` est faux.
 export const calculatePoints = (difficulty: string, attempts: number, success: boolean): number => {
   if (!success) return 0;
   const base = basePoints[difficulty] || 0;
@@ -45,6 +55,38 @@ export const plancherPoints = (base: number, attempts: number): number => {
   const essais = Number.isFinite(attempts) ? Math.max(1, attempts) : 1;
   const facteur = PLANCHER_RATIO + (1 - PLANCHER_RATIO) * Math.pow(PLANCHER_TAUX, essais - 1);
   return Math.round(base * facteur);
+};
+
+// ✅ BARÈME DU CLASSEMENT QUOTIDIEN depuis le 06/11/2026
+// (docs/plans/2026-11-06-CN-plan-bareme-unifie-et-ecran-competition.md partie A).
+//
+// Il est le MÊME que celui de la branche `blocabrac_plancher` de
+// `calculateCompetitionPoints` : même `plancherPoints`, même table `basePoints`, même garde
+// de succès. Pas une copie de la formule — le même code.
+//
+// **Pourquoi ce changement, alors que `CLAUDE.md` tenait l'anomalie du blanc pour « sans bon
+// moment pour être corrigée »** : parce que le critère qui gouverne a été nommé, et qu'il
+// l'emporte. *Quand on compte des points avec les essais, il doit y avoir une seule façon de
+// le faire, quel que soit le processus compétitif.* Une troisième courbe au quotidien aurait
+// contredit exactement ce principe. Et le compteur général **ne qualifie à rien** : ni badge,
+// ni niveau, ni classement de compétition — c'est un totaliseur de vitrine, donc les comptes
+// qui baissent ne coûtent qu'une annonce (mesuré avant la bascule : −5 868 points sur
+// 212 655, 26 comptes sur 34 en baisse, 9 rangs qui bougent dont le 6ᵉ/7ᵉ).
+//
+// ✅ Ce qui est corrigé au passage : **l'inversion des couleurs**. Le barème classique
+// contient quatre inversions (blanc < noir aux essais 8-30, rose < noir 15-30, blanc < rouge
+// 15-20, blanc < violet 17-20) — une couleur plus dure valant moins qu'une plus tendre au même
+// nombre d'essais, parce que la déduction est propre à chaque couleur. Ici le facteur ne dépend
+// que du nombre d'essais : la couleur se factorise, donc il n'y a **aucune** inversion possible.
+//
+// 🔴 `scripts/reconcile-classement-profiles.js` porte sa PROPRE copie de ce calcul (il ne peut
+// pas importer un module TypeScript). Les deux doivent bouger ensemble, et leur accord est
+// verrouillé par une table figée partagée (`frontend/test/contrats/baremeQuotidien.test.ts`) :
+// si le script gardait l'ancienne formule, sa prochaine passe mensuelle réécrirait tous les
+// comptes à l'ancien barème **en croyant les réparer**.
+export const calculateDailyPoints = (difficulty: string, attempts: number, success: boolean): number => {
+  if (!success) return 0;
+  return plancherPoints(basePoints[difficulty] || 0, attempts);
 };
 
 // ✅ Modes de comptage propres aux compétitions (jamais au classement annuel — voir

@@ -3,7 +3,7 @@ import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '../../../services/firebaseConfig';
 import { collection, query, where, getDocs, addDoc, setDoc, doc, getDoc, deleteDoc } from 'firebase/firestore';
 import { scoreDeltaForValidation, isWithinSeasonWindow } from '../../../utils/classementScore';
-import { calculatePoints } from '../../../utils/climbingPoints';
+import { calculateDailyPoints } from '../../../utils/climbingPoints';
 import { getDocsCacheFirst } from '../../../utils/firestoreCacheFirst';
 import { useDebouncedFlushQueue } from '../../../utils/useDebouncedFlushQueue';
 import { runReadThenWriteTransaction } from '../../../utils/firestoreTransaction';
@@ -875,7 +875,13 @@ const ClientDaily: React.FC = () => {
           }
         }
       } else if (challenge.structure === 'bloc_designe' && boulderId && challenge.boulder_id === boulderId && success) {
-        const points = calculatePoints(color, resultAttempts, true);
+        // ⚠️ `calculateDailyPoints` (06/11/2026) : le même barème que `scoreDelta` ci-dessus,
+        // que la métrique "points" d'un défi `fenetre` réutilise. Sans ça, la MÊME validation
+        // du MÊME bloc créditerait deux échelles différentes dans la MÊME fonction — un défi
+        // `bloc_designe` compte bien « des points avec les essais », donc il compte comme le
+        // reste. (Rien n'est recalculé : une progression déjà écrite à l'ancien barème reste
+        // telle quelle, et `bloc_designe` ne retient que le meilleur score.)
+        const points = calculateDailyPoints(color, resultAttempts, true);
         const previousBest = delta.blocDesigneScores.get(challenge.id) || 0;
         if (points > previousBest) delta.blocDesigneScores.set(challenge.id, points);
       }
