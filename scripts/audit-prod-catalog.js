@@ -33,6 +33,7 @@
 const path = require('path');
 const { initializeApp, cert } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
+const { estCanonique } = require('./lib/couleur-canonique.cjs');
 
 const CREDENTIALS_DIR = path.join(__dirname, '../firestore-migration');
 const IS_EMULATOR = !!process.env.FIRESTORE_EMULATOR_HOST;
@@ -418,6 +419,58 @@ async function main() {
   }
   if (drapeauxSurvivants.length > 10) {
     errors.push(`… et ${drapeauxSurvivants.length - 10} autre(s) bloc(s) dans le même cas.`);
+  }
+
+  // ✅ 06/11/2026 — LE BLOC DE COMPÉTITION DONT LA COMPÉTITION A ÉTÉ SUPPRIMÉE.
+  //
+  // Distinct du contrôle `competition_active` ci-dessus, qui porte sur un bloc **du jour**
+  // gardant un drapeau. Celui-ci porte sur un bloc `type: 'competition'`, dont la cotation
+  // vit dans `difficulty` et reste **cachée** jusqu'à « Terminer la compétition ». Si sa
+  // compétition n'existe plus, **aucun écran ne l'atteint** (les deux écrans interrogent par le
+  // `competition_id` d'une compétition sélectionnée) : il reste actif, invisible, et sa cotation
+  // ne sera jamais révélée. 7 cas trouvés en production, de 2 compétitions supprimées.
+  //
+  // ⚠️ **LA RÈGLE A ÉTÉ PRÉCÉDÉE DE SON RATTRAPAGE**, dans cet ordre : les 7 ont été retirés par
+  // `retirer-blocs-competition-orphelins.js` avant que ce contrôle n'existe. Sans ça, elle
+  // naîtrait comme un avertissement permanent — et un avertissement permanent apprend à ignorer
+  // les avertissements. À partir d'ici, toute occurrence est une **régression réelle**.
+  //
+  // ⚠️ **La condition porte sur `is_active`, pas seulement sur l'orphelinage** : le rattrapage
+  // ne touche **pas** `competition_id` (un identifiant pendant est normal et documenté), donc
+  // les 7 blocs retirés resteront orphelins pour toujours. Une règle qui crierait sur eux
+  // crierait pour l'éternité, sur un état voulu.
+  const orphelinsActifs = bouldersSnap.docs.filter((d) => {
+    const b = d.data();
+    if (b.type !== 'competition' || b.is_active !== true) return false;
+    return !b.competition_id || !statutCompetition.has(b.competition_id);
+  });
+
+  // ✅ SECONDE CLAUSE, et c'est le PIÈGE que la première ne couvre pas : une `difficulty` hors
+  // des huit couleurs canoniques. « Terminer la compétition » fait `color: boulder.difficulty`
+  // **tel quel** — il écrirait donc un `color` hors de `levelOrder`, et le bloc sortirait de
+  // `colorById`, donc du barème et de tous les compteurs, **en silence**. Deux cas trouvés
+  // (`"noire"`, `"Rouge"`). Contrôlé sur les blocs ACTIFS ET RETIRÉS : un bloc retiré peut être
+  // remis au mur, et la saisie fautive l'aurait suivi.
+  const cotationsIllisibles = bouldersSnap.docs.filter((d) => {
+    const b = d.data();
+    return b.type === 'competition' && !estCanonique(b.difficulty);
+  });
+
+  console.log(`Blocs de compétition : ${orphelinsActifs.length} actif(s) sur une compétition supprimée, `
+    + `${cotationsIllisibles.length} à cotation non canonique`);
+  for (const d of orphelinsActifs.slice(0, 10)) {
+    const b = d.data();
+    errors.push(`boulders/${d.id} (n°${b.number ?? '?'} ${b.wall || '?'}) est type=competition et ACTIF `
+      + `alors que sa compétition "${b.competition_id || '(aucune)'}" n'existe plus — aucun écran ne `
+      + 'l\'atteint, sa cotation ne sera jamais révélée. '
+      + 'Remède : node scripts/retirer-blocs-competition-orphelins.js (simulation), puis --fix --expected N');
+  }
+  for (const d of cotationsIllisibles.slice(0, 10)) {
+    const b = d.data();
+    errors.push(`boulders/${d.id} (n°${b.number ?? '?'} ${b.wall || '?'}) porte difficulty=`
+      + `${JSON.stringify(b.difficulty ?? null)}, hors des huit couleurs canoniques — une clôture `
+      + 'écrirait ce `color` tel quel, et le bloc sortirait du barème et des compteurs en silence. '
+      + 'Remède : node scripts/retirer-blocs-competition-orphelins.js --fix --expected N (il normalise)');
   }
 
   // Fenêtre de saison.
