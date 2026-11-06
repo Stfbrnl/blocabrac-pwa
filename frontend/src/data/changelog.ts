@@ -25,12 +25,15 @@ export const changelog: ChangelogEntry[] = [
   {
     version: '2.80',
     date: '2026-11-06',
-    title: 'Un seul barème de points, partout',
+    title: 'Un seul barème de points, et l’écran de compétition réorganisé',
     items: [
       'Le barème des blocs du jour devient le même que celui des compétitions : un bloc réussi rapporte toujours au moins un quart de sa valeur, quel que soit le nombre d’essais. Plus aucun bloc arraché ne finit à zéro.',
       'En contrepartie, les points baissent un peu plus vite sur les premiers essais. Votre total cumulé peut donc bouger légèrement — c’est un compteur de vitrine, il ne change rien à vos badges, ni à votre niveau, ni à vos classements de compétition.',
-      'Un flash ne change jamais de valeur : au premier essai, l’ancien et le nouveau barème rapportent exactement la même chose. Et une couleur plus dure rapporte maintenant toujours plus qu’une couleur plus tendre, à nombre d’essais égal — ce n’était pas toujours vrai avant.',
-      'La table complète des points est affichée à l’accueil de la salle.',
+      'La table complète des points est affichée à l’accueil de la salle. Un flash ne change jamais de valeur : au premier essai, l’ancien et le nouveau barème rapportent exactement la même chose.',
+      'NOUVEAU — En compétition, l’écran de validation range les blocs par MUR, dans l’ordre où vous les croisez dans la salle, et non plus dans une seule longue liste. Chaque mur se replie, et son en-tête indique combien de ses blocs vous avez déjà réussis : au contest du 5 novembre, c’était 92 blocs d’affilée à faire défiler.',
+      'Les numéros sont ceux écrits sur les prises, mur par mur — c’est pour ça que l’ancienne liste les mélangeait : tous les n°1 des sept murs se retrouvaient ensemble. Regroupés par mur, ils redeviennent utilisables tels quels. Une couleur plus dure rapporte aussi toujours plus qu’une plus tendre à nombre d’essais égal, ce qui n’était pas toujours vrai avant.',
+      'Deux réglages en haut de l’écran : « Masquer les blocs déjà réussis », pour ne plus faire défiler ce qui est fait, et « Trier par couleur » quand tous les blocs de l’épreuve ont une couleur publique. Un bloc ne disparaît jamais au moment où vous le validez : il reste affiché jusqu’à ce que vous rouvriez son mur.',
+      'Et quand un bloc du jour est réutilisé pour une compétition, sa couleur est maintenant affichée sur sa fiche — vous la lisez déjà sur le mur, la cacher dans l’application ne cachait rien. Les blocs créés pour l’épreuve restent « Mystère » jusqu’à la clôture.',
     ],
   },
   // ⚠️ EXCEPTION ASSUMÉE À LA RÈGLE CI-DESSUS, et la raison, pour qu'on ne la « corrige » pas :

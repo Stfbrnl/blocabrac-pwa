@@ -11,11 +11,15 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions,
   Grid, Card, CardContent, CardMedia, Rating, Chip,
   FormControl, InputLabel, Select, MenuItem,
+  Collapse, Divider, FormControlLabel, Switch, IconButton,
   useMediaQuery
 } from '@mui/material';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { useTheme } from '@mui/material/styles';
 import { calculateCompetitionPoints, type ScoringMode, type CustomScoringTable } from '../../../utils/climbingPoints';
 import { applyCompetitionValidationUpdate } from '../../../utils/competitionValidation';
+import { groupBouldersByWall, peutTrierParCouleur, compareByNumber } from '../../../utils/competitionBoulderGroups';
 import { logoPath } from '../../../config/gymConfig';
 import { getBoulderImageUrl } from '../../../services/imageStorage';
 import { buildCompetitionParticipant, competitionParticipantId } from '../../../utils/competitionParticipant';
@@ -119,6 +123,20 @@ const ClientCompetitions: React.FC = () => {
   const [palmaresOuvert, setPalmaresOuvert] = useState<string | null>(null);
   const [selectedCompetition, setSelectedCompetition] = useState<Competition | null>(null);
   const [boulders, setBoulders] = useState<Boulder[]>([]);
+
+  // ✅ docs/plans/2026-11-06-CN-plan-bareme-unifie-et-ecran-competition.md partie B — six
+  // grimpeurs devant 92 blocs dans une liste plate, au Contest du 5 novembre. Un seul mur
+  // ouvert à la fois (le plan dit « seule la section ouverte se rend »), ce qui est aussi le
+  // seul des quatre éléments de la partie B à peser quelque chose à 80 grimpeurs.
+  const [murOuvert, setMurOuvert] = useState<string | null>(null);
+  const [triParCouleur, setTriParCouleur] = useState(false);
+  const [masquerReussis, setMasquerReussis] = useState(false);
+  // ⚠️ L'INSTANTANÉ, et non l'ensemble vivant des réussis — c'est tout le filtre.
+  // `competitionBoulderGroups.ts` reçoit les deux séparément : un bloc qui disparaît sous le
+  // doigt à l'instant où on le valide est déroutant, donc la ligne ne s'efface qu'au prochain
+  // basculement du filtre, ou à la réouverture de son mur (les deux seuls endroits qui
+  // écrivent cet état).
+  const [idsMasques, setIdsMasques] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -360,9 +378,15 @@ const ClientCompetitions: React.FC = () => {
           where('competition_active', '==', true)
         )),
       ]);
+      // ⚠️ PLUS DE TRI GLOBAL PAR NUMÉRO ICI (06/11/2026). Les numéros sont attachés au MUR,
+      // pas à la salle : un tri global mettait tous les n°1 des sept murs ensemble, donc il
+      // ENTRELAÇAIT les murs. Ça avait un sens pour 30 blocs créés pour une épreuve, aucun
+      // pour toute la salle. Le tri d'affichage se fait désormais par section, dans
+      // `competitionBoulderGroups.ts` ; ce `sort` ne sert plus qu'à donner un ordre
+      // déterministe à l'état, pour que deux chargements rendent la même chose.
       const merged = [...classicSnapshot.docs, ...reusedSnapshot.docs]
         .map(mapBoulderDoc)
-        .sort((a, b) => a.number - b.number);
+        .sort(compareByNumber);
       setBoulders(merged);
       loadedBouldersCompId.current = competition.id;
     } catch (err: unknown) {
@@ -747,6 +771,15 @@ const ClientCompetitions: React.FC = () => {
                             if (registered) {
                               loadBoulders(competition);
                               loadResults(competition);
+                              // ⚠️ L'organisation de l'écran se remet à neuf à chaque
+                              // ouverture : aucun mur déplié, aucun filtre, aucun instantané.
+                              // Un filtre resté actif d'une compétition à l'autre masquerait
+                              // des blocs d'une épreuve qu'on ouvre pour la première fois,
+                              // sans rien qui l'explique.
+                              setMurOuvert(null);
+                              setTriParCouleur(false);
+                              setMasquerReussis(false);
+                              setIdsMasques(new Set());
                               setOpenValidationDialog(true);
                             } else {
                               if (canRegister) {
@@ -885,8 +918,124 @@ const ClientCompetitions: React.FC = () => {
                   Validez vos blocs et proposez une cotation (tous les blocs de compétition sont considérés comme "mystère").
                 </Typography>
               )}
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-                {boulders.map((boulder) => {
+              {/* ✅ docs/plans/2026-11-06-CN-plan-bareme-unifie-et-ecran-competition.md partie B.
+                  TOUT CE QUI DÉCIDE DE QUOI EST MONTRÉ vit dans
+                  utils/competitionBoulderGroups.ts, pur et testé : la couverture de ce dépôt
+                  s'arrête au bord des .tsx, donc ce qui serait composé en ligne ici serait
+                  structurellement invisible aux tests. Ce bloc-ci ne fait que rendre. */}
+              {(() => {
+                // Les blocs réellement réussis À L'INSTANT : sert à COMPTER, dans l'en-tête de
+                // chaque mur. Un bloc jamais touché n'a pas d'entrée, donc le `success: false`
+                // de defaultValidationResult n'est jamais confondu avec un échec déclaré.
+                const reussisIds = new Set(
+                  Object.entries(validationResults).filter(([, r]) => r.success).map(([id]) => id)
+                );
+                // 🔴 Le tri par couleur n'est OFFERT que si tous les blocs de l'épreuve portent
+                // une couleur publique : en format mixte, la position d'un bloc à cotation
+                // cachée dans une liste triée par couleur révélerait sa cotation. Et la
+                // condition se dérive de la DONNÉE, jamais d'un réglage de compétition — un
+                // réglage peut être posé à tort par un ouvreur pressé.
+                const triCouleurPossible = peutTrierParCouleur(boulders);
+                const sections = groupBouldersByWall(boulders, {
+                  validatedIds: reussisIds,
+                  hiddenIds: masquerReussis ? idsMasques : undefined,
+                  sortByColor: triParCouleur && triCouleurPossible,
+                });
+                // L'instantané se reprend à DEUX moments, et seulement ceux-là : au
+                // basculement du filtre, et à l'ouverture d'une section. Jamais à une
+                // validation — c'est ce qui empêche une ligne de s'effacer sous le doigt.
+                const rafraichirInstantane = () => setIdsMasques(new Set(reussisIds));
+                const basculerMur = (wall: string) => {
+                  const ouvre = murOuvert !== wall;
+                  setMurOuvert(ouvre ? wall : null);
+                  if (ouvre && masquerReussis) rafraichirInstantane();
+                };
+                const totalReussis = sections.reduce((n, sec) => n + sec.validated, 0);
+                const totalBlocs = sections.reduce((n, sec) => n + sec.total, 0);
+                return (
+                  <>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 2, mb: 1 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        {totalReussis} / {totalBlocs} bloc{totalBlocs > 1 ? 's' : ''} réussi{totalReussis > 1 ? 's' : ''}
+                      </Typography>
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            size="small"
+                            checked={masquerReussis}
+                            onChange={(e) => {
+                              setMasquerReussis(e.target.checked);
+                              // ⚠️ Un basculement DÉLIBÉRÉ, dans les deux sens : on reprend
+                              // l'instantané à l'activation, et on le vide à la désactivation.
+                              if (e.target.checked) rafraichirInstantane();
+                              else setIdsMasques(new Set());
+                            }}
+                          />
+                        }
+                        label="Masquer les blocs déjà réussis"
+                      />
+                      {/* ⚠️ L'interrupteur de tri n'est pas seulement désactivé quand la donnée
+                          l'interdit : il n'est PAS RENDU. Un interrupteur grisé invite à
+                          demander pourquoi au comptoir, un soir de contest. */}
+                      {triCouleurPossible && (
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              size="small"
+                              checked={triParCouleur}
+                              onChange={(e) => setTriParCouleur(e.target.checked)}
+                            />
+                          }
+                          label="Trier par couleur"
+                        />
+                      )}
+                    </Box>
+                    {sections.map((section) => {
+                      const ouvert = murOuvert === section.wall;
+                      return (
+                        <Box key={section.wall} sx={{ mb: 1 }}>
+                          <Box
+                            onClick={() => basculerMur(section.wall)}
+                            sx={{
+                              display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer',
+                              py: 1, px: 1, borderRadius: 1,
+                              bgcolor: ouvert ? 'action.selected' : 'action.hover',
+                            }}
+                          >
+                            <IconButton size="small" aria-label={(ouvert ? 'Replier ' : 'Ouvrir ') + section.wall}>
+                              {ouvert ? <ExpandMoreIcon /> : <ChevronRightIcon />}
+                            </IconButton>
+                            <Typography sx={{ fontWeight: 'bold', flexGrow: 1 }}>{section.wall}</Typography>
+                            {/* ⚠️ C'est ce compteur qui donne envie d'ouvrir la BONNE section,
+                                et son dénominateur compte les blocs DU MUR — jamais ceux qui
+                                restent après filtrage. Un dénominateur qui rétrécit quand on
+                                masque des lignes ferait croire que des blocs ont disparu de
+                                l'épreuve. */}
+                            <Chip
+                              size="small"
+                              label={section.validated + ' / ' + section.total}
+                              color={section.validated === section.total ? 'success' : 'default'}
+                            />
+                          </Box>
+                          <Collapse in={ouvert} unmountOnExit>
+                            {/* ⚠️ `unmountOnExit` DÉMONTE les lignes repliées — c'est le
+                                bénéfice (seule la section ouverte se rend), et c'est aussi le
+                                signal d'alarme §B.1 du plan. Il est sûr ici, VÉRIFIÉ et pas
+                                supposé : `validationQueue` (useDebouncedFlushQueue) et
+                                `validationResults` vivent dans CE composant, et les cartes
+                                ci-dessous sont du JSX inline, pas un composant par ligne. Une
+                                écriture débouncée en attente (2 500 ms) survit donc au repli.
+                                🔴 NE JAMAIS extraire une carte ou une section en composant qui
+                                porterait sa propre file : ce serait perdre une validation sans
+                                aucun message, sur l'écran où l'on ne perd jamais une
+                                validation. */}
+                            {section.hidden > 0 && (
+                              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', px: 1, pt: 1 }}>
+                                {section.hidden} bloc{section.hidden > 1 ? 's' : ''} masqué{section.hidden > 1 ? 's' : ''} (déjà réussi{section.hidden > 1 ? 's' : ''})
+                              </Typography>
+                            )}
+                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, pt: 1 }}>
+                {section.boulders.map((boulder) => {
                   const result = validationResults[boulder.id] || defaultValidationResult;
                   const isOfficialMode = selectedCompetition.scoring_mode === 'officiel';
                   const points = calculateCompetitionPoints(
@@ -907,6 +1056,33 @@ const ClientCompetitions: React.FC = () => {
                       />
                       <CardContent>
                         <Typography>Bloc n°{boulder.number} - {boulder.wall}</Typography>
+                        {/* ✅ Partie B, élément 3 : la couleur, mais SEULEMENT quand elle est
+                            publique. Un bloc du jour réutilisé porte une `color` que le
+                            grimpeur lit déjà sur le mur — la cacher dans l'application ne
+                            cache rien, elle l'oblige seulement à retourner voir l'étiquette.
+                            Un bloc créé pour l'épreuve n'a pas de `color` (sa cotation vit
+                            dans `difficulty`, et elle est cachée jusqu'à la clôture) : rien
+                            n'est rendu, sans message ni espace vide. C'est la même condition
+                            dérivée de la donnée que le tri par couleur, et au même endroit —
+                            jamais un réglage de compétition. */}
+                        {boulder.color && levelColors[boulder.color] && (
+                          <Chip
+                            size="small"
+                            sx={{ mt: 0.5 }}
+                            variant="outlined"
+                            label={boulder.color}
+                            icon={
+                              <Box
+                                component="span"
+                                sx={{
+                                  width: 14, height: 14, borderRadius: '50%',
+                                  backgroundColor: levelColors[boulder.color],
+                                  border: '1px solid #ccc',
+                                }}
+                              />
+                            }
+                          />
+                        )}
                         {/* ✅ 2026-11-03-CN-plan-multiplicateur-v2.md §3 — CE N'EST PAS
                             COSMÉTIQUE. L'aperçu de points ci-dessous affiche déjà le double
                             pour ce bloc : sans légende, le grimpeur lit un bug, et il vient le
@@ -1058,7 +1234,15 @@ const ClientCompetitions: React.FC = () => {
                     </Card>
                   );
                 })}
-              </Box>
+                            </Box>
+                          </Collapse>
+                          <Divider />
+                        </Box>
+                      );
+                    })}
+                  </>
+                );
+              })()}
             </DialogContent>
             <DialogActions>
               <Button onClick={() => { validationQueue.flushAll(); setOpenValidationDialog(false); }}>Fermer</Button>

@@ -17,6 +17,7 @@ import { db } from '../../../services/firebaseConfig';
 import { walls, colorGrades } from '../../../config/gymConfig';
 import type { ScoringMode } from '../../../utils/climbingPoints';
 import { decouperEnLots, MAX_OPS_PAR_LOT } from '../../../utils/firestoreBatchChunks';
+import { partitionnerRenumerotables, estRenumerotable } from '../../../utils/competitionRenumbering';
 
 interface Competition {
   id: string;
@@ -277,16 +278,38 @@ export default function CompetitionBouldersList(): JSX.Element {
   // BLOC. Correct à 23 blocs, intenable à l'échelle de la salle entière : ~150 blocs font
   // autant d'allers-retours, soit une demi-minute d'écran figé sans aucun retour visuel — et
   // un échec à mi-parcours laissait une renumérotation à MOITIÉ FAITE sans le dire.
+  // 🔴 §B.3 du plan du 06/11/2026 : CE GESTE NE TOUCHE QUE LES BLOCS CRÉÉS POUR
+  // L'ÉPREUVE. Le `number` d'un bloc quotidien réutilisé est le numéro ÉCRIT SUR LA PRISE,
+  // dans la salle : le renuméroter désynchronise l'application du physique, et un grimpeur
+  // chercherait le bloc 47 devant une étiquette qui dit 3. Depuis que l'écran du grimpeur
+  // regroupe par mur (partie B du même plan), ce numéro est devenu LA façon de retrouver un
+  // bloc — il compte donc plus qu'avant, pas moins.
+  //
+  // ⚠️ Le périmètre est calculé par un module pur et testé, pas par un `filter` en ligne :
+  // c'est une OPÉRATION DE DONNÉE (une écriture par bloc dans un writeBatch), et V2.79 a
+  // appris ici même qu'un périmètre d'opération ne doit jamais dériver d'un affichage.
   const handleReorder = async (): Promise<void> => {
+    const { renumerotables, proteges } = partitionnerRenumerotables(boulders);
+    if (renumerotables.length === 0) {
+      alert(proteges.length === 0
+        ? 'Aucun bloc à renuméroter.'
+        : 'Rien à renuméroter : les ' + proteges.length + ' bloc(s) de cette compétition sont des blocs quotidiens réutilisés, et leur numéro est celui écrit sur la prise dans la salle.');
+      return;
+    }
     let lotsFaits = 0;
     try {
-      for (const lot of decouperEnLots(boulders)) {
+      for (const lot of decouperEnLots(renumerotables)) {
         const batch = writeBatch(db);
         lot.forEach((boulder) => batch.update(doc(db, 'boulders', boulder.id), { number: boulder.number }));
         await batch.commit();
         lotsFaits += 1;
       }
-      alert('Numéros réorganisés avec succès !');
+      // ⚠️ Le message annonce son EFFET et son périmètre : un succès silencieux sur un
+      // sous-ensemble est indiscernable d'un succès sur l'ensemble, et l'ouvreur repartirait
+      // en croyant toute la liste renumérotée.
+      alert(proteges.length === 0
+        ? renumerotables.length + ' numéro(s) réorganisé(s) avec succès !'
+        : renumerotables.length + ' numéro(s) réorganisé(s). Les ' + proteges.length + ' bloc(s) quotidiens réutilisés n\'ont PAS été touchés : leur numéro est celui écrit sur la prise dans la salle.');
     } catch (error: unknown) {
       console.error('Erreur lors de la réorganisation :', error);
       alert(lotsFaits === 0
@@ -687,9 +710,17 @@ export default function CompetitionBouldersList(): JSX.Element {
                           </TableCell>
                         )}
                         <TableCell>
+                          {/* ⚠️ §B.3 : le numéro d'un bloc quotidien réutilisé est celui
+                              écrit sur la prise. Il est montré, jamais modifiable ici — et
+                              désactivé plutôt qu'absent, pour qu'on voie qu'il existe. Il
+                              reste modifiable dans l'écran des blocs quotidiens, ou ce
+                              champ deviendrait le seul endroit où l'application refuse une
+                              correction légitime. */}
                           <TextField
                             type="number"
                             value={boulder.number}
+                            disabled={!estRenumerotable(boulder)}
+                            title={estRenumerotable(boulder) ? undefined : 'Bloc quotidien réutilisé : son numéro est celui écrit sur la prise, il se modifie dans « Blocs quotidiens ».'}
                             onChange={(e: React.ChangeEvent<HTMLInputElement>): void => {
                               const newBoulders = [...boulders];
                               const index = newBoulders.findIndex(b => b.id === boulder.id);

@@ -262,7 +262,7 @@
     <tr><td class="label">Blocs quotidiens</td><td>Création et gestion par mur : couleur, photo annotée (prises de départ/sortie), marquage « ouistiti » (bloc enfant, possible sur n'importe quelle couleur), attribution à l'ouvreur qui l'a réellement ouvert (menu déroulant, distinct de qui l'a saisi ; modifiable à tout moment, visible des grimpeurs), anecdote libre (intention de mouvement, nom du bloc, avertissement — 300 caractères max, visible des grimpeurs si renseignée).</td></tr>
     <tr><td class="label">Blocs de compétition</td><td>Création de blocs à cotation cachée pour une compétition officielle donnée. « Terminer la compétition » révèle la cotation cachée comme couleur publique. En mode « Blocs validés », la valeur en points de chaque bloc se règle ici (voir page 06). C'est aussi ici que se règle le <b>multiplicateur ×1/×2</b> d'un bloc, à la ligne ou en masse sur une sélection de lignes (voir page 06). L'attribution à l'ouvreur reste masquée aux grimpeurs tant que l'épreuve dure.</td></tr>
     <tr><td class="label">Signalements &amp; statistiques</td><td>File des signalements clients (compteur d'urgences dès l'accueil), fréquentation par bloc, classement de compétition par catégorie et genre.</td></tr>
-    <tr><td class="label">Compétitions régulières</td><td>Une compétition peut réutiliser des blocs quotidiens existants (niveau restreint) au lieu de blocs à cotation cachée — même barème de points.</td></tr>
+    <tr><td class="label">Compétitions régulières</td><td>Une compétition peut réutiliser des blocs quotidiens existants (niveau restreint) au lieu de blocs à cotation cachée — même barème de points. Un bloc réutilisé affiche sa couleur chez le grimpeur (il la lit déjà sur le mur) ; un bloc créé pour l'épreuve n'affiche rien.</td></tr>
     <tr><td class="label">Écran juge (Finale de l'année)</td><td>Grille grimpeurs × blocs pour saisir en direct tops/zones/essais de tous les participants (mode « Officiel FFME », voir page 06) — accessible admin et ouvreur, verrouillage en un clic à la fin de l'épreuve.</td></tr>
   </table>
 
@@ -275,6 +275,7 @@
     <tr><td class="label">Groupes</td><td>Création et gestion des groupes de grimpeurs suivis par le moniteur.</td></tr>
     <tr><td class="label">Séances</td><td>Cycle programmée → active → archivée. Contenu invisible aux clients avant activation — seuls les objectifs le sont.</td></tr>
     <tr><td class="label">Exercices</td><td>Catalogue d'exercices réutilisables d'une séance à l'autre, hors escalade sur bloc.</td></tr>
+    <tr><td class="label">Validation d'une compétition</td><td>Depuis le 6 novembre 2026, les blocs y sont rangés <b>par mur</b>, dans l'ordre du circuit de la salle, un seul mur déplié à la fois, avec un compteur « réussis / total » par mur. Deux réglages : masquer les blocs déjà réussis, et trier par couleur — ce dernier n'apparaît que si <b>tous</b> les blocs de l'épreuve ont une couleur publique, sans quoi la place d'un bloc « Mystère » dans la liste triée révélerait sa cotation.</td></tr>
     <tr><td class="label">Mini-compétitions</td><td>Construites à partir de blocs quotidiens existants, rattachées à une séance. <b>Seul endroit qui garde l'ancien barème</b> (déduction fixe par essai) : leurs classements sont proclamés le soir même devant les élèves, donc ils se figent — c'est la même règle qui fige la couleur d'un bloc recoté après coup.</td></tr>
     <tr><td class="label">Statistiques</td><td>Classement des mini-compétitions calculé à la volée, suivi des résultats du groupe.</td></tr>
   </table>
@@ -555,7 +556,11 @@
 
 <!-- PAGE 12 : 07 SUITE TECHNIQUE -->
 <section class="page">
-  <div class="warn-group-title" style="margin-top:0;">Cours &amp; séances</div>
+  <div class="warn-group-title" style="margin-top:0;">Compétitions &amp; écran TV (suite)</div>
+  <div class="warn"><b>« Réorganiser les numéros » ne touche que les blocs créés pour l'épreuve</b><p>Le numéro d'un bloc quotidien réutilisé est celui écrit sur la prise : le bouton le laisse donc intact, son champ est grisé, et le message dit combien de blocs n'ont pas été touchés. Pour le corriger, passer par « Blocs quotidiens ». Depuis le 6 novembre 2026 l'écran du grimpeur regroupe par mur : ce numéro est devenu <b>la</b> façon de retrouver un bloc dans la salle.</p></div>
+  <div class="warn"><b>Numéroter du facile au dur révèle les cotations cachées</b><p>Sur une épreuve à blocs « Mystère », si l'ouvreur numérote dans l'ordre où il ouvre et qu'il ouvre du plus facile au plus dur, le numéro devient un indice de cotation. Mélanger l'ordre, ou numéroter après coup.</p></div>
+
+  <div class="warn-group-title">Cours &amp; séances</div>
   <div class="warn"><b>Contenu caché avant activation</b><p>Exercices et mini-compétitions invisibles au client tant que la séance n'est pas « active » — seuls les objectifs le sont.</p></div>
   <div class="warn"><b>Retrait possible seulement avant activation</b><p>Une fois la séance activée, un client ne peut plus se retirer lui-même de la liste des participants.</p></div>
 
