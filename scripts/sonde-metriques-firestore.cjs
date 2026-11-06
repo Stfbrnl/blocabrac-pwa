@@ -242,22 +242,30 @@ async function main() {
     }
   }
 
-  // ⚠️ L'INSTRUMENT QUI A BESOIN DE BLAZE EST LE MEILLEUR DÉTECTEUR DE BLAZE RESTÉ ALLUMÉ.
-  // Le retour en Spark du 6 novembre est un geste de console que personne ici ne peut faire ;
-  // plutôt qu'un rappel qui vit dans la mémoire de quelqu'un, c'est une GARDE qui parle à
-  // chaque exécution ultérieure, sans que personne ait à y penser (ClaudeNav,
-  // `docs/handoffs/2026-10-19-CN-plan-fenetre-blaze.md` §5).
+  // ✅ 06/11/2026 — CETTE GARDE EST DÉSARMÉE, PARCE QU'ELLE EST DEVENUE FAUSSE.
+  //
+  // Elle annonçait en rouge, passé le 6 novembre, qu'un projet encore en Blaze était « un
+  // OUBLI DE RETOUR EN SPARK ». Elle avait raison tant que la redescente était décidée. Elle
+  // ne l'est plus : l'utilisateur a tranché le 06/11 que **Blaze est le forfait retenu**, avec
+  // une alerte de budget active à 5 €. Son raisonnement, à ne pas re-litiger : *« On ne paie
+  // qu'au dépassement. C'est pour l'heure une grosse sécurité. »* Les allocations quotidiennes
+  // gratuites s'appliquent aussi sur Blaze, donc Blaze ne coûte rien dans la franchise — et il
+  // supprime le risque d'ARRÊT DE SERVICE un soir de compétition, là où Spark coupe au plafond.
+  //
+  // ⚠️ POURQUOI LA RETIRER PLUTÔT QUE LA LAISSER CRIER : un garde qui se déclenche sur un état
+  // désormais voulu apprend à ignorer les gardes — c'est la doctrine des avertissements
+  // permanents, appliquée à mon propre outillage. Et une garde fausse est pire qu'une garde
+  // absente : celle-ci se remarque, celle-là se croit.
+  //
+  // Ce qui reste utile : dire QUEL forfait est actif, puisque l'instrument le sait par
+  // construction (`timeSeries` exige un compte de facturation). C'est un CONSTAT, plus un
+  // reproche. Si la décision s'inversait un jour, la garde à réécrire est ici.
   if (timeSeriesRepond) {
-    const aujourdhui = new Date().toISOString().slice(0, 10);
     console.log('\n════ ÉTAT DU FORFAIT ════');
     console.log('`timeSeries` a répondu 200 → le projet est en BLAZE.');
-    if (aujourdhui > '2026-11-06') {
-      console.log('🔴 Nous sommes le ' + aujourdhui + ', après le 6 novembre 2026 :');
-      console.log('   c\'est un OUBLI DE RETOUR EN SPARK. Console Firebase → ⚙ Utilisation et');
-      console.log('   facturation → Modifier le forfait → Spark.');
-    } else {
-      console.log('Fenêtre d\'essai en cours, redescente prévue le 6 novembre 2026.');
-    }
+    console.log('✔️ C\'est le forfait RETENU (décision du 06/11/2026) : on ne paie qu\'au');
+    console.log('   dépassement de la franchise gratuite, et Blaze évite la coupure de service');
+    console.log('   que Spark impose au plafond. Alerte de budget active à 5 €.');
   }
 
   console.log('\n════ À VÉRIFIER AVANT DE CROIRE CES CHIFFRES (§4) ════');
