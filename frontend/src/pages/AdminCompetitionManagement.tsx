@@ -26,11 +26,22 @@ const levelOptions: Level[] = ['jaune', 'vert', 'bleu', 'violet', 'rouge', 'noir
 // de points — voir climbingPoints.ts/competitionClassement.ts. Jamais utilisé par le
 // classement annuel (classementScore.ts n'a jamais connaissance de ce champ) :
 // uniquement les écrans de classement compétition.
-const scoringModeOptions: { value: ScoringMode; label: string; description: string }[] = [
+//
+// ⚠️ `historique: true` = LISIBLE MAIS PLUS SÉLECTIONNABLE (06/11/2026,
+// docs/plans/2026-11-06-CN-plan-bareme-unifie-et-ecran-competition.md commit A3). Un mode
+// retiré de la liste ne doit pas disparaître de ce tableau : une compétition passée qui
+// l'utilise doit continuer de s'afficher juste, et l'écran d'édition doit pouvoir montrer
+// son mode sans le changer en silence. Les deux besoins sont opposés, d'où le drapeau
+// plutôt qu'une suppression : le mode reste décrit, il n'est simplement plus proposé.
+//
+// 🔴 Ce que ce drapeau empêche très précisément : que l'ancienne courbe du barème quotidien
+// revienne par une liste déroulante, un soir où personne n'y pensera.
+const scoringModeOptions: { value: ScoringMode; label: string; description: string; historique?: true }[] = [
   {
     value: 'blocabrac',
-    label: 'Barème par couleur (essais comptabilisés)',
-    description: 'Le barème par couleur utilisé partout ailleurs, avec dégression selon le nombre d\'essais.'
+    label: 'Barème par couleur sans plancher (ancien — historique)',
+    description: 'L\'ancien barème par couleur, avec une déduction fixe par essai supplémentaire — donc zéro au bout d\'assez d\'essais, et des inversions de couleurs (un blanc valant moins qu\'un noir au même nombre d\'essais). Remplacé le 06/11/2026 par le barème à plancher, partout. Conservé uniquement pour que les compétitions passées qui l\'utilisent continuent de s\'afficher juste.',
+    historique: true
   },
   {
     value: 'blocabrac_plancher',
@@ -53,6 +64,20 @@ const scoringModeOptions: { value: ScoringMode; label: string; description: stri
     description: 'Classement par tops, puis zones, puis essais au top, puis essais à la zone (version simplifiée sur les totaux cumulés de la compétition, pas un classement bloc par bloc). Aucun score en points — les grimpeurs valident top et zone séparément.'
   }
 ];
+
+// ✅ Le mode d'une compétition NEUVE (06/11/2026, commit A3 du plan). Il est passé de
+// `blocabrac` à `blocabrac_plancher` le jour où le barème quotidien a adopté la même courbe.
+//
+// ⚠️ DISTINCTION À NE PAS PERDRE, et c'est pour elle que cette constante existe : ce fichier
+// contient DEUX sortes de `'blocabrac'`, qui se ressemblent mot pour mot et n'ont rien à voir.
+//   - un DÉFAUT D'ÉCRITURE — quel mode porte une compétition qu'on crée aujourd'hui. C'est
+//     celui-ci, et c'est le seul qui devait changer.
+//   - un REPLI DE LECTURE — `doc.data().scoring_mode || 'blocabrac'`, qui répond « quel mode
+//     avait une compétition créée AVANT que ce champ existe ». La réponse est et restera
+//     `blocabrac` : ces compétitions ont été comptées à l'ancien barème, et le réécrire en
+//     `blocabrac_plancher` recoterait rétroactivement des épreuves déjà proclamées. Les six
+//     replis de lecture de ce fichier gardent donc le littéral, exprès.
+const MODE_PAR_DEFAUT: ScoringMode = 'blocabrac_plancher';
 
 const defaultCustomScoring = (): CustomScoringTable =>
   Object.fromEntries(levelOptions.map(level => [level, { base: basePoints[level] || 0, deduction: deductions[level] || 0 }]));
@@ -119,7 +144,7 @@ const AdminCompetitionManagement: React.FC = () => {
     minLevel: undefined, // ✅ Nouveau
     maxLevel: undefined, // ✅ Nouveau
     liveDisplayEnabled: false, // ✅ Nouveau
-    scoring_mode: 'blocabrac', // ✅ Nouveau
+    scoring_mode: MODE_PAR_DEFAUT, // ✅ Nouveau
     custom_scoring: defaultCustomScoring() // ✅ Nouveau
   });
   const [editForm, setEditForm] = useState<Omit<Competition, 'id' | 'registered_count'>>({
@@ -131,7 +156,7 @@ const AdminCompetitionManagement: React.FC = () => {
     minLevel: undefined, // ✅ Nouveau
     maxLevel: undefined, // ✅ Nouveau
     liveDisplayEnabled: false, // ✅ Nouveau
-    scoring_mode: 'blocabrac', // ✅ Nouveau
+    scoring_mode: MODE_PAR_DEFAUT, // ✅ Nouveau
     custom_scoring: defaultCustomScoring() // ✅ Nouveau
   });
   const navigate = useNavigate();
@@ -192,7 +217,7 @@ const AdminCompetitionManagement: React.FC = () => {
         ...(createForm.minLevel ? { minLevel: createForm.minLevel } : {}),
         ...(createForm.maxLevel ? { maxLevel: createForm.maxLevel } : {}),
         liveDisplayEnabled: createForm.liveDisplayEnabled ?? false, // ✅ Nouveau
-        scoring_mode: createForm.scoring_mode ?? 'blocabrac', // ✅ Nouveau
+        scoring_mode: createForm.scoring_mode ?? MODE_PAR_DEFAUT, // ✅ Nouveau
         ...(createForm.scoring_mode === 'personnalise'
           ? { custom_scoring: createForm.custom_scoring ?? defaultCustomScoring() }
           : {}),
@@ -1183,17 +1208,25 @@ const AdminCompetitionManagement: React.FC = () => {
                       <InputLabel id="scoring-mode-select-label">Mode</InputLabel>
                       <Select
                         labelId="scoring-mode-select-label" id="scoring-mode-select"
-                        value={form.scoring_mode ?? 'blocabrac'}
+                        value={form.scoring_mode ?? MODE_PAR_DEFAUT}
                         onChange={(e) => setForm({ ...form, scoring_mode: e.target.value as ScoringMode })}
                         label="Mode"
                       >
-                        {scoringModeOptions.map(option => (
-                          <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
-                        ))}
+                        {/* ⚠️ Un mode `historique` n'est proposé QUE s'il est déjà celui de
+                            cette compétition. Sans cette exception, l'édition d'une
+                            compétition passée en mode `blocabrac` afficherait un champ VIDE
+                            (MUI ne rend rien pour une valeur absente de la liste), ce qui
+                            invite à en choisir un autre — soit le changement silencieux que
+                            ce retrait est censé empêcher. */}
+                        {scoringModeOptions
+                          .filter(option => !option.historique || option.value === (form.scoring_mode ?? MODE_PAR_DEFAUT))
+                          .map(option => (
+                            <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+                          ))}
                       </Select>
                     </FormControl>
                     <Typography variant="body2" color="text.secondary">
-                      {scoringModeOptions.find(o => o.value === (form.scoring_mode ?? 'blocabrac'))?.description}
+                      {scoringModeOptions.find(o => o.value === (form.scoring_mode ?? MODE_PAR_DEFAUT))?.description}
                     </Typography>
 
                     {form.scoring_mode === 'blocs_valides' && (

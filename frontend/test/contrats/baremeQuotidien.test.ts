@@ -24,6 +24,7 @@
 // est gardée par les propriétés de `src/utils/climbingPoints.test.ts` (plancher, ordre
 // strict, monotonie, jamais zéro), chacune cassable séparément.
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { createRequire } from 'module';
 import {
@@ -172,5 +173,65 @@ describe("clause d'absence — `calculatePoints` (mini-compétitions) ne bouge p
       expect(TABLE_CLASSIQUE[couleur][ESSAIS_MAX - 1]).toBe(0);
       expect(TABLE_PLANCHER[couleur][ESSAIS_MAX - 1]).toBeGreaterThan(0);
     });
+  });
+});
+
+// ============================================================================
+// CONTRAT DU SÉLECTEUR DE MODE — commit A3 du plan.
+//
+// « Sinon l'ancienne courbe revient par une liste déroulante, un soir où personne n'y
+// pensera. » Ce retrait vit entièrement dans un `.tsx`, donc hors de portée de la couverture
+// de tests de ce dépôt (pas de harnais React) : ce qui y est écrit est STRUCTURELLEMENT
+// invisible. D'où un contrat lu sur la SOURCE, même forme que pointsMultiplier.test.ts.
+//
+// ⚠️ Et il porte DEUX clauses opposées, dont une ABSENCE : le mode doit être non
+// sélectionnable, **et** rester décrit dans le tableau. Supprimer l'option afficherait faux
+// les compétitions passées qui l'utilisent — c'est le défaut symétrique, et aucun test
+// d'exécution ne l'attrape puisqu'il ne se voit qu'à la consultation d'un classement ancien.
+//
+// ⚠️ CE QUE CE FILET NE COUVRE PAS : il lit un fichier désigné par son chemin et des noms
+// désignés en clair. Un renommage ou un déplacement lui échappent.
+// ============================================================================
+describe('contrat du sélecteur de mode — `blocabrac` lisible mais plus sélectionnable', () => {
+  const source = readFileSync(resolve(__dirname, '../../src/pages/AdminCompetitionManagement.tsx'), 'utf8');
+
+  it("le mode d'une compétition NEUVE est le barème à plancher", () => {
+    expect(source).toMatch(/const MODE_PAR_DEFAUT: ScoringMode = 'blocabrac_plancher';/);
+  });
+
+  it('`blocabrac` est marqué `historique`', () => {
+    // La fenêtre de l'option `blocabrac`, du début de son `value` à la fin de son objet.
+    const option = source.slice(source.indexOf("value: 'blocabrac',"));
+    const fin = option.indexOf('},');
+    expect(fin).toBeGreaterThan(0);
+    expect(option.slice(0, fin)).toMatch(/historique: true/);
+  });
+
+  it('la liste déroulante filtre les modes `historique`, sauf celui déjà choisi', () => {
+    expect(source).toMatch(/\.filter\(option => !option\.historique \|\| option\.value === \(form\.scoring_mode \?\? MODE_PAR_DEFAUT\)\)/);
+  });
+
+  it("CLAUSE D'ABSENCE : l'option `blocabrac` n'a PAS été supprimée du tableau", () => {
+    // ⚠️ Sans elle, les compétitions passées en mode `blocabrac` perdraient leur libellé et
+    // leur description — un écran qui affiche un mode vide pour une épreuve déjà jouée.
+    expect(source).toContain("value: 'blocabrac',");
+    const option = source.slice(source.indexOf("value: 'blocabrac',"));
+    expect(option.slice(0, option.indexOf('},'))).toMatch(/label: '[^']+'/);
+  });
+
+  it("les replis de LECTURE gardent `blocabrac` : une épreuve passée ne se recote pas", () => {
+    // ⚠️ La grandeur dont on n'attend AUCUN mouvement. Un `doc.data().scoring_mode ||
+    // 'blocabrac'` passé à `|| 'blocabrac_plancher'` recoterait rétroactivement toutes les
+    // compétitions antérieures au champ — des épreuves déjà proclamées.
+    // ⚠️ Les lignes de commentaire sont retirées d'abord : la note qui EXPLIQUE ces replis
+    // en cite un mot pour mot, et sans ce filtrage le compte annoncé compterait la
+    // documentation avec le code — un nombre juste qui ne mesure pas ce qu'il dit.
+    const code = source
+      .split('\n')
+      .filter((ligne) => !/^\s*(\/\/|\*|\/\*)/.test(ligne))
+      .join('\n');
+    expect((code.match(/scoring_mode \|\| 'blocabrac'/g) ?? []).length).toBe(3);
+    expect((code.match(/scoring_mode \?\? 'blocabrac'/g) ?? []).length).toBe(4);
+    expect(code).not.toMatch(/scoring_mode (\|\||\?\?) 'blocabrac_plancher'/);
   });
 });
