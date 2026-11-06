@@ -235,3 +235,57 @@ describe('contrat du sélecteur de mode — `blocabrac` lisible mais plus sélec
     expect(code).not.toMatch(/scoring_mode (\|\||\?\?) 'blocabrac_plancher'/);
   });
 });
+
+// ============================================================================
+// LA TABLE RECOPIÉE DANS LE TOPO PAPIER.
+//
+// ⚠️ L'affiche d'accueil, elle, est GÉNÉRÉE depuis le code (`scripts/regen-affiche-bareme.cjs`
+// importe `climbingPoints.ts`), donc elle ne peut pas mentir. Le topo n'a pas cette machinerie :
+// sa page « Barème de points » porte des nombres RECOPIÉS À LA MAIN. C'est précisément la
+// famille de défaut que ce dépôt connaît le mieux — une transcription littérale ne bouge pas
+// quand la donnée bouge, et elle est IMPRIMÉE, donc définitive.
+//
+// À défaut d'une génération, la recopie est ici VÉRIFIÉE contre la même table figée que le
+// code. Un chiffre qui dériverait d'un côté rougit.
+//
+// ⚠️ CE QUE CE FILET NE COUVRE PAS : il lit la SOURCE du topo, pas le PDF régénéré. Il ne dit
+// donc rien d'un oubli de `npm run topo` — ça, c'est l'estampille de version qui l'attrape
+// (topoEstampille.test.ts). Et il ne vérifie que les six colonnes présentes : il ne verrait pas
+// une colonne entière supprimée, raison pour laquelle la taille est affirmée d'abord.
+// ============================================================================
+describe('la table du topo papier est la même que celle du code', () => {
+  const ESSAIS_DU_TOPO = [1, 2, 3, 5, 10];
+  const topo = readFileSync(resolve(__dirname, '../../../topo-blocabrac-source.html'), 'utf8');
+
+  it('les 8 lignes de la table du topo rendent les valeurs du code, plancher compris', () => {
+    const lignes = [...topo.matchAll(/<span class="swatch"[^>]*><\/span>(\w+)<\/td>((?:<td>\d+<\/td>)+)/g)];
+    // ⚠️ Affirmer la TAILLE avant le contenu : une ligne ou une colonne disparue passerait
+    // verte en ne vérifiant que ce qui reste. Et la table des modes de la page suivante ne
+    // porte pas de `swatch`, donc 8 est bien le compte attendu.
+    expect(lignes).toHaveLength(8);
+
+    lignes.forEach(([, nomCouleur, cellules]) => {
+      // « Noire » dans le topo, `noir` dans le code : le féminin est celui de l'affichage.
+      const couleur = nomCouleur.toLowerCase() === 'noire' ? 'noir' : nomCouleur.toLowerCase();
+      expect(COULEURS).toContain(couleur);
+      const valeurs = [...cellules.matchAll(/<td>(\d+)<\/td>/g)].map((m) => Number(m[1]));
+      expect(valeurs, `ligne ${nomCouleur}`).toHaveLength(ESSAIS_DU_TOPO.length + 1);
+      ESSAIS_DU_TOPO.forEach((essais, i) => {
+        expect(valeurs[i], `${couleur} à ${essais} essai(s) dans le topo`)
+          .toBe(TABLE_PLANCHER[couleur][essais - 1]);
+      });
+      // La dernière colonne, « Jamais moins de » : le plancher, qui est tout l'intérêt.
+      expect(valeurs[ESSAIS_DU_TOPO.length], `plancher de ${couleur} dans le topo`)
+        .toBe(Math.round(basePoints[couleur] * 0.25));
+    });
+  });
+
+  it("CLAUSE D'ABSENCE : le topo ne parle plus de « déduction par essai » au quotidien", () => {
+    // ⚠️ L'ancienne page portait une colonne « Déduction / essai suppl. » et un encadré
+    // affirmant « C'est voulu et ça ne change pas ». Les deux sont devenus faux le 06/11 — et
+    // un document imprimé qui se contredit est ce qui décide un lecteur à ne plus faire
+    // confiance au reste.
+    expect(topo).not.toContain('Déduction / essai suppl.');
+    expect(topo).not.toContain("C'est voulu et ça ne change pas");
+  });
+});

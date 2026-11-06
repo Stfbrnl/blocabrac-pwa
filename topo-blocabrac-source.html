@@ -275,7 +275,7 @@
     <tr><td class="label">Groupes</td><td>Création et gestion des groupes de grimpeurs suivis par le moniteur.</td></tr>
     <tr><td class="label">Séances</td><td>Cycle programmée → active → archivée. Contenu invisible aux clients avant activation — seuls les objectifs le sont.</td></tr>
     <tr><td class="label">Exercices</td><td>Catalogue d'exercices réutilisables d'une séance à l'autre, hors escalade sur bloc.</td></tr>
-    <tr><td class="label">Mini-compétitions</td><td>Construites à partir de blocs quotidiens existants, rattachées à une séance. Même barème que le quotidien.</td></tr>
+    <tr><td class="label">Mini-compétitions</td><td>Construites à partir de blocs quotidiens existants, rattachées à une séance. <b>Seul endroit qui garde l'ancien barème</b> (déduction fixe par essai) : leurs classements sont proclamés le soir même devant les élèves, donc ils se figent — c'est la même règle qui fige la couleur d'un bloc recoté après coup.</td></tr>
     <tr><td class="label">Statistiques</td><td>Classement des mini-compétitions calculé à la volée, suivi des résultats du groupe.</td></tr>
   </table>
   <footer class="pagefoot">
@@ -330,31 +330,41 @@
   <div class="eyebrow">06 · Compétitions &amp; classement</div>
   <h2 class="section-title">Barème de points</h2>
   <p style="color:var(--muted); font-size:12.5px; max-width:620px;">
-    Barème par défaut (« Barème par couleur », anciennement appelé
-    « Blocabrac »), utilisé pour le classement quotidien, les
-    mini-compétitions, et les compétitions qui n'ont pas choisi un autre mode
-    de comptage (voir page suivante). Les points sont dégressifs selon le
-    nombre d'essais nécessaires pour réussir.
+    <b>Depuis le 6 novembre 2026 il n'y a plus qu'un seul barème</b>, « Barème
+    par couleur avec plancher » : celui des blocs du jour, du classement des
+    grimpeurs et des compétitions. Un bloc réussi rapporte toujours au moins
+    <b>un quart</b> de sa valeur, quel que soit le nombre d'essais, et la
+    décroissance ne dépend que du nombre d'essais — jamais de la couleur, donc
+    une couleur plus dure rapporte toujours plus qu'une plus tendre, à essais
+    égaux. Table complète :
+    <b>blocabrac.web.app/docs/affiche-bareme-competition.pdf</b>, à afficher à
+    l'accueil.
   </p>
   <table class="scoring">
-    <tr><th>Couleur</th><th>Points au 1er essai</th><th>Déduction / essai suppl.</th><th>Exemple au 3e essai</th></tr>
-    <tr><td><span class="swatch" style="background:#FFFF00;"></span>Jaune</td><td>25</td><td>−10</td><td>5</td></tr>
-    <tr><td><span class="swatch" style="background:#00FF00;"></span>Vert</td><td>50</td><td>−10</td><td>30</td></tr>
-    <tr><td><span class="swatch" style="background:#0000FF;"></span>Bleu</td><td>100</td><td>−10</td><td>80</td></tr>
-    <tr><td><span class="swatch" style="background:#800080;"></span>Violet</td><td>200</td><td>−10</td><td>180</td></tr>
-    <tr><td><span class="swatch" style="background:#FF0000;"></span>Rouge</td><td>400</td><td>−20</td><td>360</td></tr>
-    <tr><td><span class="swatch" style="background:#000000;"></span>Noire</td><td>600</td><td>−20</td><td>560</td></tr>
-    <tr><td><span class="swatch" style="background:#FFFFFF;"></span>Blanc</td><td>800</td><td>−50</td><td>700</td></tr>
-    <tr><td><span class="swatch" style="background:#FFC0CB;"></span>Rose</td><td>1000</td><td>−50</td><td>900</td></tr>
+    <tr><th>Couleur</th><th>1 essai</th><th>2 essais</th><th>3 essais</th><th>5 essais</th><th>10 essais</th><th>Jamais moins de</th></tr>
+    <tr><td><span class="swatch" style="background:#FFFF00;"></span>Jaune</td><td>25</td><td>22</td><td>20</td><td>16</td><td>11</td><td>6</td></tr>
+    <tr><td><span class="swatch" style="background:#00FF00;"></span>Vert</td><td>50</td><td>44</td><td>40</td><td>32</td><td>21</td><td>13</td></tr>
+    <tr><td><span class="swatch" style="background:#0000FF;"></span>Bleu</td><td>100</td><td>89</td><td>79</td><td>64</td><td>42</td><td>25</td></tr>
+    <tr><td><span class="swatch" style="background:#800080;"></span>Violet</td><td>200</td><td>178</td><td>158</td><td>128</td><td>85</td><td>50</td></tr>
+    <tr><td><span class="swatch" style="background:#FF0000;"></span>Rouge</td><td>400</td><td>355</td><td>317</td><td>257</td><td>169</td><td>100</td></tr>
+    <tr><td><span class="swatch" style="background:#000000;"></span>Noire</td><td>600</td><td>533</td><td>475</td><td>385</td><td>254</td><td>150</td></tr>
+    <tr><td><span class="swatch" style="background:#FFFFFF;"></span>Blanc</td><td>800</td><td>710</td><td>633</td><td>513</td><td>339</td><td>200</td></tr>
+    <tr><td><span class="swatch" style="background:#FFC0CB;"></span>Rose</td><td>1000</td><td>888</td><td>792</td><td>642</td><td>424</td><td>250</td></tr>
   </table>
   <div class="callout">
     Un échec ne rapporte jamais de point — la dégressivité ne joue que sur les
-    blocs réussis, et le score ne descend jamais sous 0. Dans ce barème-ci, un
-    bloc finit par ne plus rien rapporter : un blanc dès le 17ᵉ essai, un noir au
-    31ᵉ. <b>C'est voulu et ça ne change pas</b> — le classement quotidien est
-    cumulatif et recalculé, donc modifier son barème réécrirait les points de tous
-    les grimpeurs sur tous les blocs passés. Une compétition, elle, se joue et se
-    clôt : c'est pourquoi le mode « avec plancher » existe pour elles seules.
+    blocs réussis. <b>Cette page disait l'inverse jusqu'au 6 novembre 2026</b> :
+    le quotidien comptait alors avec une déduction fixe par essai, un blanc ne
+    rapportait plus rien dès le 17ᵉ essai, et l'encadré affirmait que ça ne
+    changerait pas. Ce qui a emporté la décision est un critère que le gérant a
+    nommé : <b>quand on compte des points avec les essais, il doit y avoir une
+    seule façon de le faire</b>, quel que soit le processus compétitif. Le
+    classement quotidien étant cumulatif et recalculé, la bascule a <b>réécrit les
+    points de tous les grimpeurs sur tous les blocs passés</b> : 26 comptes sur 34
+    ont légèrement baissé, 3 ont monté, et c'est sans conséquence puisque ce total
+    ne commande ni badge, ni niveau, ni qualification. <b>Seules les
+    mini-compétitions des cours gardent l'ancien barème</b> : leurs classements
+    ont été proclamés le soir même, donc ils se figent.
   </div>
   <div class="callout">
     Blocs « Mystère » — en grosse compétition officielle, la cotation reste
@@ -377,8 +387,8 @@
     réglé par l'admin/l'ouvreur à la création, verrouillé dès que la
     compétition démarre :
     <div class="modes-list" style="margin-top:10px;">
-      <div class="mode-row"><div class="mode-name">Barème par couleur</div><div class="mode-desc">Le barème de la page précédente (par défaut, anciennement appelé « Blocabrac »).</div></div>
-      <div class="mode-row"><div class="mode-name">Barème par couleur <b>avec plancher</b></div><div class="mode-desc"><b>Mode du contest du 5 novembre 2026.</b> Mêmes points de base, mais un bloc réussi rapporte toujours au moins <b>un quart</b> de sa valeur, quel que soit le nombre d'essais : plus aucun bloc arraché ne finit à 0. Pas de déduction par couleur, donc une couleur plus dure rapporte toujours plus, à tous les nombres d'essais. Table complète : <b>blocabrac.web.app/docs/affiche-bareme-competition.pdf</b>, à afficher à l'accueil.</div></div>
+      <div class="mode-row"><div class="mode-name">Barème par couleur <b>sans</b> plancher</div><div class="mode-desc"><b>Plus sélectionnable depuis le 6 novembre 2026.</b> L'ancien barème, à déduction fixe par essai : un bloc finissait à zéro, et une couleur plus dure pouvait rapporter moins qu'une plus tendre au même nombre d'essais. Conservé en lecture seule pour que les compétitions passées qui l'utilisent continuent de s'afficher juste.</div></div>
+      <div class="mode-row"><div class="mode-name">Barème par couleur <b>avec plancher</b></div><div class="mode-desc"><b>Le mode par défaut, et celui des blocs du jour depuis le 6 novembre 2026.</b> Un bloc réussi rapporte toujours au moins <b>un quart</b> de sa valeur, quel que soit le nombre d'essais : plus aucun bloc arraché ne finit à 0. Pas de déduction par couleur, donc une couleur plus dure rapporte toujours plus, à tous les nombres d'essais. Table complète : <b>blocabrac.web.app/docs/affiche-bareme-competition.pdf</b>, à afficher à l'accueil.</div></div>
       <div class="mode-row"><div class="mode-name">Blocs validés</div><div class="mode-desc">Points fixés bloc par bloc par l'ouvreur (la cotation étant cachée, un barème par couleur ne reflète pas la difficulté réelle), sans dégression aux essais.</div></div>
       <div class="mode-row"><div class="mode-name">Personnalisé</div><div class="mode-desc">Barème par couleur propre à cette compétition (points de base et déduction par essai réglables).</div></div>
       <div class="mode-row"><div class="mode-name">Officiel FFME</div><div class="mode-desc">Classement par tops, puis zones, puis essais (pas une somme de points). Pensé pour la Finale de l'année (10 grimpeurs, 5 blocs) : saisie par un juge unique sur un écran dédié plutôt que par auto-déclaration des grimpeurs, écran live sans rotation (les deux genres côte à côte). Une égalité parfaite en tête se tranche par une super-finale (un bloc de plus ajouté à l'épreuve), pas par un titre partagé.</div></div>

@@ -12,6 +12,27 @@ export interface ChangelogEntry {
 // à chaque nouvelle fonctionnalité visible côté client — l'historique complet vit dans
 // les commits git.
 export const changelog: ChangelogEntry[] = [
+  // ⚠️ Les deux phrases de cette entrée viennent du §A.5 du plan, et sa consigne compte autant
+  // que le texte : **ne pas s'appuyer sur « vous l'avez déjà approuvé »**. À 93,7 % de flash au
+  // contest, presque personne n'a vu la courbe — à 1 essai les deux barèmes rendent exactement
+  // la même valeur. Ce qui a été plébiscité est le PRINCIPE (plus jamais zéro), pas la courbe.
+  // Les validations qui ne sont pas des flashs verront, elles, des nombres plus petits.
+  //
+  // ⚠️ Et la phrase qui désamorce la seule vraie inquiétude possible : le total cumulé bouge,
+  // donc il faut dire tout de suite qu'il ne commande RIEN (ni badge, ni niveau, ni
+  // qualification). Sans ça un grimpeur qui voit son total baisser croit avoir perdu autre
+  // chose avec lui.
+  {
+    version: '2.80',
+    date: '2026-11-06',
+    title: 'Un seul barème de points, partout',
+    items: [
+      'Le barème des blocs du jour devient le même que celui des compétitions : un bloc réussi rapporte toujours au moins un quart de sa valeur, quel que soit le nombre d’essais. Plus aucun bloc arraché ne finit à zéro.',
+      'En contrepartie, les points baissent un peu plus vite sur les premiers essais. Votre total cumulé peut donc bouger légèrement — c’est un compteur de vitrine, il ne change rien à vos badges, ni à votre niveau, ni à vos classements de compétition.',
+      'Un flash ne change jamais de valeur : au premier essai, l’ancien et le nouveau barème rapportent exactement la même chose. Et une couleur plus dure rapporte maintenant toujours plus qu’une couleur plus tendre, à nombre d’essais égal — ce n’était pas toujours vrai avant.',
+      'La table complète des points est affichée à l’accueil de la salle.',
+    ],
+  },
   // ⚠️ EXCEPTION ASSUMÉE À LA RÈGLE CI-DESSUS, et la raison, pour qu'on ne la « corrige » pas :
   // cette entrée-ci RAPPELLE délibérément des consignes déjà annoncées en 2.73, 2.74 et 2.76.
   //
