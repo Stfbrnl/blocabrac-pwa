@@ -62,11 +62,62 @@ const levelOrder: string[] = colorRatings.map((c) => c.value);
 // public tant que l'épreuve dure). D'où cette distinction dans tout l'écran.
 const isReusedDailyBoulder = (boulder: Boulder): boolean => boulder.type === 'daily';
 
+// ✅ V2.79 — TOUS les blocs rattachés à une compétition, ACTIFS OU NON.
+//
+// 🔴 LE DÉFAUT QUE CETTE FONCTION FERME (mesuré en prod le 06/11/2026). L'effet de chargement
+// ci-dessous applique `.filter(boulder => boulder.is_active === true)` avant de poser l'état
+// `boulders` — ce qui est juste pour un ÉCRAN : un ouvreur n'a rien à faire d'un bloc retiré du
+// mur dans sa liste. Mais c'est cet état que « Terminer la compétition » parcourait. **Un bloc
+// désactivé pendant qu'il était rattaché était donc invisible à l'écran ET sauté par la
+// clôture** : il gardait `competition_active: true` pour toujours, et plus aucune interface ne
+// pouvait l'atteindre. Constaté sur le Contest du 5 novembre, bloc n°7 du Dévers 40°.
+//
+// ⚠️ LA LEÇON, plus large que ce bouton : **un filtre d'AFFICHAGE ne doit jamais devenir le
+// périmètre d'une OPÉRATION DE DONNÉE.** L'écran décide de ce qu'on montre, la clôture décide
+// de ce qui est vrai. Même famille que la verrue du sélecteur ×1/×2, qui ne s'affiche que pour
+// un bloc rattaché : dès qu'un geste se règle sur ce que l'œil voit, il oublie ce qui est
+// caché.
+//
+// ⚠️ ET ELLE RELIT À L'INSTANT DE L'ÉCRITURE, jamais la copie en mémoire — même doctrine que
+// `utils/firstAscentWrites.ts`. Deux raisons : l'état d'affichage est filtré (c'est le défaut
+// ci-dessus), et il peut être périmé si un collègue a saisi des blocs entre-temps, ce qui est
+// le cas NORMAL dans cette salle (la saisie se fait par vagues).
+//
+// ⚠️ Pas de nouvel état React qui porterait la liste complète : ce serait une seconde source de
+// vérité à côté de `boulders`, et c'est la forme d'échec la plus fréquente de ce dépôt (un
+// document, plusieurs rédacteurs, des contrats divergents).
+//
+// Les deux requêtes sont celles de l'effet de chargement, SANS le filtre d'activité. Elles
+// restent séparées plutôt qu'un `type in [...]` : les blocs créés pour l'épreuve s'identifient
+// par leur seul `type`, les blocs quotidiens réutilisés par `competition_active: true` — sans
+// ce champ dédié, un ancien bloc de compétition devenu `daily` après une clôture précédente
+// reviendrait à tort, puisqu'il garde son `competition_id` pour les statistiques.
+const chargerBlocsRattaches = async (competitionId: string): Promise<Boulder[]> => {
+  const [classicSnapshot, reusedSnapshot] = await Promise.all([
+    getDocs(query(
+      collection(db, 'boulders'),
+      where('competition_id', '==', competitionId),
+      where('type', '==', 'competition')
+    )),
+    getDocs(query(
+      collection(db, 'boulders'),
+      where('competition_id', '==', competitionId),
+      where('type', '==', 'daily'),
+      where('competition_active', '==', true)
+    )),
+  ]);
+  return [...classicSnapshot.docs, ...reusedSnapshot.docs]
+    .map(d => ({ id: d.id, ...d.data() })) as Boulder[];
+};
+
 export default function CompetitionBouldersList(): JSX.Element {
   const navigate = useNavigate();
   const [competitions, setCompetitions] = useState<Competition[]>([]);
   const [selectedCompetition, setSelectedCompetition] = useState<string>('');
   const [boulders, setBoulders] = useState<Boulder[]>([]);
+  // ✅ V2.79 : combien de blocs sont rattachés à la compétition SANS être affichés, parce que
+  // désactivés. Un simple compte, jamais la liste — voir `chargerBlocsRattaches`.
+  const [detachedAttachedCount, setDetachedAttachedCount] = useState(0);
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
   const [boulderToDelete, setBoulderToDelete] = useState<string | null>(null);
   const [openRemoveDialog, setOpenRemoveDialog] = useState(false);
@@ -111,37 +162,25 @@ export default function CompetitionBouldersList(): JSX.Element {
       setSelectedForMultiplier(new Set());
 
       try {
-        // ✅ Deux requêtes fusionnées plutôt qu'un `type in [...]` : les blocs créés
-        // pour l'épreuve restent identifiés par leur seul `type` (comme avant, aucun
-        // changement rétrocompatible), tandis que les blocs quotidiens réutilisés
-        // portent en plus `competition_active: true` tant qu'ils sont dans CETTE
-        // compétition — sans ce champ dédié, un ancien bloc de compétition devenu
-        // `type: 'daily'` après "Terminer la compétition" réapparaîtrait ici à tort,
-        // puisqu'il garde son `competition_id` pour les statistiques historiques.
-        const [classicSnapshot, reusedSnapshot] = await Promise.all([
-          getDocs(query(
-            collection(db, 'boulders'),
-            where('competition_id', '==', selectedCompetition),
-            where('type', '==', 'competition')
-          )),
-          getDocs(query(
-            collection(db, 'boulders'),
-            where('competition_id', '==', selectedCompetition),
-            where('type', '==', 'daily'),
-            where('competition_active', '==', true)
-          )),
-        ]);
-
-        const allBoulders = [...classicSnapshot.docs, ...reusedSnapshot.docs].map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as Boulder[];
+        // ✅ V2.79 : les deux requêtes vivent désormais dans `chargerBlocsRattaches`, partagée
+        // avec « Terminer la compétition » — un seul endroit répond à « quels blocs sont
+        // rattachés à cette compétition ? ».
+        const allBoulders = await chargerBlocsRattaches(selectedCompetition);
 
         const filteredAndSortedBoulders = allBoulders
           .filter(boulder => boulder.is_active === true)
           .sort((a, b) => (a.number || 0) - (b.number || 0));
 
         setBoulders(filteredAndSortedBoulders);
+        // ✅ V2.79 : le NOMBRE de blocs rattachés mais désactivés — pas la liste, qui n'a
+        // rien à faire à l'écran. Il sert uniquement à ce que le dialogue de clôture dise la
+        // vérité sur ce qu'il va modifier.
+        //
+        // ⚠️ Sans lui, le correctif ci-dessus produirait un MENSONGE D'UN AUTRE GENRE : la
+        // clôture traiterait plus de blocs que le dialogue n'en annonce. Ce dépôt a déjà
+        // tranché que sur un écran qui règle des points, un message faux est pire que pas de
+        // message — l'ouvreur se fie alors à une salle qu'il croit dans un état donné.
+        setDetachedAttachedCount(allBoulders.length - filteredAndSortedBoulders.length);
       } catch (error: unknown) {
         console.error('Erreur lors du chargement des blocs :', error);
         alert('Une erreur est survenue lors du chargement des blocs.');
@@ -357,7 +396,16 @@ export default function CompetitionBouldersList(): JSX.Element {
     let lotsFaits = 0;
     try {
       setIsMigrating(true);
-      for (const lot of decouperEnLots(boulders)) {
+      // ✅ V2.79 : on RELIT la liste complète ici, au lieu de parcourir l'état `boulders`,
+      // qui est filtré sur `is_active` pour l'affichage. Voir `chargerBlocsRattaches` pour le
+      // défaut que cela ferme et pour la raison de relire plutôt que de mémoriser.
+      //
+      // ⚠️ Et cela ferme un second défaut, du même coup : un bloc `type: 'competition'`
+      // désactivé n'était jamais repassé en `daily`, donc **sa cotation restait cachée pour
+      // toujours** et il devenait l'un de ces blocs inatteignables dont la production porte
+      // déjà 7 exemplaires. La clôture le récupère maintenant.
+      const tousLesBlocsRattaches = await chargerBlocsRattaches(selectedCompetition);
+      for (const lot of decouperEnLots(tousLesBlocsRattaches)) {
         const batch = writeBatch(db);
         lot.forEach((boulder) => {
           if (isReusedDailyBoulder(boulder)) {
@@ -380,8 +428,12 @@ export default function CompetitionBouldersList(): JSX.Element {
         lotsFaits += 1;
       }
       setBoulders([]);
+      setDetachedAttachedCount(0);
       setOpenMigrateDialog(false);
-      alert('La compétition est terminée : les blocs créés pour l\'épreuve sont maintenant des blocs quotidiens (à recoter depuis "Gérer les blocs quotidiens"), et les blocs quotidiens réutilisés ont simplement quitté la compétition.');
+      alert(`La compétition est terminée : ${tousLesBlocsRattaches.length} bloc(s) traité(s). `
+        + 'Les blocs créés pour l\'épreuve sont maintenant des blocs quotidiens (à recoter depuis '
+        + '"Gérer les blocs quotidiens"), et les blocs quotidiens réutilisés ont simplement quitté '
+        + 'la compétition.');
     } catch (error: unknown) {
       console.error('Erreur lors du basculement en blocs quotidiens :', error);
       alert(lotsFaits === 0
@@ -831,6 +883,18 @@ export default function CompetitionBouldersList(): JSX.Element {
           {reusedCount > 0 && (
             <>
               {reusedCount} bloc(s) quotidien(s) réutilisé(s) vont simplement quitter la compétition : ils redeviennent uniquement des blocs quotidiens, sans aucun changement de cotation.
+            </>
+          )}
+          {/* ✅ V2.79 : les blocs rattachés mais DÉSACTIVÉS sont traités eux aussi, et le
+              dialogue doit le dire — sinon il annonce moins que ce que la clôture modifie.
+              Avant ce correctif ils étaient simplement oubliés, et gardaient leur drapeau de
+              compétition pour toujours. */}
+          {detachedAttachedCount > 0 && (
+            <>
+              <br /><br />
+              S'y ajoutent <strong>{detachedAttachedCount} bloc(s) désactivé(s)</strong>, absents
+              de la liste ci-dessus parce que retirés du mur, mais encore rattachés à la
+              compétition : ils seront détachés eux aussi, sans réapparaître en salle.
             </>
           )}
         </DialogContent>
