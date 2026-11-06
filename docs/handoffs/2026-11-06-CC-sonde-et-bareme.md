@@ -242,3 +242,98 @@ rien ne distingue un instrument juste d'un instrument faux du bon ordre de grand
 L'utilisateur annonce « de nombreux retours pour faire évoluer le mode compétition sur des
 choses très concrètes », à venir. Rien n'est encore connu de leur contenu — **à ne pas anticiper
 par du code**, et à lire comme un chantier distinct de celui du barème.
+
+---
+
+## 5. Le correctif des niveaux — livré en V2.78, et un troisième défaut trouvé en le vérifiant
+
+Chantier de `docs/handoffs/2026-10-18-CN-plan-niveaux-contest.md`, dégelé ce matin. Commit
+`44f506a`. **500 tests / 40 fichiers, lint propre, build après le bump.**
+
+### ① Le plancher (le correctif prévu)
+
+La décision de réécrire `users.level` sort de `ClientStats.tsx` vers **`utils/levelSync.ts`**,
+pur et testé (12 tests). Quand plus aucun badge de couleur n'est actif **et** que `baseLevel`
+est absent ou illisible, **plus aucune écriture** : le niveau reste à sa dernière valeur connue.
+L'ancien code posait `'bleu'`, qui n'est pas une donnée mais une hypothèse.
+
+**Mesuré en prod : 9 comptes** portent un niveau ≥ violet sans `baseLevel` (rose ×1, blanc ×4,
+noir ×2, rouge ×2) et tombaient tous à `'bleu'` dès qu'un recalcul tournait.
+
+✔️ Les 3 tests du groupe « LE PLANCHER » ont été vus rouges **seuls**, en remettant l'ancien
+repli dix secondes : les 9 autres restent verts. Le filet mesure donc le plancher, et pas le
+reste de la fonction.
+
+### ② Régler un niveau à la main est une DÉCLARATION
+
+`AdminUsers.tsx` écrivait `level` **sans jamais `baseLevel`**, contrairement à
+`ClientProfile.tsx` et `Register.tsx`. Les 68 niveaux réglés nom par nom le soir du contest
+n'étaient donc enregistrés nulle part comme des déclarations. Corrigé à l'édition **et** à la
+création.
+
+⚠️ **La forme générale, qui vaut au-delà de ce champ** : le plancher protège d'une valeur
+**INVENTÉE** ; il ne peut rien contre une valeur **ANCIENNE mais lisible**. Deux défauts de
+natures différentes derrière le même symptôme — il fallait les deux correctifs, et le premier
+seul aurait donné l'illusion d'avoir fini.
+
+### ③ 🔴 Le défaut qui m'a trompé : un verrou MASQUE un écart, il ne le résout pas
+
+`audit-niveaux-perimes.js` faisait `if (d.levelOverride) continue;`. Au lendemain du contest,
+**68 comptes sur 71** portaient ce verrou : l'audit n'en évaluait plus que **3** et annonçait
+« ÉCARTS : 1 ». J'ai d'abord lu ce 1 comme la preuve que la passe de verrouillage avait soldé
+les 19 écarts du 18 octobre. **C'était faux** : les écarts étaient intacts, simplement
+invisibles, et c'est précisément au déverrouillage qu'ils se matérialisent.
+
+L'audit annonce désormais, **toujours et même à zéro** : les écarts **ACTIFS**, les écarts
+**LATENTS** (derrière un verrou), et le nombre de comptes sans `baseLevel`. Sa formule d'attendu
+suit maintenant `resolveLevelSync` — sans quoi il aurait dénoncé comme « écart » exactement les
+9 comptes que le plancher protège. **Un audit qui contredit le code qu'il surveille apprend à
+ignorer l'audit.**
+
+⚠️ **La leçon de méthode**, à ranger près de « un critère de sortie doit prédire *toutes* les
+grandeurs observables » : **un filtre qui écarte des lignes réduit silencieusement la
+POPULATION mesurée, et le compteur qui en sort reste parfaitement plausible.** Ici il est passé
+de 63 à 3 comptes sans qu'aucun chiffre ne le dise. La question à poser à tout audit :
+*combien d'éléments ont été évalués, et combien ont été écartés avant l'évaluation ?* Un
+instrument doit annoncer son dénominateur.
+
+### ④ Ce que le déverrouillage produira — mesuré, et moins grave que je l'ai d'abord écrit
+
+⚠️ **Correction de mon propre message de commit `44f506a`**, qui annonce que les 9 comptes en
+écart latent « trop HAUT » ont un `baseLevel` antérieur au réglage du 5 novembre. **C'est vrai
+pour 1 seul.** Les 8 autres redescendent par la **branche des badges** :
+
+| | nombre | origine de l'attendu |
+|---|---|---|
+| redescente pilotée par les badges | **8** | la plus haute couleur du grimpeur encore posée en salle |
+| redescente vers un `baseLevel` déclaré | **1** | Clement Bourvic, blanc → noir, badge blanc en veille |
+| élévation (attribution jamais faite) | **1** | Olivier John, jaune → rouge |
+| protégés du `'bleu'` par le plancher | **9** | niveau ≥ violet sans `baseLevel` |
+
+Les 8 redescentes sont donc **le mécanisme explicitement voulu** — « le badge est la
+proclamation, son caractère éphémère EST sa valeur ; le niveau est la mesure ». Il n'y a **pas**
+de décision bloquante avant de déverrouiller.
+
+🟠 **La seule question qui reste est de valeur, pas technique** : si l'un de ces 9 grimpeurs a
+été réglé plus haut **exprès** le 5 au soir et que ce réglage doit tenir, la réponse est de
+relever son `baseLevel`, pas de renoncer au déverrouillage. L'utilisateur figure lui-même dans
+la liste (noir → rouge), ce qui en fait un bon juge.
+
+### ⑤ Ce qui n'est PAS fait de ce chantier, et pourquoi
+
+Le plan prévoyait aussi que **le module porte la chaîne entière** (attribuer les badges
+manquants *puis* recalculer le niveau) et soit **appelé depuis `ClientDaily`**, pour que la
+chaîne n'avance plus seulement chez ceux qui consultent « Mes stats ». **Non livré, délibérément
+reporté** :
+
+- il coûte **deux lectures de collection de plus** (`badges` + `client_badges`) sur l'écran le
+  plus ouvert de l'application, **le jour même où le plafond Spark revient** et où la sonde
+  vient de désigner les lectures comme la contrainte réelle ;
+- il n'a plus d'urgence : son bénéfice est le cas « niveau trop BAS », qui ne concerne
+  aujourd'hui que **2 comptes**, et qui se répare tout seul dès que l'intéressé ouvre ses stats ;
+- ⚠️ la question laissée ouverte par le plan — *la Roulette se comporte-t-elle correctement
+  quand aucun bloc ouvert ne correspond au niveau du grimpeur ?* — devient fréquente dès que
+  les niveaux cessent d'être périmés, et **elle n'a pas encore été vérifiée.** À lire avant
+  d'ajouter ce point d'appel, pas après.
+
+**Ordre à tenir, inchangé : déployer V2.78 → PUIS déverrouiller.** Jamais l'inverse.
