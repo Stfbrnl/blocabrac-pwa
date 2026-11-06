@@ -374,6 +374,52 @@ async function main() {
   }
   console.log(`Résultats de compétition : ${compResultsSnap.size}, ${resultatsOrphelins.length} orphelin(s)`);
 
+  // ✅ 06/11/2026 — `competition_active` SURVIVANT À UNE CLÔTURE.
+  //
+  // ⚠️ LA CAUSE est dans le code, trouvée et non supposée : `CompetitionBouldersList.tsx`
+  // applique `.filter(boulder => boulder.is_active === true)` avant de poser son état, et
+  // c'est cet état que « Terminer la compétition » parcourt. Un bloc désactivé pendant qu'il
+  // était rattaché est donc invisible à l'écran ET sauté par la clôture — il garde le drapeau
+  // pour toujours, hors d'atteinte de toute interface.
+  //
+  // ⚠️ POURQUOI C'EST UNE ERREUR ET PAS UN AVERTISSEMENT, bien que le dommage soit LATENT :
+  // un bloc désactivé ne reçoit aucune validation, donc rien n'est suspendu tant qu'il reste
+  // au placard. Mais `firestore.rules` refuse les premières ascensions et les votes de méthode
+  // sur tout bloc `competition_active` : le jour où il est remis au mur — la routine d'une
+  // rotation — les deux fonctionnalités y sont muettes, sans terme et sans message. Un défaut
+  // qui attend une action banale pour se réveiller n'est pas un avertissement.
+  //
+  // ⚠️ ET CE CONTRÔLE A ÉTÉ PRÉCÉDÉ DE SON RATTRAPAGE (1 bloc, le 06/11, via
+  // `scripts/fix-competition-active-apres-cloture.js`), dans cet ordre et pas l'autre : une
+  // règle d'audit posée sur une base qui a un passé naîtrait rouge en permanence, et un
+  // avertissement permanent apprend à ignorer les avertissements.
+  const statutCompetition = new Map();
+  competitionsSnap.forEach((c) => statutCompetition.set(c.id, c.data().status || '(sans statut)'));
+  const EN_VOL = ['à venir', 'en cours']; // énumérés en POSITIF : une liste d'exclusions
+  // laisserait passer tout statut futur qu'on n'aurait pas pensé à y ajouter.
+  const drapeauxSurvivants = bouldersSnap.docs.filter((d) => {
+    const b = d.data();
+    if (b.competition_active !== true) return false;
+    const statut = statutCompetition.has(b.competition_id)
+      ? statutCompetition.get(b.competition_id)
+      : '(compétition absente)';
+    return !EN_VOL.includes(statut);
+  });
+  const actifsAvecDrapeau = bouldersSnap.docs.filter((d) => d.data().competition_active === true).length;
+  console.log(`competition_active : ${actifsAvecDrapeau} bloc(s) porteurs, `
+    + `${drapeauxSurvivants.length} sur une compétition qui n'est plus en vol`);
+  for (const d of drapeauxSurvivants.slice(0, 10)) {
+    const b = d.data();
+    const statut = statutCompetition.get(b.competition_id) || '(compétition absente)';
+    errors.push(`boulders/${d.id} (n°${b.number ?? '?'} ${b.wall || '?'}, is_active=${b.is_active === true}) `
+      + `garde competition_active alors que la compétition "${b.competition_id}" est ${statut} — `
+      + 'premières ascensions et votes de méthode y seront refusés s\'il est remis au mur. '
+      + 'Remède : node scripts/fix-competition-active-apres-cloture.js');
+  }
+  if (drapeauxSurvivants.length > 10) {
+    errors.push(`… et ${drapeauxSurvivants.length - 10} autre(s) bloc(s) dans le même cas.`);
+  }
+
   // Fenêtre de saison.
   if (!seasonSnap.exists) {
     warnings.push('app_config/classement_saison absent : le classement de saison reste vide tant que l\'admin ne l\'a pas réglé.');
