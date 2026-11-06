@@ -297,3 +297,95 @@ depuis son raccourcissement : rien à y changer.
 
 **553 tests verts.** Le compte de commits locaux passe à **7** — la procédure du §6 est
 inchangée.
+
+---
+
+## 9. Hors plan, fait le même soir : les 7 blocs de compétition orphelins
+
+Le §« Ce que ce plan ne touche pas » les laissait de côté ; ils sont traités.
+
+**Mesure d'abord, et elle a décidé de tout** : 7 blocs `type: 'competition'`, `is_active: true`,
+rattachés à deux compétitions **supprimées** (25/05 et 13/06/2026), portant **zéro validation** —
+ni `client_boulder_results`, ni `competition_results`. Totalement inertes : aucun écran ne les
+atteint, les deux écrans de compétition interrogeant par le `competition_id` d'une compétition
+*sélectionnée*.
+
+**Décision de l'utilisateur** : `is_active: false` sur les 7, `difficulty` normalisée sur les deux
+fautives (`"noire"` → `noir`, `"Rouge"` → `rouge`), `type` et `competition_id` **intouchés**. Pas
+de conversion en `type: 'daily'` : avec 0 validation aucun compteur ne lira jamais leur couleur,
+donc la conversion n'achetait rien — et laissés actifs ils auraient créé de vrais défauts, deux
+paires se télescopant (« Dévers 15° n°2 », « Dalle n°1 ») et des blocs vieux de cinq mois
+apparaissant comme posés aujourd'hui.
+
+**Effet vérifié** : l'audit de production passe de **9 erreurs à 0**, et une relance du script ne
+trouve plus rien — il est idempotent.
+
+### 🔴 Un invariant tenu malgré une raison inapplicable
+
+La suppression est restée exclue, alors même que sa raison habituelle — perdre les validations
+associées — **ne s'appliquait pas** ici. Deux autres tenaient : les 7 images Cloudinary
+deviendraient orphelines donc détruites par le nettoyage mensuel sous 7 jours ; et surtout :
+
+> ***Un invariant qui ne vaut que quand sa raison s'applique n'est plus un invariant : c'est une
+> appréciation à refaire chaque fois, par quelqu'un qui aura moins de contexte.***
+
+⚠️ **C'est le symétrique exact de la leçon des mini-compétitions, prise une heure plus tôt** —
+et les deux ne se contredisent pas : une **exception** doctrinale se vérifie (elle ne coûte rien
+à lever quand elle ne protège plus rien), un **invariant** se tient.
+
+### Deux outils, et la discipline qu'ils portent
+
+`scripts/lib/couleur-canonique.cjs` — normalisation **explicite ou refus**. Liste d'alias
+féminins (5 entrées, les seules qui existent), huit couleurs **dérivées de `BASE_POINTS`** plutôt
+que recopiées. Pas d'heuristique : retirer les accents ou couper un `e` final trancherait aussi
+les cas qu'il ne faut pas trancher, et **sur une donnée qui décide de points une normalisation
+fausse est pire qu'un refus** — le refus se voit et s'instruit, la normalisation fausse part en
+base et s'oublie. 8 tests, dont celui qui vérifie que « turquoise », « noirs », « noi » rendent
+`null`.
+
+`scripts/retirer-blocs-competition-orphelins.js` — simulation par défaut, `--fix --expected N`
+obligatoire. **Les deux gardes ont été exercés contre la prod avant d'écrire** : `--fix` sans
+`--expected` refuse en sortie 1, `--expected 6` refuse en sortie 1, **et la prod a été vérifiée
+intacte après les deux** — un garde qui refuse *après* avoir écrit refuserait pour rien.
+⚠️ Mon premier relevé de code de sortie était faux : `$?` après un pipe rend le code de `tail`.
+L'instrument était en cause, pas le script.
+
+### ⚠️ Et une correction de ce que ma propre mémoire affirmait
+
+J'avais consigné que ces 7 blocs « polluaient l'audit ». **C'était faux** : l'audit était à
+0 erreur parce que **rien ne contrôlait ce cas** — le filet de V2.79 portait sur
+`competition_active`, un autre défaut. *Un terrain propre peut l'être faute d'instrument, et
+j'avais pris la propreté pour une preuve.* La règle existe maintenant, ajoutée **après** son
+rattrapage (l'ordre prescrit) et vue **rouge sur de vraies données** : 9 erreurs, sortie 1, les
+deux clauses rougissant séparément. ⚠️ Sa condition porte sur `is_active` et pas seulement sur
+l'orphelinage, parce que le rattrapage ne touche pas `competition_id` : les 7 resteront orphelins
+pour toujours, et une règle qui crierait sur eux crierait pour l'éternité, sur un état voulu.
+
+---
+
+## 10. Le prochain sujet, posé par l'utilisateur ce soir
+
+**Un espace dans la partie Admin pour récupérer les documents de la salle en PDF** (topo,
+affiche…). C'est la reprise du chantier ② reporté le 28/10/2026 — voir
+`docs/handoffs/2026-10-28-CC-ecran-blanc-service-worker.md`.
+
+🔴 **Et il y a un préalable que la mesure a sorti ce soir : les deux topos ne sont PAS servis.**
+
+| document | emplacement | servi en ligne ? |
+|---|---|---|
+| `affiche-bareme-competition.pdf` + `.html` | `frontend/public/docs/` | ✔️ oui |
+| `aide-connexion-installation.pdf` + `.html` | `frontend/public/docs/` | ✔️ oui |
+| `topo-blocabrac.pdf` | **racine du dépôt** | 🔴 **non** |
+| `topo-roulettes-defis.pdf` | **racine du dépôt** | 🔴 **non** |
+
+Un écran admin ne pourra donc pas « simplement lister des liens » : il faudra d'abord décider si
+les topos entrent dans `public/docs/` (et donc dans le périmètre servi, avec ce que ça implique
+— ce sont des documents de **staff**, pas destinés aux grimpeurs, alors que `public/docs/` est
+public et sans authentification). C'est la question à trancher avant d'écrire une ligne.
+
+⚠️ Rappel du 28/10, qui reste le meilleur argument pour ce chantier : *c'est ② qui aurait fait
+découvrir ① plus tôt.* Un lien dans l'application est un chemin que quelqu'un emprunte ; tant que
+l'accès se fait par une URL qu'on se transmet à la main, le chemin n'est jamais parcouru — et le
+guide de connexion est resté cassé **depuis sa création** sans que personne le voie.
+
+Le chantier ① (une route `*` terminale) reste reporté.
