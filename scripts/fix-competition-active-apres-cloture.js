@@ -28,7 +28,15 @@
 // est légitime, et l'effacer sortirait un bloc d'une épreuve en train de se jouer.
 const path = require('path');
 const { initializeApp, cert } = require('firebase-admin/app');
-const { getFirestore, deleteField } = require('firebase-admin/firestore');
+// ⚠️ `FieldValue.delete()`, PAS `deleteField()` : ce dernier est l'API du SDK **client**
+// (`firebase/firestore`), et l'application en est pleine — d'où la confusion. Côté Admin il
+// n'existe pas, et l'import ne lève pas : il rend `undefined`, donc l'échec arrive seulement à
+// l'appel, « deleteField is not a function », au milieu du mode écriture.
+//
+// 🔴 ET LA SIMULATION NE POUVAIT PAS L'ATTRAPER : elle n'exerce pas le chemin d'écriture. Un
+// script dont le mode sûr est vert n'a prouvé que son mode sûr. `purge-orphan-competition-refs.js`
+// faisait déjà juste, ligne 157 — la bonne forme était dans le dépôt, à côté.
+const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 
 const CREDENTIALS_DIR = path.join(__dirname, '../firestore-migration');
 function readServiceAccount() {
@@ -105,7 +113,7 @@ const EXPECTED = iExp >= 0 ? Number(process.argv[iExp + 1]) : null;
 
   let ecrits = 0;
   for (const c of cibles) {
-    await db.collection('boulders').doc(c.id).update({ competition_active: deleteField() });
+    await db.collection('boulders').doc(c.id).update({ competition_active: FieldValue.delete() });
     ecrits += 1;
   }
   console.log(`\n✔ EFFET : ${ecrits} bloc(s) modifié(s), champ competition_active effacé.`);
