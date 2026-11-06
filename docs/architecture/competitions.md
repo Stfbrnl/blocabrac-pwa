@@ -616,8 +616,36 @@ d'autre. Une attribution, pas une supposition.
 
 `calculateDailyPoints` appelle `plancherPoints` et `basePoints`, **le même code** que la branche
 `blocabrac_plancher` — pas une copie de la formule. Et `calculatePoints` **n'a pas bougé d'un
-caractère** : elle reste la formule des **mini-compétitions** (proclamées le soir même, donc
-figées) et du mode `blocabrac` des compétitions passées.
+caractère**.
+
+🔴 **Et le soir du même jour, son périmètre a été resserré encore : elle n'a plus qu'UN SEUL
+APPELANT**, la branche du mode `blocabrac`, pour que les compétitions **passées** s'affichent
+juste. Les **mini-compétitions** ont été alignées sur le barème unifié.
+
+La question venait de l'utilisateur — *« il n'y a jamais eu de mini-compétitions véritablement
+déroulées, ne serait-ce pas pertinent de les aligner aussi ? »* — et la mesure lui a donné
+raison : **1 mini-compétition créée** (« Adulte Toussaint », 35 blocs, rattachée à 1 séance),
+**0 document portant un `miniCompetitionId`** sur les 3 `client_course_results` de la prod. La
+doctrine « proclamé = figé » ne protégeait donc **rien**, et le plan écartait les
+mini-compétitions pour une raison qui ne s'appliquait pas encore.
+
+⚠️ **LE FAIT QUI A RENDU LE MOMENT DÉCISIF, et qui n'était écrit nulle part** : les points d'une
+mini-compétition **ne sont pas stockés**. `buildMiniCompetitionRanking` les recalcule à chaque
+affichage depuis `boulderColor` + `attempts`. Le gel d'une mini-compétition porte donc sur la
+**couleur** — immunité contre une **recotation**, qui est ce que la doctrine visait — et **pas sur
+les points**. Changer le barème *plus tard* aurait donc réécrit un classement réellement proclamé
+devant des élèves : exactement l'interdit. **C'était le seul moment où l'alignement était
+gratuit, et il ne se représentera pas.**
+
+⚠️ **Leçon générale, au-delà du barème** : *vérifier qu'une exception doctrinale protège encore
+quelque chose avant de la reconduire.* Celle-ci était juste à l'écrit et vide dans les faits, et
+la reconduire aurait rendu le même changement **impossible pour toujours** — une exception vide
+qui se remplit devient une contrainte.
+
+✔️ **Et un contrôle gratuit sur l'alignement lui-même** : la seule valeur de
+`miniCompetitionRanking.test.ts` qui a bougé est celle du seul essai **non-flash** (480 → 455,
+rouge au 2ᵉ essai). Les flashs et les zéros n'ont pas bronché, ce qui est la signature attendue
+d'un changement de courbe et de rien d'autre.
 
 🔴 **Le défaut le plus grave était déjà en place, pas introduit par ce chantier** :
 `reconcile-classement-profiles.js` portait **sa propre copie** du barème, en ligne. Si elle

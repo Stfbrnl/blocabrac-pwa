@@ -18,7 +18,7 @@ describe('buildMiniCompetitionRanking', () => {
   it('somme les points du barème sur les seuls blocs de CETTE mini-compétition', () => {
     const classement = buildMiniCompetitionRanking([
       participant('u1', 'Alice', [
-        // bleu 1er essai = 100 ; rouge 2e essai = 380 ; et un bloc d'une AUTRE mini-compét.
+        // bleu 1er essai = 100 ; rouge 2e essai = 355 ; et un bloc d'une AUTRE mini-compét.
         { miniCompetitionId: MC, boulderColor: 'bleu', attempts: 1, success: true },
         { miniCompetitionId: MC, boulderColor: 'rouge', attempts: 2, success: true },
         { miniCompetitionId: AUTRE, boulderColor: 'rose', attempts: 1, success: true },
@@ -26,7 +26,10 @@ describe('buildMiniCompetitionRanking', () => {
     ], MC);
 
     expect(classement).toHaveLength(1);
-    expect(classement[0].score).toBe(480);
+    // 455 et non 480 depuis le 06/11/2026 : les mini-compétitions comptent avec le MÊME
+    // barème que tout le reste (rouge à 2 essais : 355, et non 400 − 20). Le flash, lui, ne
+    // bouge pas — c'est pourquoi c'est la seule valeur de ce fichier qui change.
+    expect(classement[0].score).toBe(455);
     expect(classement[0].bouldersValidated).toBe(2);
   });
 

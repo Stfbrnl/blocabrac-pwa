@@ -11,7 +11,7 @@ import {
   FormControl, InputLabel, Select, MenuItem, TextField, Chip
 } from '@mui/material';
 import { getSessionStatus, type SessionStatus } from '../../../utils/courseSessionStatus';
-import { calculatePoints } from '../../../utils/climbingPoints';
+import { calculateDailyPoints } from '../../../utils/climbingPoints';
 import { getBoulderImageUrl } from '../../../services/imageStorage';
 import { useDebouncedFlushQueue } from '../../../utils/useDebouncedFlushQueue';
 // ✅ Remplace une table `levelColors` recopiée ici : les teintes viennent de `colorGrades`
@@ -755,7 +755,7 @@ const ClientCourseSession: React.FC = () => {
                           <Box sx={{ mt: 1 }}>
                             {result.success !== undefined ? (
                               <Chip
-                                label={result.success ? `Réussi (${result.attempts || 1} essai(s)) — ${calculatePoints(couleurAffichee, result.attempts || 1, result.success)} pts` : 'Échoué'}
+                                label={result.success ? `Réussi (${result.attempts || 1} essai(s)) — ${calculateDailyPoints(couleurAffichee, result.attempts || 1, result.success)} pts` : 'Échoué'}
                                 color={result.success ? 'success' : 'error'}
                                 size="small"
                               />

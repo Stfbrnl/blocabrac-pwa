@@ -27,7 +27,7 @@ export const changelog: ChangelogEntry[] = [
     date: '2026-11-06',
     title: 'Un seul barème de points, et l’écran de compétition réorganisé',
     items: [
-      'Le barème des blocs du jour devient le même que celui des compétitions : un bloc réussi rapporte toujours au moins un quart de sa valeur, quel que soit le nombre d’essais. Plus aucun bloc arraché ne finit à zéro.',
+      'Le barème des blocs du jour devient le même que celui des compétitions — et des mini-compétitions des cours : il n’y a plus qu’un seul barème dans toute l’application. Un bloc réussi rapporte toujours au moins un quart de sa valeur, quel que soit le nombre d’essais. Plus aucun bloc arraché ne finit à zéro.',
       'En contrepartie, les points baissent un peu plus vite sur les premiers essais. Votre total cumulé peut donc bouger légèrement — c’est un compteur de vitrine, il ne change rien à vos badges, ni à votre niveau, ni à vos classements de compétition.',
       'La table complète des points est affichée à l’accueil de la salle. Un flash ne change jamais de valeur : au premier essai, l’ancien et le nouveau barème rapportent exactement la même chose.',
       'NOUVEAU — En compétition, l’écran de validation range les blocs par MUR, dans l’ordre où vous les croisez dans la salle, et non plus dans une seule longue liste. Chaque mur se replie, et son en-tête indique combien de ses blocs vous avez déjà réussis : au contest du 5 novembre, c’était 92 blocs d’affilée à faire défiler.',

@@ -8,17 +8,23 @@ export const deductions: Record<string, number> = {
 
 // Points obtenus pour un bloc réussi, dégressifs selon le nombre d'essais.
 //
-// ⚠️ DEPUIS LE 06/11/2026 (docs/plans/2026-11-06-CN-plan-bareme-unifie-et-ecran-competition.md
-// partie A) CE N'EST PLUS LE BARÈME DU CLASSEMENT QUOTIDIEN — voir `calculateDailyPoints`
-// ci-dessous. Cette fonction reste la formule de DEUX choses, et elle ne bouge pas d'un
-// caractère :
-//   - les **mini-compétitions** (`miniCompetitionRanking.ts`, `ClientCourseSession.tsx`) ;
-//   - le mode de compétition `blocabrac`, conservé **lisible** pour les compétitions passées
-//     qui l'utilisent (il n'est plus sélectionnable à la création).
+// 🔴 DEPUIS LE 06/11/2026, CETTE FONCTION N'A PLUS QU'UN SEUL APPELANT DANS TOUTE
+// L'APPLICATION : la branche du mode `blocabrac` de `pointsAvantMultiplicateur` ci-dessous,
+// c'est-à-dire **les compétitions PASSÉES** qui portent ce mode. Elle existe pour qu'un
+// palmarès déjà proclamé continue de s'afficher juste, et pour rien d'autre.
 //
-// La doctrine qui sépare les deux : *une mini-compétition a été **proclamée** le soir même,
-// elle se fige ; le classement général **mesure**, il se recalcule.* Un diff qui supprime
-// `calculatePoints` est faux.
+// ⚠️ **Un diff qui la supprime est faux** (les compétitions passées se recalculent à
+// l'affichage), et **un diff qui lui ajoute un appelant l'est aussi** : ce serait une
+// troisième courbe, soit exactement ce que le critère d'uniformité du 06/11 écarte. Son
+// unicité d'appelant est épinglée par `test/contrats/baremeQuotidien.test.ts`.
+//
+// Ce qu'elle ÉTAIT, et qui a changé deux fois le même jour : le barème du classement
+// quotidien (jusqu'au matin du 06/11), puis celui des **mini-compétitions** (jusqu'au soir).
+// Les mini-compétitions ont été alignées parce que la mesure a montré qu'**aucune n'avait
+// jamais produit de résultat** (1 mini-compétition créée, 0 document portant un
+// `miniCompetitionId`) : la doctrine « proclamé = figé » ne protégeait donc rien, et leurs
+// points étant **recalculés à l'affichage** (jamais stockés), les aligner plus tard aurait
+// réécrit un classement réellement proclamé. C'était le seul moment où c'était gratuit.
 export const calculatePoints = (difficulty: string, attempts: number, success: boolean): number => {
   if (!success) return 0;
   const base = basePoints[difficulty] || 0;

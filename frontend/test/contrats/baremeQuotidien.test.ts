@@ -24,7 +24,7 @@
 // est gardée par les propriétés de `src/utils/climbingPoints.test.ts` (plancher, ordre
 // strict, monotonie, jamais zéro), chacune cassable séparément.
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'fs';
+import { readdirSync, readFileSync } from 'fs';
 import { resolve } from 'path';
 import { createRequire } from 'module';
 import {
@@ -287,5 +287,73 @@ describe('la table du topo papier est la même que celle du code', () => {
     // confiance au reste.
     expect(topo).not.toContain('Déduction / essai suppl.');
     expect(topo).not.toContain("C'est voulu et ça ne change pas");
+  });
+});
+
+// ============================================================================
+// L'UNICITÉ D'APPELANT DE `calculatePoints` — resserré le 06/11/2026 au soir.
+//
+// Le plan (§A.1 point 2) la gardait pour DEUX choses : les mini-compétitions et le mode
+// `blocabrac` des compétitions passées. La mesure en production a renversé la première :
+// **1 mini-compétition créée, 0 document portant un `miniCompetitionId`** — aucune n'a jamais
+// produit de résultat, donc la doctrine « proclamé = figé » ne protégeait rien.
+//
+// 🔴 ET CE QUI A RENDU LE MOMENT DÉCISIF : les points d'une mini-compétition **ne sont pas
+// stockés**, ils sont recalculés à chaque affichage par `buildMiniCompetitionRanking` depuis
+// `boulderColor` + `attempts`. Le gel d'une mini-compétition porte donc sur la **couleur**
+// (immunité contre une recotation), pas sur les **points**. Aligner le barème plus tard aurait
+// réécrit un classement réellement proclamé devant des élèves. C'était le seul moment où
+// c'était gratuit, et il ne se représentera pas.
+//
+// Ce qui reste donc à `calculatePoints` : **un seul appelant**, la branche du mode `blocabrac`,
+// pour que les compétitions passées s'affichent juste. ⚠️ **Un appelant de plus serait une
+// troisième courbe** — exactement ce que le critère d'uniformité écarte. C'est ce que ce pas
+// garde, et c'est une clause d'ABSENCE : aucun test d'exécution ne la voit.
+// ============================================================================
+describe("contrat d'unicité — `calculatePoints` n'a plus qu'un appelant", () => {
+  const SRC = resolve(__dirname, '../../src');
+
+  // Tous les fichiers de source, tests exclus : ce sont les tests qui l'appellent légitimement
+  // pour l'épingler, et les compter ici rendrait le contrat insensible au vrai sujet.
+  const fichiersSource = (dossier: string): string[] =>
+    readdirSync(dossier, { withFileTypes: true }).flatMap((e) => {
+      const chemin = resolve(dossier, e.name);
+      if (e.isDirectory()) return fichiersSource(chemin);
+      if (!/\.(ts|tsx)$/.test(e.name) || /\.test\.tsx?$/.test(e.name)) return [];
+      return [chemin];
+    });
+
+  it('un seul site d’appel, et il est dans climbingPoints.ts', () => {
+    const appels = fichiersSource(SRC)
+      .map((f) => ({ f, n: (readFileSync(f, 'utf8').match(/(?<![A-Za-z])calculatePoints\(/g) ?? []).length }))
+      .filter((x) => x.n > 0);
+    // ⚠️ Affirmer la TAILLE avant le contenu : un second fichier appelant, ou un second appel
+    // dans le même fichier, doit rougir — pas seulement un appel déplacé.
+    expect(appels).toHaveLength(1);
+    // Le nom de fichier ne contient pas de séparateur, donc cette assertion est insensible
+    // au séparateur de chemin de la plateforme — pas de normalisation à faire.
+    expect(appels[0].f).toMatch(/climbingPoints\.ts$/);
+    expect(appels[0].f).toContain('utils');
+    expect(appels[0].n).toBe(1);
+  });
+
+  it("et cet appel est bien la branche du mode `blocabrac`, pas autre chose", () => {
+    const src = readFileSync(resolve(SRC, 'utils/climbingPoints.ts'), 'utf8');
+    // La dernière instruction de `pointsAvantMultiplicateur` : le repli de mode, atteint
+    // quand aucune branche spécifique n'a répondu — donc `blocabrac`.
+    // ⚠️ `\r?\n` et non `\n` : les sources de ce dépôt sont en CRLF, et un motif ancré sur un
+    // saut de ligne nu échoue sans rien dire du sujet qu'il prétend garder.
+    expect(src).toMatch(/\r?\n {2}return calculatePoints\(colorKey, attempts, success\);\r?\n\};/);
+  });
+
+  it("CLAUSE D'ABSENCE : les mini-compétitions comptent avec le barème unifié", () => {
+    // ⚠️ Les deux sites qui ont basculé le 06/11 au soir. Nommés explicitement parce que
+    // l'écran du moniteur et celui de l'élève ont déjà divergé une fois sur la même validation
+    // (80 points contre 900, 18/10/2026) : c'est le précédent qui justifie de garder les deux
+    // ensemble plutôt qu'un seul.
+    const ranking = readFileSync(resolve(SRC, 'utils/miniCompetitionRanking.ts'), 'utf8');
+    const ecran = readFileSync(resolve(SRC, 'pages/Client/Courses/ClientCourseSession.tsx'), 'utf8');
+    expect(ranking).toMatch(/total \+ calculateDailyPoints\(r\.boulderColor/);
+    expect(ecran).toMatch(/calculateDailyPoints\(couleurAffichee/);
   });
 });

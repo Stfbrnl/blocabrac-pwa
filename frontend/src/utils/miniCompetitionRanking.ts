@@ -12,7 +12,7 @@
  *
  * Le barème est celui de `climbingPoints.ts`, comme partout ailleurs.
  */
-import { calculatePoints } from './climbingPoints';
+import { calculateDailyPoints } from './climbingPoints';
 
 /** La forme minimale d'un résultat lu dans `client_course_results`. */
 export interface MiniCompetitionResultInput {
@@ -57,7 +57,7 @@ export const buildMiniCompetitionRanking = (
         userId: p.id,
         participant: p.displayName,
         score: resultats.reduce(
-          (total, r) => total + calculatePoints(r.boulderColor || '', r.attempts || 1, r.success === true),
+          (total, r) => total + calculateDailyPoints(r.boulderColor || '', r.attempts || 1, r.success === true),
           0
         ),
         bouldersValidated: resultats.filter((r) => r.success === true).length,
