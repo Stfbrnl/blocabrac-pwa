@@ -59,26 +59,63 @@ const rang = (c) => ORDRE.indexOf(c);
     m.add(couleur); parUid.set(d.userId, m);
   }
 
+  // ✅ V2.78 — LE NIVEAU ATTENDU EST CELUI DE `resolveLevelSync`, et plus l'ancienne
+  // formule. La différence porte sur une seule branche, et c'est tout le correctif : sans
+  // `baseLevel` LISIBLE, le niveau ne bouge pas, donc l'attendu est le niveau COURANT.
+  // L'ancienne formule écrivait `(d.baseLevel || 'bleu')` et aurait dénoncé comme « écart »
+  // exactement les 9 comptes que le plancher protège — un audit qui contredit le code qu'il
+  // surveille apprend à ignorer l'audit.
+  const attenduPour = (d, uid) => {
+    const atteintes = [...(parUid.get(uid) || [])].filter((c) => AVEC_BADGE.includes(c));
+    if (atteintes.length) return atteintes.sort((a, b) => rang(b) - rang(a))[0];
+    if (rang(d.level) < rang('violet')) return d.level;
+    const base = d.baseLevel;
+    const baseLisible = base && ORDRE.includes(base) && rang(base) < rang(d.level);
+    return baseLisible ? base : d.level; // 🔴 le plancher : pas de cible => on ne bouge pas
+  };
+
+  // 🔴 LES COMPTES VERROUILLÉS NE SONT PLUS SAUTÉS EN SILENCE, ILS SONT COMPTÉS À PART.
+  // Le `continue` d'avant était un piège mesuré le 06/11/2026 : au lendemain du contest,
+  // 68 comptes sur 71 portaient `levelOverride`, l'audit n'en évaluait donc plus que 3 et
+  // annonçait « ÉCARTS : 1 ». Les 21 écarts latents étaient intacts — simplement invisibles.
+  // Un verrou MASQUE un écart, il ne le résout pas, et c'est précisément au déverrouillage
+  // qu'il se matérialise. L'audit doit donc dire les deux nombres, toujours.
   const ecarts = { haut: [], bas: [] };
+  const latents = { haut: [], bas: [] };
   let sansNiveau = 0;
+  let verrouilles = 0;
+  let sansBase = 0;
   for (const u of users.docs) {
     const d = u.data();
-    if (d.levelOverride) continue;        // niveau imposé : hors sujet
     if (!d.level) { sansNiveau += 1; continue; }
-    const atteintes = [...(parUid.get(u.id) || [])].filter((c) => AVEC_BADGE.includes(c));
-    const attendu = atteintes.length
-      ? atteintes.sort((a, b) => rang(b) - rang(a))[0]
-      : (rang(d.level) >= rang('violet') ? (d.baseLevel || 'bleu') : d.level);
+    if (!d.baseLevel || !ORDRE.includes(d.baseLevel)) sansBase += 1;
+    const attendu = attenduPour(d, u.id);
+    const verrouille = !!d.levelOverride;
+    if (verrouille) verrouilles += 1;
     if (attendu === d.level) continue;
     const ligne = `${(`${d.first_name || ''} ${d.last_name || ''}`).trim() || u.id} : stocké ${d.level} -> attendu ${attendu}`;
-    (rang(d.level) > rang(attendu) ? ecarts.haut : ecarts.bas).push(ligne);
+    const cible = verrouille ? latents : ecarts;
+    (rang(d.level) > rang(attendu) ? cible.haut : cible.bas).push(ligne);
   }
 
-  console.log(`\n${users.size} comptes, ${sansNiveau} sans niveau (ignorés).`);
-  console.log(`ÉCARTS : ${ecarts.haut.length + ecarts.bas.length}`);
+  console.log(`\n${users.size} comptes, ${sansNiveau} sans niveau (ignorés), ${verrouilles} verrouillé(s).`);
+  console.log(`Comptes sans baseLevel lisible : ${sansBase}`);
+  console.log('  (le niveau déclaré n\'existe que depuis V2.54.1 ; sur ces comptes le plancher');
+  console.log('   de levelSync.ts est la seule chose qui empêche une valeur inventée)');
+
+  console.log(`\nÉCARTS ACTIFS (niveau libre, la synchro agira au prochain « Mes stats ») : ${ecarts.haut.length + ecarts.bas.length}`);
   console.log(`  niveau trop HAUT (badge non redescendu) : ${ecarts.haut.length}`);
   ecarts.haut.forEach((l) => console.log(`    - ${l}`));
   console.log(`  niveau trop BAS (attribution jamais faite) : ${ecarts.bas.length}`);
   ecarts.bas.forEach((l) => console.log(`    - ${l}`));
+
+  console.log(`\n🔴 ÉCARTS LATENTS (niveau VERROUILLÉ — ce que le déverrouillage révélera) : ${latents.haut.length + latents.bas.length}`);
+  console.log(`  niveau trop HAUT : ${latents.haut.length}`);
+  latents.haut.forEach((l) => console.log(`    - ${l}`));
+  console.log(`  niveau trop BAS  : ${latents.bas.length}`);
+  latents.bas.forEach((l) => console.log(`    - ${l}`));
+  console.log('\n⚠️  Un écart latent « trop HAUT » est un niveau réglé à la main qui sera ramené');
+  console.log('    vers son baseLevel au déverrouillage. Si ce baseLevel est antérieur au');
+  console.log('    réglage, le déverrouillage DÉFAIT le réglage. À trancher avant, pas après.');
   process.exit(0);
 })().catch((e) => { console.error(e); process.exit(1); });

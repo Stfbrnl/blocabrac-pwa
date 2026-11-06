@@ -50,6 +50,7 @@ import { jsPDF } from 'jspdf';
 import * as html2canvas from 'html2canvas';
 import { logoAssetUrl as logo } from '../../../config/gymConfig';
 import { badgeDisplayColor, computeBadgeActive, isMissionBadge } from '../../../utils/badgeActivation';
+import { resolveLevelSync } from '../../../utils/levelSync';
 import GymStampMark from '../../../components/GymStampMark';
 import type { RouletteCompletion } from '../../../utils/roulette';
 import { getLudicState } from '../../../services/ludicState';
@@ -132,9 +133,11 @@ interface CourseStatEntry extends DocumentData {
   exerciseName: string;
 }
 
-// Ordre des niveaux/couleurs, du plus faible au plus élevé.
-// Les badges couleur commencent à violet : aucun badge n'existe pour jaune/vert/bleu.
-const colorOrder = ['jaune', 'vert', 'bleu', 'violet', 'rouge', 'noir', 'blanc', 'rose'];
+// ✅ V2.78 : l'ordre des niveaux vivait ici en DOUBLE de `levelOrder`
+// (`utils/competitionEligibility.ts`), et le seul code qui s'en servait est parti dans
+// `utils/levelSync.ts`, qui lit la liste canonique. Un second exemplaire d'une liste
+// ordonnée est la forme la plus discrète de la divergence : les deux étaient identiques,
+// mais rien ne l'imposait. Supprimé plutôt que laissé « au cas où ».
 
 const ClientStats: React.FC = () => {
   const [user, loadingAuth] = useAuthState(auth);
@@ -538,45 +541,28 @@ const ClientStats: React.FC = () => {
         // moment où on le met de côté dans `users.baseLevel` pour pouvoir y revenir
         // si un jour tous les badges retombent en veille (rotation de tous les murs).
         // Si un admin a verrouillé le niveau (levelOverride), on ne le touche jamais.
-        if (!userData?.levelOverride && userData) {
-          const lowestBadgeIndex = colorOrder.indexOf('violet');
-          const currentLevelIndex = userData.level ? colorOrder.indexOf(userData.level) : -1;
-          const activeBadgeColors = allClientBadges
-            .filter((cb) => computeBadgeActive(cb.badge, validatedExistingByColorLocal, inventoryByColor))
-            .map((cb) => cb.badge.criteria?.color || cb.badge.color)
-            .filter((color): color is string => !!color && colorOrder.includes(color));
-
-          if (activeBadgeColors.length > 0) {
-            const highestActiveColor = activeBadgeColors.reduce((highest, color) =>
-              colorOrder.indexOf(color) > colorOrder.indexOf(highest) ? color : highest
-            );
-
-            if (userData.level !== highestActiveColor) {
-              const update: Record<string, string> = { level: highestActiveColor };
-              // Mémoriser le niveau déclaré, une seule fois, juste avant la 1re
-              // élévation par un badge — et seulement si le niveau courant est un
-              // niveau "facile" sans badge (jaune/vert/bleu) ; au-delà, c'est déjà
-              // une valeur pilotée par un badge, rien à sauvegarder.
-              if (!userData.baseLevel && currentLevelIndex >= 0 && currentLevelIndex < lowestBadgeIndex) {
-                update.baseLevel = userData.level as string;
-              }
-              await updateDoc(doc(db, 'users', user.uid), update);
-            }
-          } else if (currentLevelIndex >= lowestBadgeIndex) {
-            // Aucun badge couleur actif alors que le niveau est à "violet" ou plus :
-            // cette valeur ne peut venir que d'un badge désormais en veille (rotation
-            // de tous les murs concernés). On ramène le niveau à celui déclaré par le
-            // client : `baseLevel` s'il a été mémorisé, sinon "bleu" — le plus haut
-            // niveau sans badge, hypothèse par défaut la plus probable (retomber en
-            // dessous de "violet" avec un vrai palmarès de badges est très improbable).
-            // Jamais vers le haut : monter de niveau reste le rôle des badges.
-            const fallbackLevel =
-              userData.baseLevel && colorOrder.includes(userData.baseLevel)
-                ? (userData.baseLevel as string)
-                : 'bleu';
-            if (colorOrder.indexOf(fallbackLevel) < currentLevelIndex) {
-              await updateDoc(doc(db, 'users', user.uid), { level: fallbackLevel });
-            }
+        // ✅ V2.78 : la DÉCISION est sortie d'ici vers `utils/levelSync.ts`, pur et testé
+        // (`resolveLevelSync`). Cet écran garde ce que lui seul peut faire — établir
+        // quels badges sont actifs, ce qui demande l'inventaire de la salle — et ne
+        // décide plus de rien. La couverture du dépôt s'arrête au bord des `.tsx` : une
+        // décision qui réécrit un champ pilotant la Roulette, les défis `seuil` et la
+        // grille de missions n'avait pas sa place en ligne dans un composant.
+        //
+        // 🔴 Le changement de comportement est dans `resolveLevelSync` : sans `baseLevel`
+        // lisible, plus aucune écriture (l'ancien code posait `'bleu'`, une valeur
+        // inventée, et faisait tomber 9 comptes de production mesurés le 06/11/2026).
+        if (userData) {
+          const levelWrite = resolveLevelSync({
+            currentLevel: userData.level,
+            baseLevel: userData.baseLevel,
+            levelOverride: userData.levelOverride,
+            activeBadgeColors: allClientBadges
+              .filter((cb) => computeBadgeActive(cb.badge, validatedExistingByColorLocal, inventoryByColor))
+              .map((cb) => cb.badge.criteria?.color || cb.badge.color)
+              .filter((color): color is string => !!color),
+          });
+          if (levelWrite) {
+            await updateDoc(doc(db, 'users', user.uid), levelWrite);
           }
         }
 

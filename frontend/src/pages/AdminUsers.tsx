@@ -265,6 +265,18 @@ const AdminUsers: React.FC = () => {
         dateOfBirth: editForm.dateOfBirth,
         gender: editForm.gender,
         level: editForm.level,
+        // ✅ V2.78 — RÉGLER UN NIVEAU À LA MAIN EST UNE DÉCLARATION, et doit s'enregistrer
+        // comme telle. Même geste que `ClientProfile.tsx`, qui écrit `baseLevel` en même
+        // temps que `level` parce qu'enregistrer son profil vaut re-déclaration.
+        //
+        // 🔴 Le défaut que cela ferme, mesuré le 06/11/2026 : cet écran n'écrivait que
+        // `level`. Les niveaux réglés à la main nom par nom le soir du contest (68 comptes)
+        // n'étaient donc enregistrés nulle part comme des déclarations — et au
+        // déverrouillage, `resolveLevelSync` aurait ramené 9 d'entre eux vers un `baseLevel`
+        // PÉRIMÉ (celui d'avant la soirée), défaisant silencieusement ce travail.
+        // Le plancher de `levelSync.ts` protège de la valeur INVENTÉE (`'bleu'`) ; il ne
+        // peut rien contre une valeur ANCIENNE mais lisible. Il fallait les deux.
+        baseLevel: editForm.level,
         levelOverride: editForm.levelOverride ?? false,
         inscritAuxCours: editForm.inscritAuxCours,
         inscritAuxCompetitions: editForm.inscritAuxCompetitions,
@@ -367,6 +379,11 @@ const AdminUsers: React.FC = () => {
         dateOfBirth: createForm.dateOfBirth,
         gender: createForm.gender,
         level: createForm.level,
+        // ✅ V2.78 : même raison qu'à l'édition ci-dessus — le niveau choisi à la création
+        // est le niveau DÉCLARÉ. `Register.tsx` le fait déjà pour une inscription libre ;
+        // un compte créé au comptoir n'avait pas de raison d'en être privé, et sans cela il
+        // naissait sans plancher vers lequel redescendre.
+        baseLevel: createForm.level,
         levelOverride: createForm.levelOverride ?? false,
         inscritAuxCours: createForm.inscritAuxCours,
         inscritAuxCompetitions: createForm.inscritAuxCompetitions,
