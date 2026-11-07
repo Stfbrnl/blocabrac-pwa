@@ -15,6 +15,24 @@ import { buildCompetitionParticipant, competitionParticipantId } from '../utils/
 import { buildLevelAtStartSnapshot, type ParticipationForSnapshot, type SnapshotSourceUser } from '../utils/competitionLevelSnapshot';
 import { buildFrozenRankings, isScoringModeGelable, type FrozenRankings, type RankingParticipant } from '../utils/competitionRankings';
 import { basePoints, deductions, type ScoringMode, type CustomScoringTable } from '../utils/climbingPoints';
+// ✅ 07/11/2026 — LE COUPLAGE DEMANDÉ : quand une compétition quitte le vol ici, ses blocs sont
+// encore rattachés à elle, et c'est un clic de l'ouvreur qui les en détache. Le 06/11 ce clic
+// n'a pas eu lieu : 92 blocs sur les 230 de la salle (40 %) ont gardé `competition_active:
+// true` en étant AU MUR, et `firestore.rules` y refusait les premières ascensions et les votes
+// de méthode — deux fonctionnalités muettes, sans terme et sans message.
+//
+// ⚠️ Ce couplage REVIENT SUR UN INVARIANT ÉCRIT (`CLAUDE.md` : « le `status` de la compétition
+// est une action d'admin distincte, que ce bouton ne touche jamais »). Il se fait donc en le
+// disant, et en gardant la propriété qui justifiait la séparation : la bascule reste un OUI
+// EXPLICITE, jamais un effet de bord du changement de statut. Raison : elle est IRRÉVERSIBLE
+// (la cotation cachée devient publique et rien ne la recache) alors que le statut, lui, se
+// remet comme il était.
+//
+// ⚠️ Et le couplage NE REMPLACE PAS LE FILET : un admin sur un ancien bundle ne l'aura pas
+// reçu, et passera le statut sans rien basculer, exactement comme aujourd'hui. Le contrôle
+// `competition_active` de `scripts/audit-prod-catalog.js` reste nécessaire.
+import { estHorsDuVol, planifierCloture, type PlanCloture } from '../utils/competitionClosure';
+import { chargerBlocsRattaches, executerCloture, ErreurCloture } from '../utils/competitionClosureWrites';
 
 type CompetitionStatus = 'à venir' | 'en cours' | 'terminée' | 'annulée';
 type Level = 'jaune' | 'vert' | 'bleu' | 'violet' | 'rouge' | 'noir' | 'blanc' | 'rose';
@@ -135,6 +153,17 @@ const AdminCompetitionManagement: React.FC = () => {
   // clique le 5 novembre au soir n'aura lu aucun de ces documents, et il sera en fin de contest,
   // entouré. Un clic survit à ce contexte, une bannière non.
   const [risqueAssume, setRisqueAssume] = useState(false);
+  // ✅ La clôture des blocs proposée après un changement de statut hors du vol. `plan` est
+  // MESURÉ sur une relecture de la base, jamais deviné : l'écran d'administration ne charge
+  // aucun bloc le reste du temps, donc sans cette lecture le dialogue ne pourrait annoncer
+  // aucun nombre — et un dialogue qui annonce « des blocs » là où il pourrait dire « 92 blocs,
+  // dont 3 désactivés » laisse décider à l'aveugle une opération irréversible.
+  const [clotureProposee, setClotureProposee] = useState<{
+    competition: Competition;
+    nouveauStatut: CompetitionStatus;
+    plan: PlanCloture;
+  } | null>(null);
+  const [clotureEnCours, setClotureEnCours] = useState(false);
   const [createForm, setCreateForm] = useState<Omit<Competition, 'id' | 'registered_count'>>({
     name: '',
     date: new Date().toISOString().split('T')[0],
@@ -545,10 +574,84 @@ const AdminCompetitionManagement: React.FC = () => {
       setOpenEditDialog(false);
       setSnackbarMessage(`Compétition mise à jour avec succès !${messageFigeage}`);
       setOpenSnackbar(true);
+
+      // ✅ LE COUPLAGE. La compétition vient de quitter le vol (« terminée » ou « annulée », et
+      // tout statut futur qui ne serait pas dans `STATUTS_EN_VOL`) : si des blocs lui sont
+      // encore rattachés, les proposer à la bascule.
+      //
+      // ⚠️ LA CONDITION PORTE SUR L'ÉTAT, PAS SUR LA TRANSITION, et c'est délibéré : on ne
+      // vérifie pas que le statut vient de changer. Une compétition passée en « terminée » la
+      // semaine dernière sans que les blocs aient suivi est précisément le cas du 06/11 — le
+      // proposer au prochain enregistrement de cette compétition la répare, alors qu'un test
+      // de transition l'aurait laissée dans son état fautif pour toujours.
+      //
+      // ⚠️ Deux lectures, et ZÉRO quand la compétition reste en vol. L'écran n'en fait aucune
+      // le reste du temps.
+      //
+      // ⚠️ Son échec ne doit pas faire croire que l'enregistrement a échoué — il a réussi,
+      // c'est écrit juste au-dessus. Il est donc rapporté à part et n'empêche rien.
+      if (estHorsDuVol(editForm.status)) {
+        try {
+          const blocs = await chargerBlocsRattaches(selectedCompetition.id);
+          const plan = planifierCloture(blocs);
+          if (plan.compte.total > 0) {
+            setClotureProposee({
+              competition: selectedCompetition,
+              nouveauStatut: editForm.status,
+              plan,
+            });
+          }
+        } catch (error: unknown) {
+          console.error('Erreur lors de la lecture des blocs encore rattachés :', error);
+          setSnackbarMessage('Compétition mise à jour, mais ses blocs n\'ont pas pu être relus : '
+            + 'vérifiez depuis « Gérer les blocs de compétition » qu\'ils ont bien quitté l\'épreuve.');
+          setOpenSnackbar(true);
+        }
+      }
     } catch (error: unknown) {
       console.error("Erreur :", error);
       setSnackbarMessage("Erreur lors de la mise à jour de la compétition.");
       setOpenSnackbar(true);
+    }
+  };
+
+  /**
+   * Bascule les blocs de la compétition qui vient de quitter le vol.
+   *
+   * ⚠️ Passe par `executerCloture`, le MÊME chemin que le bouton de l'ouvreur — y compris sa
+   * relecture des blocs à l'instant de l'écriture, son découpage en lots et son refus des
+   * cotations hors échelle. Rien n'est recomposé ici : c'est ce qui empêche les deux écrans de
+   * diverger sur un geste irréversible.
+   */
+  const handleConfirmerCloture = async (): Promise<void> => {
+    if (!clotureProposee) return;
+    setClotureEnCours(true);
+    try {
+      const { plan } = await executerCloture(clotureProposee.competition.id);
+      setClotureProposee(null);
+      // ⚠️ Le message annonce son PÉRIMÈTRE, et le refus éventuel : un succès sur un
+      // sous-ensemble est indiscernable d'un succès sur l'ensemble.
+      setSnackbarMessage(`${plan.compte.crees + plan.compte.reutilises} bloc(s) ont quitté l'épreuve`
+        + (plan.compte.crees > 0
+          ? ` — dont ${plan.compte.crees} dont la cotation est maintenant publique, à recoter depuis « Gérer les blocs quotidiens ».`
+          : '.')
+        + (plan.compte.refuses > 0
+          ? ` ⚠️ ${plan.compte.refuses} bloc(s) n'ont PAS été basculés : leur cotation n'est pas l'une des huit couleurs de la salle.`
+          : ''));
+      setOpenSnackbar(true);
+    } catch (error: unknown) {
+      console.error('Erreur lors de la clôture des blocs :', error);
+      // ⚠️ Le découpage en lots échange « rien n'est écrit » contre « peut-être une partie » :
+      // le message doit le DIRE, sinon l'admin se fie à une salle qu'il croit intacte.
+      const lotsFaits = error instanceof ErreurCloture ? error.lotsFaits : 0;
+      setSnackbarMessage(lotsFaits === 0
+        ? 'Les blocs n\'ont pas pu quitter l\'épreuve. Aucun bloc n\'a été modifié — réessayez, '
+          + 'ou utilisez « Terminer la compétition » depuis l\'espace ouvreur.'
+        : 'Une partie seulement des blocs a quitté l\'épreuve. Relancez depuis « Gérer les blocs '
+          + 'de compétition » (espace ouvreur) : les blocs déjà basculés ne seront pas affectés.');
+      setOpenSnackbar(true);
+    } finally {
+      setClotureEnCours(false);
     }
   };
 
@@ -1315,6 +1418,99 @@ const AdminCompetitionManagement: React.FC = () => {
             <Button onClick={() => setOpenDeleteDialog(false)}>Annuler</Button>
             <Button onClick={handleDeleteCompetition} color="error" variant="contained" autoFocus>
               Supprimer
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* ✅ 07/11/2026 — LA BASCULE DES BLOCS, proposée après un changement de statut hors du
+            vol. Elle n'est PAS un effet de bord de l'enregistrement : le statut est déjà écrit
+            quand ce dialogue s'ouvre, donc répondre « Plus tard » ne perd rien — le bouton
+            « Terminer la compétition » de l'ouvreur reste, et l'audit de production continue de
+            voir le cas. C'est ce qui permet d'offrir le geste sans le forcer, alors qu'il est
+            IRRÉVERSIBLE pour les blocs créés pour l'épreuve.
+
+            ⚠️ Tous les nombres affichés ici sont MESURÉS sur une relecture de la base, pas
+            déduits d'un état d'écran — l'écran d'administration ne charge aucun bloc. */}
+        <Dialog
+          open={clotureProposee !== null}
+          onClose={() => (clotureEnCours ? undefined : setClotureProposee(null))}
+          fullWidth
+          maxWidth="sm"
+        >
+          <DialogTitle>Faire quitter l'épreuve à ses blocs ?</DialogTitle>
+          <DialogContent>
+            {clotureProposee && (
+              <>
+                <Typography variant="body2" sx={{ mb: 2 }}>
+                  « {clotureProposee.competition.name} » est maintenant <strong>{clotureProposee.nouveauStatut}</strong>,
+                  mais <strong>{clotureProposee.plan.compte.total} bloc(s)</strong> lui sont encore rattachés.
+                  Tant qu'ils le sont, les <strong>premières ascensions</strong> et les{' '}
+                  <strong>votes de méthode</strong> y sont refusés.
+                </Typography>
+
+                {clotureProposee.plan.compte.reutilises > 0 && (
+                  <Typography variant="body2" sx={{ mb: 1 }}>
+                    • <strong>{clotureProposee.plan.compte.reutilises} bloc(s) quotidien(s) réutilisé(s)</strong> quitteront
+                    simplement la compétition, sans aucun changement de cotation.
+                  </Typography>
+                )}
+
+                {clotureProposee.plan.compte.crees > 0 && (
+                  <Typography variant="body2" sx={{ mb: 1 }}>
+                    • <strong>{clotureProposee.plan.compte.crees} bloc(s) créé(s) pour l'épreuve</strong> deviendront
+                    des blocs quotidiens : leur cotation jusqu'ici cachée devient publique, à corriger ensuite
+                    depuis « Gérer les blocs quotidiens ».
+                  </Typography>
+                )}
+
+                {/* Les blocs désactivés sont traités eux aussi (V2.79), et le dialogue doit le
+                    dire — sinon il annonce moins que ce que la bascule modifie. */}
+                {clotureProposee.plan.compte.desactives > 0 && (
+                  <Typography variant="body2" sx={{ mb: 1 }}>
+                    • dont <strong>{clotureProposee.plan.compte.desactives} bloc(s) désactivé(s)</strong>, retirés du
+                    mur mais encore rattachés : ils seront détachés sans réapparaître en salle.
+                  </Typography>
+                )}
+
+                {/* 🔴 Le refus, annoncé AVANT le clic : ces blocs ne bougeront pas, et c'est
+                    une information dont l'admin a besoin pour savoir qu'il reste à faire. */}
+                {clotureProposee.plan.compte.refuses > 0 && (
+                  <Alert severity="warning" sx={{ mt: 2 }}>
+                    {clotureProposee.plan.compte.refuses} bloc(s) ne seront <strong>pas</strong> basculés : leur
+                    cotation ({clotureProposee.plan.refuses.map((r) => String(r.difficulty)).join(', ')}) n'est pas
+                    l'une des huit couleurs de la salle. Les basculer leur donnerait une couleur hors barème, et
+                    chacune de leurs réussites vaudrait zéro point sans le dire. Corrigez leur cotation, puis
+                    relancez depuis l'espace ouvreur.
+                  </Alert>
+                )}
+
+                {clotureProposee.plan.compte.crees > 0 && (
+                  <Alert severity="info" sx={{ mt: 2 }}>
+                    <strong>Irréversible</strong> pour les {clotureProposee.plan.compte.crees} bloc(s) créé(s) pour
+                    l'épreuve : une fois leur cotation rendue publique, aucun geste de l'application ne la recache.
+                    Le statut de la compétition, lui, se remet comme il était.
+                  </Alert>
+                )}
+
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
+                  « Plus tard » ne perd rien : le statut est déjà enregistré, et le bouton
+                  « Terminer la compétition » de l'espace ouvreur fait exactement la même chose.
+                </Typography>
+              </>
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setClotureProposee(null)} disabled={clotureEnCours}>Plus tard</Button>
+            <Button
+              onClick={() => { void handleConfirmerCloture(); }}
+              color="success"
+              variant="contained"
+              disabled={clotureEnCours}
+              autoFocus
+            >
+              {clotureEnCours
+                ? 'Bascule...'
+                : `Basculer (${(clotureProposee?.plan.compte.crees ?? 0) + (clotureProposee?.plan.compte.reutilises ?? 0)})`}
             </Button>
           </DialogActions>
         </Dialog>

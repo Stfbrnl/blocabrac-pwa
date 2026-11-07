@@ -12,6 +12,20 @@ export interface ChangelogEntry {
 // à chaque nouvelle fonctionnalité visible côté client — l'historique complet vit dans
 // les commits git.
 export const changelog: ChangelogEntry[] = [
+  // ⚠️ Cette entrée décrit UNIQUEMENT la 2.82 (voir l'en-tête du fichier). Le chantier est côté
+  // administration, mais son EFFET est celui que vivaient les grimpeurs : le 06/11, 92 des 230
+  // blocs de la salle sont restés rattachés à une compétition terminée, et sur un bloc rattaché
+  // `firestore.rules` refuse les premières ascensions et les votes de méthode — sans message.
+  // C'est donc cet effet qui est annoncé, pas le mécanisme.
+  {
+    version: '2.82',
+    date: '2026-11-07',
+    title: 'Les blocs quittent l’épreuve avec elle',
+    items: [
+      'Après une compétition, ses blocs restaient parfois rattachés à elle alors qu’ils étaient de nouveau au mur. Sur un bloc dans cet état, les « premières ascensions » et le « carnet de méthodes » étaient refusés — sans rien afficher. C’est arrivé le 6 novembre sur 92 des 230 blocs de la salle, soit 40 % : si vous avez été premier sur un bloc noir, blanc ou rose ces jours-là et que votre nom n’est pas apparu, c’était ça.',
+      'Pour le staff : quand une compétition passe en « terminée » ou « annulée », l’application propose désormais de faire quitter l’épreuve à ses blocs, en annonçant combien ils sont et ce qui va leur arriver. Le clic reste explicite — la cotation d’un bloc créé pour l’épreuve devient publique et rien ne la recache — et « Terminer la compétition » depuis l’espace ouvreur fait toujours exactement la même chose.',
+    ],
+  },
   // ⚠️ Cette entrée décrit UNIQUEMENT la 2.81 (voir l'en-tête du fichier). Ce qui est visible
   // d'un grimpeur ordinaire, et donc ce qu'elle dit : les informations de la salle apparaissent
   // désormais partout, et un écran qui plantait en blanc propose maintenant une sortie. Les
