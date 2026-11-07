@@ -18,6 +18,12 @@ import { walls, colorGrades } from '../../../config/gymConfig';
 import type { ScoringMode } from '../../../utils/climbingPoints';
 import { decouperEnLots, MAX_OPS_PAR_LOT } from '../../../utils/firestoreBatchChunks';
 import { partitionnerRenumerotables, estRenumerotable } from '../../../utils/competitionRenumbering';
+// ✅ 07/11/2026 — la clôture vit désormais dans un module partagé, parce que l'écran
+// d'administration la déclenche aussi au passage de la compétition hors du vol. La recopier
+// là-bas aurait fabriqué un second rédacteur d'un geste IRRÉVERSIBLE : voir l'en-tête de
+// `utils/competitionClosure.ts`.
+import { estBlocQuotidienReutilise } from '../../../utils/competitionClosure';
+import { chargerBlocsRattaches, executerCloture, ErreurCloture } from '../../../utils/competitionClosureWrites';
 
 interface Competition {
   id: string;
@@ -61,55 +67,20 @@ const levelOrder: string[] = colorRatings.map((c) => c.value);
 // `competition_id` le rattache temporairement à cette compétition. Un bloc créé
 // spécifiquement pour l'épreuve, lui, est en `type: 'competition'` (caché du
 // public tant que l'épreuve dure). D'où cette distinction dans tout l'écran.
-const isReusedDailyBoulder = (boulder: Boulder): boolean => boulder.type === 'daily';
+//
+// ⚠️ La DÉFINITION vit dans `utils/competitionClosure.ts` : c'est elle qui décide du périmètre
+// de la clôture, et cet écran ne doit pas en tenir une seconde copie qui pourrait en dériver.
+// L'alias local garde la lisibilité des trois usages d'affichage ci-dessous.
+const isReusedDailyBoulder = (boulder: Boulder): boolean => estBlocQuotidienReutilise(boulder);
 
-// ✅ V2.79 — TOUS les blocs rattachés à une compétition, ACTIFS OU NON.
-//
-// 🔴 LE DÉFAUT QUE CETTE FONCTION FERME (mesuré en prod le 06/11/2026). L'effet de chargement
-// ci-dessous applique `.filter(boulder => boulder.is_active === true)` avant de poser l'état
-// `boulders` — ce qui est juste pour un ÉCRAN : un ouvreur n'a rien à faire d'un bloc retiré du
-// mur dans sa liste. Mais c'est cet état que « Terminer la compétition » parcourait. **Un bloc
-// désactivé pendant qu'il était rattaché était donc invisible à l'écran ET sauté par la
-// clôture** : il gardait `competition_active: true` pour toujours, et plus aucune interface ne
-// pouvait l'atteindre. Constaté sur le Contest du 5 novembre, bloc n°7 du Dévers 40°.
-//
-// ⚠️ LA LEÇON, plus large que ce bouton : **un filtre d'AFFICHAGE ne doit jamais devenir le
-// périmètre d'une OPÉRATION DE DONNÉE.** L'écran décide de ce qu'on montre, la clôture décide
-// de ce qui est vrai. Même famille que la verrue du sélecteur ×1/×2, qui ne s'affiche que pour
-// un bloc rattaché : dès qu'un geste se règle sur ce que l'œil voit, il oublie ce qui est
-// caché.
-//
-// ⚠️ ET ELLE RELIT À L'INSTANT DE L'ÉCRITURE, jamais la copie en mémoire — même doctrine que
-// `utils/firstAscentWrites.ts`. Deux raisons : l'état d'affichage est filtré (c'est le défaut
-// ci-dessus), et il peut être périmé si un collègue a saisi des blocs entre-temps, ce qui est
-// le cas NORMAL dans cette salle (la saisie se fait par vagues).
+// ⚠️ `chargerBlocsRattaches` (V2.79) vit dans `utils/competitionClosureWrites.ts` depuis le
+// 07/11/2026, avec le récit du défaut qu'elle ferme : elle rend TOUS les blocs rattachés,
+// ACTIFS OU NON, et c'est la clé de voûte de la clôture. Elle est partagée avec l'écran
+// d'administration, qui déclenche la même clôture au changement de statut.
 //
 // ⚠️ Pas de nouvel état React qui porterait la liste complète : ce serait une seconde source de
 // vérité à côté de `boulders`, et c'est la forme d'échec la plus fréquente de ce dépôt (un
 // document, plusieurs rédacteurs, des contrats divergents).
-//
-// Les deux requêtes sont celles de l'effet de chargement, SANS le filtre d'activité. Elles
-// restent séparées plutôt qu'un `type in [...]` : les blocs créés pour l'épreuve s'identifient
-// par leur seul `type`, les blocs quotidiens réutilisés par `competition_active: true` — sans
-// ce champ dédié, un ancien bloc de compétition devenu `daily` après une clôture précédente
-// reviendrait à tort, puisqu'il garde son `competition_id` pour les statistiques.
-const chargerBlocsRattaches = async (competitionId: string): Promise<Boulder[]> => {
-  const [classicSnapshot, reusedSnapshot] = await Promise.all([
-    getDocs(query(
-      collection(db, 'boulders'),
-      where('competition_id', '==', competitionId),
-      where('type', '==', 'competition')
-    )),
-    getDocs(query(
-      collection(db, 'boulders'),
-      where('competition_id', '==', competitionId),
-      where('type', '==', 'daily'),
-      where('competition_active', '==', true)
-    )),
-  ]);
-  return [...classicSnapshot.docs, ...reusedSnapshot.docs]
-    .map(d => ({ id: d.id, ...d.data() })) as Boulder[];
-};
 
 export default function CompetitionBouldersList(): JSX.Element {
   const navigate = useNavigate();
@@ -166,7 +137,7 @@ export default function CompetitionBouldersList(): JSX.Element {
         // ✅ V2.79 : les deux requêtes vivent désormais dans `chargerBlocsRattaches`, partagée
         // avec « Terminer la compétition » — un seul endroit répond à « quels blocs sont
         // rattachés à cette compétition ? ».
-        const allBoulders = await chargerBlocsRattaches(selectedCompetition);
+        const allBoulders = await chargerBlocsRattaches<Boulder>(selectedCompetition);
 
         const filteredAndSortedBoulders = allBoulders
           .filter(boulder => boulder.is_active === true)
@@ -394,71 +365,43 @@ export default function CompetitionBouldersList(): JSX.Element {
   // ✅ À la fin d'une compétition : les blocs créés spécifiquement pour l'épreuve
   // (type: 'competition') deviennent des blocs quotidiens, leur cotation interne
   // (jusque-là cachée) servant de point de départ à recoter. Les blocs quotidiens
-  // réutilisés (type: 'daily') redeviennent simplement de purs blocs quotidiens :
-  // seul `competition_active` est retiré (ils quittent la compétition), sans
-  // toucher à leur cotation publique. `competition_id` est volontairement
-  // conservé dans les deux cas : les pages de résultats/classement (déjà basées
-  // uniquement sur ce champ, sans filtre de type) doivent pouvoir reconstituer
-  // l'historique d'une compétition terminée.
+  // réutilisés (type: 'daily') redeviennent simplement de purs blocs quotidiens.
   //
-  // ⚠️ 2026-11-03-CN-plan-multiplicateur-v2.md §0 — `points_multiplier` est VOLONTAIREMENT
-  // ABSENT des deux `batch.update` ci-dessous, et cette absence est le cœur du chantier :
-  // `competition_results` ne stocke QUE des faits bruts (succès, essais, note, cotation
-  // proposée) et jamais de points — les points sont recalculés à chaque affichage depuis le
-  // bloc et le mode. Effacer le multiplicateur ici rendrait donc au simple, pour toujours, les
-  // blocs doublés d'une compétition terminée : l'histoire changerait après coup. Le champ
-  // appartient au groupe de `competition_id` (conservé pour l'historique), pas à celui de
-  // `points_value` (effacé). La remise à zéro vit au RATTACHEMENT (handleConfirmAddExisting),
-  // ce qui ferme le défaut inverse — l'héritage du ×2 par une compétition future.
-  // ⚠️ 03/11/2026 — DÉCOUPÉ EN LOTS, même raison qu'au rattachement, et c'est ICI que
-  // l'enjeu est le plus grand : « Terminer la compétition » écrit une opération par bloc de
-  // l'épreuve. Avec toute la salle engagée, un lot unique pouvait dépasser 500 et ÉCHOUER
-  // ENTIÈREMENT, à chaque tentative, le soir du contest — laissant tous les blocs
-  // `competition_active` et la cotation cachée invisible.
+  // ⚠️ 07/11/2026 — TOUT LE GESTE VIT DANS `utils/competitionClosureWrites.ts`, et son
+  // périmètre dans le module pur `utils/competitionClosure.ts`. Ce bouton n'est plus qu'un des
+  // DEUX déclencheurs : l'écran d'administration déclenche le même au passage de la compétition
+  // hors du vol. Les trois contrats qui comptent (le découpage en lots, la conservation de
+  // `points_multiplier`, le refus d'une cotation hors échelle) sont documentés et testés
+  // là-bas — ne pas les réimplémenter ici.
   const handleConfirmMigrate = async (): Promise<void> => {
-    let lotsFaits = 0;
     try {
       setIsMigrating(true);
-      // ✅ V2.79 : on RELIT la liste complète ici, au lieu de parcourir l'état `boulders`,
-      // qui est filtré sur `is_active` pour l'affichage. Voir `chargerBlocsRattaches` pour le
-      // défaut que cela ferme et pour la raison de relire plutôt que de mémoriser.
-      //
-      // ⚠️ Et cela ferme un second défaut, du même coup : un bloc `type: 'competition'`
-      // désactivé n'était jamais repassé en `daily`, donc **sa cotation restait cachée pour
-      // toujours** et il devenait l'un de ces blocs inatteignables dont la production porte
-      // déjà 7 exemplaires. La clôture le récupère maintenant.
-      const tousLesBlocsRattaches = await chargerBlocsRattaches(selectedCompetition);
-      for (const lot of decouperEnLots(tousLesBlocsRattaches)) {
-        const batch = writeBatch(db);
-        lot.forEach((boulder) => {
-          if (isReusedDailyBoulder(boulder)) {
-            // ✅ Même raison que dans handleConfirmRemove : la valeur en points ne
-            // vaut que pour cette compétition, elle doit repartir avec elle.
-            batch.update(doc(db, 'boulders', boulder.id), { competition_active: deleteField(), points_value: deleteField() });
-          } else {
-            // ✅ Ce bloc devient un bloc quotidien ordinaire : s'il est un jour
-            // réutilisé dans une future compétition en mode "Blocs validés", sa
-            // valeur en points doit être ressaisie pour cette nouvelle épreuve,
-            // jamais hériter de celle d'une compétition passée déjà terminée.
-            batch.update(doc(db, 'boulders', boulder.id), {
-              type: 'daily',
-              color: boulder.difficulty,
-              points_value: deleteField(),
-            });
-          }
-        });
-        await batch.commit();
-        lotsFaits += 1;
-      }
+      const { plan } = await executerCloture(selectedCompetition);
       setBoulders([]);
       setDetachedAttachedCount(0);
       setOpenMigrateDialog(false);
-      alert(`La compétition est terminée : ${tousLesBlocsRattaches.length} bloc(s) traité(s). `
+      // ⚠️ Le message annonce son PÉRIMÈTRE, pas seulement son succès : un succès sur un
+      // sous-ensemble est indiscernable d'un succès sur l'ensemble.
+      alert(`La compétition est terminée : ${plan.compte.crees + plan.compte.reutilises} bloc(s) traité(s). `
         + 'Les blocs créés pour l\'épreuve sont maintenant des blocs quotidiens (à recoter depuis '
         + '"Gérer les blocs quotidiens"), et les blocs quotidiens réutilisés ont simplement quitté '
-        + 'la compétition.');
+        + 'la compétition.'
+        // 🔴 Un bloc dont la cotation cachée n'est pas l'une des huit couleurs n'a PAS été
+        // basculé — le basculer lui donnerait une couleur hors barème, et chacune de ses
+        // réussites vaudrait zéro point en silence. Le dire ici : un refus muet serait pire
+        // que le défaut, puisque l'ouvreur repartirait en croyant la salle à jour.
+        + (plan.compte.refuses > 0
+          ? `\n\n⚠️ ${plan.compte.refuses} bloc(s) n'ont PAS été basculés : leur cotation `
+            + `(${plan.refuses.map((r) => JSON.stringify(r.difficulty)).join(', ')}) n'est pas `
+            + 'l\'une des huit couleurs de la salle. Corrigez-la dans leur fiche, puis relancez '
+            + '« Terminer la compétition ».'
+          : ''));
     } catch (error: unknown) {
       console.error('Erreur lors du basculement en blocs quotidiens :', error);
+      // ⚠️ Le découpage en lots échange « rien n'est écrit » contre « peut-être une partie » :
+      // le message doit le DIRE. `lotsFaits` vient de l'erreur elle-même, pas d'un compteur
+      // local — c'est le module qui sait combien de lots il a commités.
+      const lotsFaits = error instanceof ErreurCloture ? error.lotsFaits : 0;
       alert(lotsFaits === 0
         ? 'Une erreur est survenue lors du basculement en blocs quotidiens. Aucun bloc n\'a été modifié.'
         : 'Une erreur est survenue APRÈS le basculement d\'une partie des blocs. Rechargez la page et relancez « Terminer la compétition » : les blocs déjà basculés ne seront pas affectés.');
