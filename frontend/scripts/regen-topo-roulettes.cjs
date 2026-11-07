@@ -16,6 +16,15 @@ const OUT = resolve(__dirname, '../public/docs/topo-roulettes-defis.pdf');
 const NOM = 'topo-roulettes-defis.pdf';
 
 (async () => {
+  // 🔴 LE FILET DES PIEDS DE PAGE PASSE D'ABORD (07/11/2026) — même correctif que dans
+  // regen-topo.cjs, et pour la même raison : il tournait après `page.pdf()` et après
+  // l'enregistrement de l'estampille, donc un débordement laissait sur le disque un PDF au
+  // pied de page manquant, estampillé de la nouvelle version. C'est l'artefact qu'on IMPRIME.
+  // Ce filet mesure la SOURCE, pas le PDF : rien n'imposait l'ordre inverse.
+  require('child_process').execFileSync(
+    'node', [resolve(__dirname, 'assert-topo-footers.cjs'), SRC],
+    { stdio: 'inherit' }
+  );
   // ✅ 03/11/2026 — l'estampille (version + date) est DÉRIVÉE, plus jamais écrite dans le
   // HTML : voir scripts/topo-stamp.cjs pour la raison. On rend une copie estampillée placée
   // À CÔTÉ de la source, pour que le `@import` de police et tout chemin relatif résolvent
@@ -51,11 +60,7 @@ const NOM = 'topo-roulettes-defis.pdf';
     rmSync(cheminTemp, { force: true });
   }
   // ✅ Garde à l'ÉVÉNEMENT plutôt que compte affiché : la pagination ne change qu'à une
-  // régénération, donc c'est ici qu'elle se vérifie — pas dans un contrôle qu'il faudrait
-  // penser à lancer. Un débordement fait disparaître un pied de page EN SILENCE.
-  require("child_process").execFileSync(
-    "node", [resolve(__dirname, "assert-topo-footers.cjs"), resolve(__dirname, "../../topo-roulettes-defis-source.html")],
-    { stdio: "inherit" }
-  );
+  // régénération, donc c'est à la régénération qu'elle se vérifie. ⚠️ Le contrôle lui-même
+  // est remonté EN TÊTE de ce script — un garde qui échoue ne doit rien laisser derrière lui.
   console.log(`✅ ${OUT} régénéré.`);
 })().catch((e) => { console.error(e); process.exit(1); });

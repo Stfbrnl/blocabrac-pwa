@@ -19,6 +19,21 @@ const OUT = resolve(__dirname, '../public/docs/topo-blocabrac.pdf');
 const NOM = 'topo-blocabrac.pdf';
 
 (async () => {
+  // 🔴 LE FILET DES PIEDS DE PAGE PASSE D'ABORD (07/11/2026). Il tournait EN DERNIER, après
+  // `page.pdf()` et après l'enregistrement de l'estampille : un débordement laissait donc sur
+  // le disque un PDF au pied de page manquant, estampillé de la nouvelle version — et
+  // c'est l'artefact qu'on IMPRIME. Constaté en ajoutant un point de vigilance à la page 07 :
+  // le filet a bien crié, mais le mauvais PDF était déjà écrit, et il a fallu le restaurer
+  // depuis git pour que le dépôt redevienne cohérent.
+  //
+  // ⚠️ Rien n'imposait l'ordre inverse : ce filet mesure la SOURCE (estampillée), pas le PDF.
+  // La raison écrite pour le placer ici — « la pagination ne change qu'à une régénération,
+  // donc c'est ici qu'elle se vérifie » — portait sur le MOMENT, jamais sur le rang. Un garde
+  // qui échoue ne doit rien laisser derrière lui.
+  require('child_process').execFileSync(
+    'node', [resolve(__dirname, 'assert-topo-footers.cjs'), SRC],
+    { stdio: 'inherit' }
+  );
   // ✅ 03/11/2026 — l'estampille (version + date) est DÉRIVÉE, plus jamais écrite dans le
   // HTML : voir scripts/topo-stamp.cjs pour la raison. On rend une copie estampillée placée
   // À CÔTÉ de la source, pour que le `@import` de police et tout chemin relatif résolvent
@@ -55,11 +70,9 @@ const NOM = 'topo-blocabrac.pdf';
     rmSync(cheminTemp, { force: true });
   }
   // ✅ Garde à l'ÉVÉNEMENT plutôt que compte affiché : la pagination ne change qu'à une
-  // régénération, donc c'est ici qu'elle se vérifie — pas dans un contrôle qu'il faudrait
-  // penser à lancer. Un débordement fait disparaître un pied de page EN SILENCE.
-  require("child_process").execFileSync(
-    "node", [resolve(__dirname, "assert-topo-footers.cjs"), resolve(__dirname, "../../topo-blocabrac-source.html")],
-    { stdio: "inherit" }
-  );
+  // régénération, donc c'est à la régénération qu'elle se vérifie — pas dans un contrôle
+  // qu'il faudrait penser à lancer. Un débordement fait disparaître un pied de page EN
+  // SILENCE. ⚠️ Le contrôle lui-même est remonté EN TÊTE de ce script : voir le commentaire
+  // là-haut, un garde qui échoue ne doit rien laisser derrière lui.
   console.log(`✅ ${OUT} régénéré.`);
 })().catch((e) => { console.error(e); process.exit(1); });
