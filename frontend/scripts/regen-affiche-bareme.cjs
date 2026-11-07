@@ -16,11 +16,13 @@ const { chromium } = require('playwright');
 const { pathToFileURL } = require('url');
 const { resolve } = require('path');
 const fs = require('fs');
+const { versionDuDepot, formatDateFr, enregistrerEstampille } = require('./topo-stamp.cjs');
 
 const GABARIT = resolve(__dirname, '../../affiche-bareme-competition-source.html');
 const GUIDE = resolve(__dirname, '../public/docs/aide-connexion-installation.html');
 const OUT_HTML = resolve(__dirname, '../public/docs/affiche-bareme-competition.html');
 const OUT_PDF = resolve(__dirname, '../public/docs/affiche-bareme-competition.pdf');
+const NOM_PDF = 'affiche-bareme-competition.pdf';
 
 // L'ordre du barème, du plus facile au plus dur, et la pastille de couleur qui l'accompagne.
 const COULEURS = [
@@ -193,4 +195,13 @@ const extrait = (source, regex, quoi) => {
   console.log(`✅ courbe : ${serie.length} points (1 à ${X_MAX} essais), identiques à la ligne « bleu » de la table.`);
   console.log(`✅ ${OUT_HTML}`);
   console.log(`✅ ${OUT_PDF}`);
+  // ✅ Estampille enregistrée pour l'écran « Documents de la salle » (07/11/2026). Cette
+  // affiche ne PORTE pas d'estampille imprimée, contrairement aux deux topos : elle n'a donc
+  // pas de jeton à relire dans le DOM. Ce qui est enregistré ici est donc un fait sur LE
+  // FICHIER (quelle version du dépôt l'a produit, et quand), pas une relecture du document.
+  // ⚠️ La distinction compte : pour les topos, l'écran et le papier affichent la MÊME
+  // estampille, vérifiée dans le rendu ; ici l'écran est la seule place où elle apparaisse.
+  const { version, dateTexte } = { version: versionDuDepot(), dateTexte: formatDateFr(new Date()) };
+  enregistrerEstampille(NOM_PDF, { version, dateTexte });
+  console.log(`✅ registre d'estampilles : ${NOM_PDF} → ${version}, généré le ${dateTexte}`);
 })().catch((e) => { console.error(e); process.exit(1); });

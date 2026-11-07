@@ -1,4 +1,7 @@
-// Régénère ../../topo-roulettes-defis.pdf depuis ../../topo-roulettes-defis-source.html.
+// Régénère ../public/docs/topo-roulettes-defis.pdf depuis ../../topo-roulettes-defis-source.html.
+//
+// ⚠️ LA SORTIE EST DANS public/docs/, PAS À LA RACINE DU DÉPÔT — voir regen-topo.cjs pour la
+// raison : un document à la racine n'est servi nulle part.
 // Document équipe compagnon du Topo Blocabrac, dédié à la Bloc Roulette et aux Défis entre
 // potes (catalogue complet + barèmes). Même mécanique que regen-topo.cjs.
 //   cd frontend && node scripts/regen-topo-roulettes.cjs      (ou: npm run topo:roulettes)
@@ -6,10 +9,11 @@ const { chromium } = require('playwright');
 const { pathToFileURL } = require('url');
 const { resolve } = require('path');
 const { rmSync } = require('fs');
-const { preparerSourceEstampillee } = require('./topo-stamp.cjs');
+const { preparerSourceEstampillee, enregistrerEstampille } = require('./topo-stamp.cjs');
 
 const SRC = resolve(__dirname, '../../topo-roulettes-defis-source.html');
-const OUT = resolve(__dirname, '../../topo-roulettes-defis.pdf');
+const OUT = resolve(__dirname, '../public/docs/topo-roulettes-defis.pdf');
+const NOM = 'topo-roulettes-defis.pdf';
 
 (async () => {
   // ✅ 03/11/2026 — l'estampille (version + date) est DÉRIVÉE, plus jamais écrite dans le
@@ -38,7 +42,10 @@ const OUT = resolve(__dirname, '../../topo-roulettes-defis.pdf');
     // Les marges sont dans le CSS (.page : padding 18mm 16mm), donc marges PDF à zéro.
     await page.pdf({ path: OUT, format: 'A4', printBackground: true, margin: { top: 0, bottom: 0, left: 0, right: 0 } });
     // ✅ Annonce l'effet : un succès silencieux est indiscernable d'un no-op.
-    console.log(`   estampille posée : ${version}, généré le ${dateTexte}`);
+    // ✅ Enregistrée pour l'écran « Documents de la salle » APRÈS relecture dans le DOM et
+    // APRÈS l'écriture du PDF — voir regen-topo.cjs.
+    enregistrerEstampille(NOM, { version, dateTexte });
+    console.log(`   estampille posée : ${version}, généré le ${dateTexte} (+ registre)`);
   } finally {
     await browser.close();
     rmSync(cheminTemp, { force: true });

@@ -12,6 +12,10 @@
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
+    /* Le registre d'estampilles des documents de la salle est un JSON GÉNÉRÉ
+       (src/data/documentsStamp.json, écrit par frontend/scripts/topo-stamp.cjs) :
+       il est importé par l'écran Documents, donc TS doit savoir le résoudre. */
+    "resolveJsonModule": true,
     "noEmit": true,
     "jsx": "react-jsx",
 

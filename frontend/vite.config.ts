@@ -103,6 +103,25 @@ export default defineConfig(({ mode }) => {
           // voir src/styles/fonts.css) — sans lui elle ne serait pas précachée et
           // retomberait sur la police système hors-ligne après le premier chargement.
           globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
+          // 🔴 MESURÉ LE 07/11/2026, SUR LE MANIFESTE PRODUIT ET NON SUR L'INTENTION : les
+          // quatre PDF de public/docs/ n'étaient DÉJÀ pas précachés (pas de `pdf` dans
+          // globPatterns ci-dessus) — mais les deux `.html` du même dossier l'étaient, soit
+          // **225 Ko téléchargés par chaque grimpeur** pour des documents qu'aucun n'ouvre
+          // jamais depuis l'application. C'était le coût caché de l'écran « Documents de la
+          // salle », et il n'était pas là où on le cherchait.
+          //
+          // ✔️ Effet secondaire plus précieux que les 225 Ko : les deux sortes de fichier de
+          // ce dossier ont désormais LE MÊME SORT. CLAUDE.md décrivait « deux sorts opposés
+          // pour deux fichiers du même dossier » — un `.pdf` servi par le réseau grâce à
+          // `navigateFallbackDenylist`, un `.html` servi par le précache — comme un piège.
+          // Le piège est supprimé, pas contourné : tout `/docs/` passe par le réseau, et
+          // c'est le refus d'interception ci-dessous qui garantit que c'est bien le fichier
+          // demandé qui arrive.
+          //
+          // ⚠️ Contrepartie assumée : ces documents ne sont plus consultables hors ligne. Ce
+          // sont des documents qu'on imprime ou qu'on ouvre une fois, pas une partie de la
+          // coquille applicative — contrairement à la police Dosis, précachée exprès.
+          globIgnores: ['**/docs/**'],
           // ⚠️ `public/docs/` est servi À L'ADRESSE, pas depuis l'application : ce sont des
           // documents qu'on ouvre ou qu'on imprime (guide de connexion, affiche du barème).
           // Sans ce refus, le service worker traite leur ouverture comme une NAVIGATION et

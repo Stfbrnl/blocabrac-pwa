@@ -9,6 +9,12 @@
     "strict": true,
     "jsx": "react-jsx",
     "esModuleInterop": true,
+    /* Le registre d'estampilles des documents de la salle est un JSON GÉNÉRÉ
+       (src/data/documentsStamp.json, écrit par frontend/scripts/topo-stamp.cjs), importé
+       par src/utils/documentsSalle.ts. ⚠️ C'est CE fichier que `tsc -b` compile (il n'y a
+       pas de "references"), donc le réglage doit y être — l'avoir mis uniquement dans
+       tsconfig.app.json laissait le build échouer alors que l'éditeur, lui, était content. */
+    "resolveJsonModule": true,
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",

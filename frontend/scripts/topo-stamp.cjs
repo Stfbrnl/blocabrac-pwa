@@ -84,6 +84,54 @@ function preparerSourceEstampillee(cheminSource) {
   return { cheminTemp, version, dateTexte };
 }
 
+// Le CHEMIN du registre d'estampilles lu par l'application (src/data/documentsStamp.json).
+// ⚠️ C'est un fichier GÉNÉRÉ : il est écrit ici, à la génération du document, et jamais à la
+// main. Voir enregistrerEstampille ci-dessous pour la raison.
+const REGISTRE = path.resolve(__dirname, '../src/data/documentsStamp.json');
+
+// Enregistre l'estampille d'un document généré, pour que l'écran « Documents de la salle »
+// puisse l'AFFICHER sans la recopier.
+//
+// ─── POURQUOI PASSER PAR UN FICHIER PLUTÔT QUE PAR UN LITTÉRAL DANS L'ÉCRAN (07/11/2026) ──
+//
+// L'écran doit montrer, à côté de chaque lien, la version et la date du document — « un
+// document daté se repère périmé ; un document nu ne se repère jamais ». Les écrire dans le
+// composant serait reproduire À L'IDENTIQUE le défaut que ce module existe pour avoir corrigé :
+// une transcription littérale ne bouge pas quand la donnée bouge. Un écran annonçant « V2.80 »
+// à côté d'un PDF régénéré en V2.95 serait pire qu'un écran qui n'annonce rien, puisque c'est
+// précisément cette ligne qu'un lecteur utilise pour décider s'il fait confiance au document.
+//
+// La seule écriture qui ne puisse pas mentir est donc celle que fait LE GÉNÉRATEUR, dans le
+// même geste que le PDF : les deux sortent de la même exécution ou d'aucune.
+//
+// ⚠️ Lecture-modification-écriture, et non réécriture : chaque générateur ne connaît QUE son
+// document. Réécrire le registre entier ferait disparaître les estampilles des deux autres à
+// chaque régénération d'un seul — une perte silencieuse, et dans le sens qui ne se voit pas
+// (l'écran retomberait sur « estampille inconnue » sans qu'aucun script n'échoue).
+function enregistrerEstampille(nomFichier, { version, dateTexte }) {
+  if (typeof nomFichier !== 'string' || nomFichier.trim() === '') {
+    throw new Error(`topo-stamp : nom de fichier illisible (${JSON.stringify(nomFichier)})`);
+  }
+  if (typeof version !== 'string' || typeof dateTexte !== 'string' || !version || !dateTexte) {
+    throw new Error(
+      `topo-stamp : estampille incomplète pour ${nomFichier} `
+      + `(version=${JSON.stringify(version)}, date=${JSON.stringify(dateTexte)}). `
+      + 'Pas de repli : une estampille vide dans un écran est indiscernable d\'une absence.'
+    );
+  }
+  let registre = {};
+  if (fs.existsSync(REGISTRE)) {
+    registre = JSON.parse(fs.readFileSync(REGISTRE, 'utf8'));
+  }
+  registre[nomFichier] = { version, genereLe: dateTexte };
+  // Clés triées : le registre est un fichier versionné, un diff ne doit montrer que ce qui
+  // a réellement changé — pas un réordonnancement dû à l'ordre d'exécution des scripts.
+  const trie = {};
+  for (const cle of Object.keys(registre).sort()) trie[cle] = registre[cle];
+  fs.writeFileSync(REGISTRE, `${JSON.stringify(trie, null, 2)}\n`);
+  return { nomFichier, version, dateTexte };
+}
+
 module.exports = {
   JETON_VERSION,
   JETON_DATE,
@@ -92,4 +140,6 @@ module.exports = {
   versionDuDepot,
   injecterEstampille,
   preparerSourceEstampillee,
+  enregistrerEstampille,
+  REGISTRE,
 };

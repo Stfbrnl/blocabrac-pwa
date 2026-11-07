@@ -148,6 +148,29 @@ Les blocs sont rangés **par mur** (sections repliables, un seul mur déplié), 
 
 ⚠️ **`public/docs/` est servi À L'ADRESSE, et le service worker doit REFUSER de l'intercepter** (`navigateFallbackDenylist: [/^\/docs\//]` dans `vite.config.ts`). Sans ce refus, l'ouverture d'un `/docs/*.pdf` est traitée comme une **navigation** et reçoit `index.html` : l'application se charge, aucune route ne correspond, et comme il n'existe **aucune route `*`**, le visiteur voit un **écran blanc**. Les versions `.html` des mêmes documents, elles, marchaient — elles sont *précachées*, donc elles ne passent jamais par le repli : **deux sorts opposés pour deux fichiers du même dossier.** Tout nouveau dossier de `public/` destiné à être ouvert par son URL doit être ajouté à ce refus.
 
+⚠️ **Et tout ce qui entre dans `public/docs/` est PUBLIÉ** : le dossier est servi sans
+authentification, et l'écran « Documents de la salle » (`/documents`, rôles `admin`,
+`ouvreur`, `moniteur`) n'est un **confort de navigation**, jamais une protection — c'est
+une page unique, les URL de cet écran partent dans le bundle de tout visiteur. N'y mettre
+que des documents qu'on accepterait de voir circuler : jamais un export de comptes ni une
+liste d'adhérents. Firebase Hosting **ne peut pas** réserver un fichier (il sert du
+statique) ; il faudrait Cloud Storage for Firebase. Politique complète :
+[`frontend/public/docs/README.md`](frontend/public/docs/README.md).
+
+⚠️ **Les SOURCES (`*-source.html`) restent à la racine du dépôt, les SORTIES vont dans**
+**`public/docs/`.** Les deux topos écrivaient leur PDF à la racine, donc **n'étaient servis
+nulle part** — introuvables autrement qu'en ouvrant le dépôt (corrigé le 07/11/2026). Un
+générateur dont la sortie quitte ce dossier remet le document hors de portée **en silence,**
+**à la régénération suivante** et non au moment du changement.
+
+⚠️ **`globIgnores: ['**/docs/**']`** : rien de ce dossier n'est précaché. Les PDF ne
+l'étaient déjà pas (absents de `globPatterns`), mais les `.html` l'étaient — 225 Ko
+téléchargés par chaque grimpeur pour des documents qu'aucun n'ouvre depuis l'application.
+✔️ **Effet plus précieux que les 225 Ko : les deux sortes de fichier du dossier ont
+désormais LE MÊME SORT** — le piège des « deux sorts opposés » décrit ci-dessous est
+supprimé, pas contourné. Contrepartie assumée : ces documents ne sont plus consultables
+hors ligne.
+
 🔴 **Et ce défaut est INVISIBLE à `curl`, qui ne passe par aucun service worker.** Le fichier était servi en `200` avec le bon type, et l'a toujours été ; c'est le navigateur **ayant installé et activé le service worker** qui reçoit autre chose. ⚠️ **Vérifier qu'un fichier statique est « bien servi » ne se fait donc JAMAIS avec `curl` : il faut piloter un vrai navigateur, après un rechargement** (sous `registerType: 'prompt'` le service worker ne contrôle pas la page au premier chargement). Découvert le 28/10/2026 par l'utilisateur, après deux déploiements que `curl` avait déclarés bons.
 
 **Deux couches de cache indépendantes** se tiennent devant l'application : le service worker (coquille et fichiers statiques) et ce cache Firestore (données). Devant un écran figé, déterminer **laquelle** est en cause avant de soupçonner un bug : figé après un changement de donnée, c'est en général Firestore ; figé après un déploiement, c'est en général le service worker.
@@ -594,6 +617,21 @@ V2.40 aligned the MUI theme with the gym's actual public website instead of MUI'
 - ⚠️ **Un critère de sortie doit prédire *toutes* les grandeurs observables, y compris celles dont on n'attend aucun mouvement.** Sommé de vérifier un correctif d'un champ, le critère était « le compteur doit passer de 4 à 3 ». **Il y est passé — et le correctif était faux** : l'outil avait simplement reclassé le défaut dans un troisième avertissement que personne n'avait demandé de regarder. **Un compteur qui bouge dans le sens espéré mesure l'espoir.**
 - ⚠️ **Et son symétrique : un paramètre qui ne fait pas varier le résultat ne démontre l'insensibilité que s'il agit au BON ENDROIT.** Sinon il produit une non-variation qui ressemble trait pour trait à une invariance mesurée. Constaté le 19/10/2026 en mesurant les écritures de l'écran compétition : le délai entre gestes était placé **après** la saisie des essais, donc là où il ne pouvait rien changer ; 0 ms et 3 000 ms rendaient le même total, et la conclusion « le chiffre ne dépend pas de la vitesse de saisie » était juste pour une mauvaise raison. **Un compteur qui ne bouge pas peut ne mesurer que l'inertie de l'instrument.** ⚠️ **Les deux bullets ont la même racine — l'observable n'est pas relié à la cause qu'on croit faire varier — donc une seule question avant de conclure d'une variation OU DE SON ABSENCE : « le bouton que je tourne est-il branché sur ce que je regarde ? »** Corollaire pratique : une valeur stable est la forme de preuve la plus rassurante, donc **elle doit être EXPLIQUÉE avant d'être publiée** — c'est en cherchant pourquoi 35 et non 40 que le vrai levier (le dédoublonnage sur `attempts = 1` par défaut) est apparu.
 - ⚠️ **Quand la chose qui compte est INATTEIGNABLE, une mesure sur sa voisine renseigne sur la voisine.** La tentation du transfert est maximale exactement là où il est invalide : c'est parce que la cible est hors d'atteinte qu'on mesure autre chose, et c'est pour la même raison que le verdict ne s'y transporte pas. Forme utilisable : **un contrôle validé sur une méthode d'une API ne se transfère pas à une autre méthode de la même API.** Constaté le 19/10/2026 sur la sonde des métriques Firestore — un contrôle exercé dans les deux sens, et juste, répondait « cette API est-elle activée ? » quand la question était « cette méthode est-elle permise ? ». Le même code HTTP 403 et le même `status` recouvraient « il manque un rôle » (vrai, corrigeable) et « il faut un compte de facturation » (bloquant). La conclusion annoncée a dû être retirée une heure plus tard.
+- 🔴 **`fetch()` depuis une page N'EST PAS une navigation, et un contrôle de
+  `navigateFallback` qui passe par `fetch` est VERT FACE AU DÉFAUT QU'IL PRÉTEND
+  ATTRAPER.** Mesuré le 07/11/2026 : l'étape ④ de `verify-deploy-servi.cjs`, écrite avec
+  `fetch('/docs/…')` depuis la page contrôlée, restait verte quand on retirait
+  `navigateFallbackDenylist` — parce que la route de repli ne s'applique qu'aux requêtes de
+  **mode `navigate`**, et qu'un `fetch` de script a le mode `same-origin`. Il faut
+  **OUVRIR l'URL** (`page.goto`, `waitUntil: 'commit'` ; un PDF correctement servi fait
+  *avorter* la navigation en téléchargement, ce qui est le signe du bon comportement, d'où
+  `acceptDownloads: true`). ⚠️ **Et le TYPE ne discrimine que les PDF** : un `index.html`
+  servi à la place d'un `.html` est aussi du `text/html` — les quatre PDF rougissaient
+  pendant que les deux `.html` restaient verts, donc *la moitié du filet ne vérifiait rien*.
+  La grandeur qui sépare le document de la coquille est le **titre rendu**. Même racine que
+  les deux bullets ci-dessus — *le bouton que je tourne est-il branché sur ce que je
+  regarde ?* — et même leçon que `curl` : **une mesure sur la couche voisine renseigne sur**
+  **la voisine.**
 - ⚠️ **Hiérarchie des preuves** : ① le **DOM rendu** tranche (piloter un navigateur) ; ② la source installée de la bibliothèque **induit en erreur** — bon fichier, bonne ligne, mauvaise variable, et la conclusion s'écrit ensuite comme « écarté sur preuve », ce qui donne à une lecture l'autorité d'une mesure ; ③ la documentation ne fut jamais nécessaire. **Lire la source n'est pas lire le DOM.**
 - ⚠️ **Un instrument fait maison mesure ses propres défauts en silence**, d'autant plus qu'il a été écrit pour l'occasion — et ses chiffres faux sont du **bon ordre de grandeur**, donc invisibles. Ce qui les attrape : **vérifier à la main un cas tiré au hasard de la liste.** ⚠️ Et quand la grandeur mesurée provient d'une source à **délai d'ingestion** (métriques, agrégats, compteurs d'une journée en cours), **ne lire que des fenêtres CLOSES** : la valeur d'une fenêtre encore en train de se remplir est *correcte pour ce qu'elle contient* et simplement pas finie, donc elle est plausible et fausse sans rien signaler. Mesuré le 19/10/2026 sur Cloud Monitoring : une charge de +936 lectures apparaissait à **+0** pendant 2 minutes (repérable), puis à **+741** à 3 minutes (non repérable), avant de se stabiliser à +936 vers 4 min 30.
 - ⚠️ **Le test court, pour tout instrument qui rend un nombre : ce nombre vient-il d'une OBSERVATION du système, ou d'un LITTÉRAL dans le script ?** `snap.size` → observation ; `record('Validation', 1)` → littéral. C'est la famille d'instrument la plus dangereuse, parce qu'elle n'échoue ni par un silence ni par un verdict faux : elle **produit une valeur**, et une valeur est ici la forme de preuve la plus forte. ⚠️ **Mais le test porte sur le NOMBRE, pas sur le SCÉNARIO** : `measure-live-screen-reads.mjs` compte de vrais `snap.size` tout en empruntant au harnais littéral la forme de ce qu'il observe (« 82 écritures par grimpeur ») et en ajoutant 11 000 lectures en dur — il ne s'en sauve qu'en **annonçant** chaque part (« mesuré séparément », « total soirée *estimé* »). Balayage des 15 instruments du dépôt fait le 19/10/2026 : 2 fautifs, les deux ci-dessous. ⚠️ **Mais ce test TRIE, il ne protège pas : aucun test de forme ne sécurise un instrument. Ce qui le sécurise, c'est que chaque nombre porte sa PROVENANCE — « observé » ou « supposé », part par part, dans sa propre sortie.** Un instrument peut mesurer sans mentir une situation qu'il a inventée ; seule l'étiquette le dit. ⚠️ Et dernier membre de la famille : **un chiffre repris d'un document antérieur est un fait daté, pas un état courant** — c'est l'erreur du harnais d'août citée comme si elle valait encore, et celle d'un « trois compétitions de test » repris d'un handoff de la semaine précédente quand il en restait une.

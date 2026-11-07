@@ -22,6 +22,15 @@ const path = require('path');
 const { chromium } = require('playwright');
 
 const ORIGINE = process.env.ORIGINE || 'https://blocabrac.web.app';
+// Les documents de la salle, LUS DANS LE REGISTRE GÉNÉRÉ plutôt qu'énumérés ici : un document
+// ajouté au catalogue sans être vérifié serait exactement le défaut que l'étape ④ existe pour
+// attraper. On y ajoute le guide, qui n'a pas de générateur donc pas d'entrée au registre.
+const DOCUMENTS = [
+  ...Object.keys(require(path.join(__dirname, '..', 'src', 'data', 'documentsStamp.json'))),
+  'affiche-bareme-competition.html',
+  'aide-connexion-installation.pdf',
+  'aide-connexion-installation.html',
+];
 const DIST = path.join(__dirname, '..', 'dist');
 const VERSION = require(path.join(__dirname, '..', 'package.json')).version;
 
@@ -54,7 +63,10 @@ const VERSION = require(path.join(__dirname, '..', 'package.json')).version;
   porteurs.forEach((f) => console.log(`   ${f}`));
 
   const navigateur = await chromium.launch();
-  const contexte = await navigateur.newContext(); // ① contexte NEUF
+  // ① contexte NEUF. `acceptDownloads` : à l'étape ④ un PDF correctement servi fait AVORTER
+  // la navigation dans Chromium sans interface (il se télécharge au lieu de s'afficher) —
+  // l'avortement y est donc un signe de bon fonctionnement, pas une panne.
+  const contexte = await navigateur.newContext({ acceptDownloads: true });
   const page = await contexte.newPage();
 
   console.log(`\n── ① Premier chargement de ${ORIGINE} ──`);
@@ -131,11 +143,82 @@ const VERSION = require(path.join(__dirname, '..', 'package.json')).version;
     if (!ok) echecs += 1;
   }
 
+  // ── ④ LES DOCUMENTS DE LA SALLE ───────────────────────────────────────────────────────
+  //
+  // ⚠️ POURQUOI CETTE ÉTAPE EXISTE : *un lien dans l'application est un chemin que quelqu'un
+  // emprunte.* Tant que l'accès à ces documents passait par une URL qu'on se transmettait à
+  // la main, le chemin n'était jamais parcouru — et le guide de connexion est resté CASSÉ
+  // DEPUIS SA CRÉATION (écran blanc, V2.76.2) sans que personne le voie. L'écran
+  // « Documents de la salle » fait désormais parcourir ces chemins par des humains ; cette
+  // étape les fait parcourir par un instrument, à chaque déploiement.
+  //
+  // 🔴 ET ELLE DOIT NAVIGUER, PAS APPELER `fetch`. Première écriture de cette étape le
+  // 07/11/2026 : elle faisait `fetch('/docs/…')` depuis la page contrôlée, et elle restait
+  // VERTE quand on retirait `navigateFallbackDenylist` — c'est-à-dire face au défaut même
+  // qu'elle prétendait attraper. La raison est mécanique : `navigateFallback` ne s'applique
+  // qu'aux requêtes de MODE `navigate`, et un `fetch` depuis un script a le mode
+  // `same-origin`. La route de repli du service worker ne pouvait donc jamais la voir
+  // passer. **Le bouton qu'on tournait n'était pas branché sur ce qu'on regardait** — forme
+  // exacte de l'erreur que ce dépôt sait nommer (mesurer la voisine et conclure sur la
+  // cible). On OUVRE donc l'URL, comme un humain qui clique.
+  //
+  // 🔴 CE QUI FAIT VERDICT N'EST PAS LE CODE 200, C'EST LE TYPE SERVI. La signature exacte du
+  // défaut du 28/10 était un `200` parfaitement valide avec `content-type: text/html` : le
+  // service worker répondait index.html à la place du document. Un contrôle qui ne regarde que
+  // le statut déclare ce défaut-là bon — et trois vérifications curl l'ont fait.
+  console.log('\n── ④ Les documents de /docs/ : OUVERTS, service worker actif ──');
+  const reponsesVues = [];
+  page.on('response', (r) => {
+    reponsesVues.push({ url: r.url(), statut: r.status(), type: r.headers()['content-type'] || '' });
+  });
+  for (const nom of DOCUMENTS) {
+    const cible = `${ORIGINE}/docs/${nom}`;
+    const attenduPdf = nom.endsWith('.pdf');
+    reponsesVues.length = 0;
+    // `commit` : on rend la main dès que la RÉPONSE est reçue, avant tout rendu ou
+    // téléchargement. L'avortement qui suit un PDF servi correctement est donc hors sujet.
+    let erreurNav = null;
+    try {
+      await page.goto(cible, { waitUntil: 'commit' });
+    } catch (e) {
+      erreurNav = String(e).split('\n')[0];
+    }
+    const vue = reponsesVues.find((r) => r.url === cible);
+    // ⚠️ POUR UN .html, LE TYPE NE DISCRIMINE RIEN : un index.html servi à la place du
+    // document est lui aussi du text/html. Vérifié le 07/11 en retirant le refus
+    // d'interception — les quatre PDF rougissaient, les deux .html restaient VERTS, donc
+    // la moitié du filet ne vérifiait rien. On lit donc le TITRE de la page réellement
+    // rendue : c'est la seule grandeur qui sépare le document de la coquille. C'est aussi
+    // ce que l'humain avait observé le 28/10 (« titre Blocabrac - Gestion de salle
+    // d'escalade au lieu du PDF »).
+    let titreRendu = null;
+    if (!attenduPdf && !erreurNav) {
+      try { titreRendu = await page.title(); } catch { titreRendu = null; }
+    }
+    const type = vue ? vue.type : null;
+    // La coquille de l'application servie à la place du document : le défaut à attraper.
+    const estCoquille = (attenduPdf && /text\/html/.test(type || ''))
+      || (!attenduPdf && titreRendu !== null && /Blocabrac - Gestion de salle/.test(titreRendu));
+    const ok = !!vue
+      && vue.statut === 200
+      && (attenduPdf ? /application\/pdf/.test(type) : /text\/html/.test(type))
+      && !estCoquille;
+    console.log(`   ${ok ? '\u2714' : '\u2718'} /docs/${nom}`);
+    console.log(`       navigation → HTTP ${vue ? vue.statut : 'aucune réponse observée'} | ${type || '?'}`);
+    if (titreRendu !== null) console.log(`       titre rendu : ${JSON.stringify(titreRendu)}`);
+    if (erreurNav) console.log(`       (navigation interrompue : ${erreurNav} — attendu pour un PDF)`);
+    if (estCoquille) {
+      console.log('       🔴 LA COQUILLE DE L\'APPLICATION EST SERVIE À LA PLACE DU DOCUMENT.');
+      console.log('          C\'est l\'écran blanc de V2.76.2 : vérifier navigateFallbackDenylist.');
+    }
+    if (!ok) echecs += 1;
+  }
+
   await navigateur.close();
 
   console.log('\n════ VERDICT ════');
   if (echecs > 0) {
-    console.error(`✘ ${echecs} fichier(s) en échec : la version servie N'EST PAS ${VERSION}.`);
+    console.error(`✘ ${echecs} fichier(s) en échec (bundle et/ou documents de /docs/).`);
     process.exit(1);
   }
   console.log(`✔ La version ${VERSION} est SERVIE, service worker ACTIF.`);

@@ -47,6 +47,9 @@ const MiniCompetitionForm = lazy(() => import('./pages/Moniteur/MiniCompetitions
 const StatsList = lazy(() => import('./pages/Moniteur/Stats/StatsList'));
 const MessagesList = lazy(() => import('./pages/Moniteur/Messages/MessagesList'));
 
+// Documents de la salle — admin, ouvreur ET moniteur (voir pages/Documents/DocumentsSalle.tsx)
+const DocumentsSalle = lazy(() => import('./pages/Documents/DocumentsSalle'));
+
 // Pages Admin
 const Admin = lazy(() => import('./pages/Admin'));
 const AdminUsers = lazy(() => import('./pages/AdminUsers'));
@@ -115,6 +118,14 @@ export default function AppRoutes() {
         <Route path="/moniteur/mini-competitions/edit/:miniCompetitionId" element={<ProtectedRoute role="moniteur"><MiniCompetitionForm /></ProtectedRoute>} />
         <Route path="/moniteur/stats" element={<ProtectedRoute role="moniteur"><StatsList /></ProtectedRoute>} />
         <Route path="/moniteur/messages" element={<ProtectedRoute role="moniteur"><MessagesList /></ProtectedRoute>} />
+
+        {/* ========== DOCUMENTS DE LA SALLE ========== */}
+        {/* ✅ Les trois rôles de staff, pas seulement l'admin : l'ouvreur imprime l'affiche du
+            barème et le moniteur donne le guide de connexion à ses nouveaux élèves.
+            ⚠️ Ce garde de route est un confort de navigation, PAS une protection — les
+            fichiers sont servis publiquement depuis public/docs/, et les URL partent dans le
+            bundle de tout visiteur. Voir frontend/public/docs/README.md. */}
+        <Route path="/documents" element={<ProtectedRoute allowedRoles={['admin', 'ouvreur', 'moniteur']}><DocumentsSalle /></ProtectedRoute>} />
 
         {/* ========== ROUTES ADMIN ========== */}
         <Route path="/admin" element={<ProtectedRoute role="admin"><Admin /></ProtectedRoute>} />

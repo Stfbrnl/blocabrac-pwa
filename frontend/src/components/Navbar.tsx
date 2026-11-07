@@ -138,6 +138,13 @@ const Navbar: React.FC = () => {
     if (userRoles.includes('moniteur')) {
       links.push({ label: 'MONITEUR', to: '/moniteur' });
     }
+    // ✅ Documents de la salle (07/11/2026) : une seule entrée pour les trois rôles de staff,
+    // placée AVANT « Mon espace » parce qu'elle appartient au métier, pas au personnel.
+    // ⚠️ Volontairement PAS dans adminLinks en plus : un admin verrait alors deux chemins
+    // vers le même écran, et c'est le genre de doublon qui finit par diverger.
+    if (userRoles.some((r) => r === 'admin' || r === 'ouvreur' || r === 'moniteur')) {
+      links.push({ label: 'DOCUMENTS', to: '/documents' });
+    }
     if (userRoles.includes('client')) {
       links.push({ label: 'MON ESPACE', to: '/client' });
     }
