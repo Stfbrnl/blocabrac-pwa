@@ -237,7 +237,20 @@ pédagogique : élèves en lignes, blocs en colonnes, qui a buté sur quoi.
 
 ### Course sessions (`courses` collection) and the scheduled/active/archived lifecycle
 
-A `courses` doc (called "séance" in the UI) goes through `scheduled → active → archived`, driven by `activatedAt`/`archivedAt` timestamps (see `utils/courseSessionStatus.ts` for the client-side status derivation, mirrored server-side by `canValidateCourse()` in rules). Content (exercises, mini-compétitions) is only fetched/shown to clients once a session leaves `scheduled` — "objectifs visibles, contenu caché" until activation. Participants default to the whole group (`Participants: string[]`), with individual opt-out (`optedOut: string[]`) only allowed before activation.
+A `courses` doc (called "séance" in the UI) goes through `scheduled → active → archived`, driven by `activatedAt`/`archivedAt` timestamps (see `utils/courseSessionStatus.ts` for the client-side status derivation, mirrored server-side by `canValidateCourse()` in rules).
+
+🔴 **`courses.date` EST UN `Timestamp` FIRESTORE, PAS UNE CHAÎNE** — et ce fichier affirmait
+l'inverse, ce qui a produit un défaut livré en V2.81 et corrigé le même jour. `SessionLike.date:
+string` ("YYYY-MM-DD") décrit ce que `getSessionStatus` **consomme**, après conversion par
+l'appelant : tous les écrans convertissent (`CoursesList.tsx`'s `convertFirestoreDate` +
+`toDateStr`, `CourseDetail.tsx`, `ClientCourseSession.tsx`), chacun par
+`toISOString().slice(0,10)` — donc **le jour UTC**. ⚠️ **Un type d'interface dit ce qu'une
+fonction consomme, jamais ce qu'une collection stocke : devant un champ de date, MESURER la
+production.** Le point unique de normalisation est `normaliserDateSeance`
+(`utils/salleEnActivite.ts`), testé sur les formes **réellement** présentes en prod ; **une
+seconde convention de date serait une divergence**, visible un soir sur deux écrans côte à côte.
+⚠️ Et `getSessionStatus` fait `date.split('-')` : lui passer un `Timestamp` **lève**, donc
+plante l'écran entier. Normaliser AVANT, jamais dans l'appel. Content (exercises, mini-compétitions) is only fetched/shown to clients once a session leaves `scheduled` — "objectifs visibles, contenu caché" until activation. Participants default to the whole group (`Participants: string[]`), with individual opt-out (`optedOut: string[]`) only allowed before activation.
 
 ### Cross-user visibility: the `classement_profiles` mirroring pattern
 
@@ -670,6 +683,19 @@ V2.40 aligned the MUI theme with the gym's actual public website instead of MUI'
 - ⚠️ **Un critère de sortie doit prédire *toutes* les grandeurs observables, y compris celles dont on n'attend aucun mouvement.** Sommé de vérifier un correctif d'un champ, le critère était « le compteur doit passer de 4 à 3 ». **Il y est passé — et le correctif était faux** : l'outil avait simplement reclassé le défaut dans un troisième avertissement que personne n'avait demandé de regarder. **Un compteur qui bouge dans le sens espéré mesure l'espoir.**
 - ⚠️ **Et son symétrique : un paramètre qui ne fait pas varier le résultat ne démontre l'insensibilité que s'il agit au BON ENDROIT.** Sinon il produit une non-variation qui ressemble trait pour trait à une invariance mesurée. Constaté le 19/10/2026 en mesurant les écritures de l'écran compétition : le délai entre gestes était placé **après** la saisie des essais, donc là où il ne pouvait rien changer ; 0 ms et 3 000 ms rendaient le même total, et la conclusion « le chiffre ne dépend pas de la vitesse de saisie » était juste pour une mauvaise raison. **Un compteur qui ne bouge pas peut ne mesurer que l'inertie de l'instrument.** ⚠️ **Les deux bullets ont la même racine — l'observable n'est pas relié à la cause qu'on croit faire varier — donc une seule question avant de conclure d'une variation OU DE SON ABSENCE : « le bouton que je tourne est-il branché sur ce que je regarde ? »** Corollaire pratique : une valeur stable est la forme de preuve la plus rassurante, donc **elle doit être EXPLIQUÉE avant d'être publiée** — c'est en cherchant pourquoi 35 et non 40 que le vrai levier (le dédoublonnage sur `attempts = 1` par défaut) est apparu.
 - ⚠️ **Quand la chose qui compte est INATTEIGNABLE, une mesure sur sa voisine renseigne sur la voisine.** La tentation du transfert est maximale exactement là où il est invalide : c'est parce que la cible est hors d'atteinte qu'on mesure autre chose, et c'est pour la même raison que le verdict ne s'y transporte pas. Forme utilisable : **un contrôle validé sur une méthode d'une API ne se transfère pas à une autre méthode de la même API.** Constaté le 19/10/2026 sur la sonde des métriques Firestore — un contrôle exercé dans les deux sens, et juste, répondait « cette API est-elle activée ? » quand la question était « cette méthode est-elle permise ? ». Le même code HTTP 403 et le même `status` recouvraient « il manque un rôle » (vrai, corrigeable) et « il faut un compte de facturation » (bloquant). La conclusion annoncée a dû être retirée une heure plus tard.
+- 🔴 **UN INSTRUMENT QUI SE TROMPE DANS LE SENS RASSURANT EST UN PIÈGE, PAS UNE
+  APPROXIMATION.** Le voyant d'activité de V2.81 interrogeait `where('date','==','YYYY-MM-DD')`
+  sur un champ qui est un `Timestamp` en production : il ne trouvait **jamais** de séance et
+  affichait « aucune activité détectée » quoi qu'il arrive — alors que c'est sur sa foi qu'on
+  déploie les règles. ⚠️ **La cause n'était pas une inattention mais une MÉTHODE fausse** : j'ai
+  lu un type (`SessionLike.date: string`) et ce fichier, au lieu de mesurer la base. Et 🔴 **le
+  filet du module était ENTIÈREMENT VERT**, parce que son jeu de données n'utilisait que des
+  dates en chaîne — une forme **qui n'existe pas en production**. *Quels défauts ce jeu de
+  données est-il physiquement incapable d'exprimer ?* Celui-là, et il était déjà là.
+  ⚠️ **Corollaire opérationnel : la robustesse de FORME passe avant la borne de coût** quand
+  l'erreur d'un instrument est rassurante — d'où un `getDocs` sur toute la collection plutôt
+  qu'une requête bornée qui exclurait silencieusement une autre forme de champ (Firestore
+  ordonne par type : une chaîne et un `Timestamp` ne se comparent pas).
 - 🔴 **`fetch()` depuis une page N'EST PAS une navigation, et un contrôle de
   `navigateFallback` qui passe par `fetch` est VERT FACE AU DÉFAUT QU'IL PRÉTEND
   ATTRAPER.** Mesuré le 07/11/2026 : l'étape ④ de `verify-deploy-servi.cjs`, écrite avec

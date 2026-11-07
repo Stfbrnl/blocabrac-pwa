@@ -27,12 +27,74 @@
  * « personne n'utilise l'application » — **annoncer son dénominateur** plutôt que laisser
  * croire à une couverture qu'on n'a pas.
  */
-import { getSessionStatus, type SessionLike } from './courseSessionStatus';
+import { getSessionStatus } from './courseSessionStatus';
 
-export interface SeanceVoyant extends SessionLike {
+/**
+ * Une séance telle qu'elle SORT DE FIRESTORE, et non telle que `SessionLike` la décrit.
+ *
+ * 🔴 LA DIFFÉRENCE EST LA CAUSE D'UN DÉFAUT LIVRÉ ET CORRIGÉ LE 07/11/2026.
+ * `SessionLike.date` est un `string` "YYYY-MM-DD" — mais c'est une forme **dérivée**, pas la
+ * forme stockée : en production, `courses.date` est un **Timestamp Firestore** (mesuré sur les
+ * 3 documents de prod, tous Timestamp). Tous les écrans convertissent avant d'appeler
+ * `getSessionStatus` (`CoursesList.tsx`'s `convertFirestoreDate` + `toDateStr`,
+ * `CourseDetail.tsx`, `ClientCourseSession.tsx`) ; le premier voyant, lui, interrogeait
+ * `where('date','==','2026-11-07')` — une **égalité de chaîne contre un Timestamp**, qui ne
+ * peut par construction rien trouver.
+ *
+ * ⚠️ **Et la conséquence était pire que l'absence de voyant** : il affichait « aucune activité
+ * détectée » pendant qu'une séance tournait, **sans rien signaler**. Or c'est sur sa foi qu'on
+ * déploie les règles. Un instrument qui se trompe dans le sens rassurant est un piège, pas une
+ * approximation.
+ *
+ * ⚠️ **Ce que ça coûte en doctrine** : le type d'une interface ne dit pas la forme stockée.
+ * `SessionLike` décrit ce que `getSessionStatus` CONSOMME, après conversion par l'appelant —
+ * et `CLAUDE.md` l'énonçait comme la forme du champ. Devant un champ de date, **mesurer la
+ * production** plutôt que lire un type.
+ */
+export interface SeanceVoyant {
   id: string;
   name?: string;
+  /** La valeur brute : Timestamp, `{seconds}`, `Date`, ou chaîne. Normalisée ci-dessous. */
+  date: unknown;
+  activatedAt?: string;
+  archivedAt?: string;
 }
+
+/**
+ * Rend le jour d'une séance au format "YYYY-MM-DD", quelle que soit la forme stockée, ou
+ * `null` si elle est illisible.
+ *
+ * ⚠️ **LA CONVERSION SUIT CELLE QUE LES AUTRES ÉCRANS FONT DÉJÀ** — `toISOString().slice(0,10)`,
+ * donc le jour **UTC** et non le jour local. Ce n'est pas un choix : `CoursesList.tsx`,
+ * `CourseDetail.tsx` et `ClientCourseSession.tsx` le font tous ainsi, et un voyant qui
+ * déciderait du jour autrement serait en désaccord avec l'écran du moniteur sur la date d'une
+ * même séance. Une seconde convention de date est une divergence, pas une amélioration.
+ */
+export const normaliserDateSeance = (valeur: unknown): string | null => {
+  if (valeur === null || valeur === undefined) return null;
+  // Un Timestamp Firestore (forme réelle en production) ou tout objet qui porte `toDate`.
+  if (typeof valeur === 'object' && 'toDate' in valeur
+    && typeof (valeur as { toDate: unknown }).toDate === 'function') {
+    const d = (valeur as { toDate: () => Date }).toDate();
+    return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+  }
+  if (valeur instanceof Date) {
+    return Number.isNaN(valeur.getTime()) ? null : valeur.toISOString().slice(0, 10);
+  }
+  // Un Timestamp sérialisé (lu depuis un cache, ou passé par JSON).
+  if (typeof valeur === 'object' && typeof (valeur as { seconds?: unknown }).seconds === 'number') {
+    const d = new Date((valeur as { seconds: number }).seconds * 1000);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+  }
+  if (typeof valeur === 'string') {
+    // Déjà au bon format : rendu tel quel, sans aller-retour par Date — un "2026-11-07" parsé
+    // puis réémis en UTC reste identique, mais ne pas y toucher évite la question.
+    if (/^\d{4}-\d{2}-\d{2}$/.test(valeur)) return valeur;
+    const d = new Date(valeur);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+  }
+  return null;
+};
 
 export type NiveauActivite = 'seance' | 'activite' | 'calme';
 
@@ -40,6 +102,14 @@ export interface VoyantSalle {
   niveau: NiveauActivite;
   /** Les séances réellement actives, après dérivation du statut. */
   seancesActives: SeanceVoyant[];
+  /** Combien de séances ont été EXAMINÉES — le dénominateur du voyant. */
+  seancesExaminees: number;
+  /**
+   * Les séances dont la date est illisible. ⚠️ Comptées et affichées, jamais écartées en
+   * silence : une séance qu'on ne sait pas dater est précisément celle qui pourrait être
+   * active sans qu'on le voie.
+   */
+  seancesIllisibles: SeanceVoyant[];
   /** Minutes depuis la dernière validation connue, ou `null` si aucune. */
   minutesDerniereValidation: number | null;
   /** Ce qui se passe, en une ligne. */
@@ -66,7 +136,23 @@ export const evaluerActiviteSalle = (
   // ⚠️ Le statut est DÉRIVÉ par `getSessionStatus`, jamais relu d'un champ : c'est le même
   // point de dérivation que le reste de l'application (archivage automatique à minuit du
   // lendemain compris). Une seconde implémentation ici divergerait le jour où la règle change.
-  const seancesActives = seances.filter((s) => getSessionStatus(s, maintenant) === 'active');
+  //
+  // 🔴 Et la date est NORMALISÉE d'abord : `getSessionStatus` fait `date.split('-')`, donc un
+  // Timestamp — la forme réelle en production — le ferait LEVER. Une séance dont la date est
+  // illisible est comptée à part plutôt qu'écartée en silence.
+  const seancesLisibles: { seance: SeanceVoyant; jour: string }[] = [];
+  const seancesIllisibles: SeanceVoyant[] = [];
+  for (const s of seances) {
+    const jour = normaliserDateSeance(s.date);
+    if (jour === null) seancesIllisibles.push(s);
+    else seancesLisibles.push({ seance: s, jour });
+  }
+  const seancesActives = seancesLisibles
+    .filter(({ seance, jour }) => getSessionStatus(
+      { date: jour, activatedAt: seance.activatedAt, archivedAt: seance.archivedAt },
+      maintenant
+    ) === 'active')
+    .map(({ seance }) => seance);
 
   const minutesDerniereValidation = derniereValidationMs === null
     ? null
@@ -74,15 +160,23 @@ export const evaluerActiviteSalle = (
 
   const recent = minutesDerniereValidation !== null && minutesDerniereValidation <= fenetreMinutes;
 
-  const portee = 'Mesuré sur les séances dont la date est aujourd\'hui et sur la dernière '
+  // ⚠️ La portée ANNONCE SON DÉNOMINATEUR : combien de séances ont été regardées, et combien
+  // n'ont pas pu être datées. Le premier voyant disait « mesuré sur les séances du jour » alors
+  // que sa requête n'en trouvait aucune — une portée qui décrit l'intention, pas la mesure.
+  const portee = `Mesuré sur ${seances.length} séance(s) examinée(s) et sur la dernière `
     + 'validation enregistrée. Un grimpeur qui consulte sans rien valider est invisible : '
-    + '« calme » ne prouve pas que personne n\'utilise l\'application.';
+    + '« calme » ne prouve pas que personne n\'utilise l\'application.'
+    + (seancesIllisibles.length > 0
+      ? ` ⚠️ ${seancesIllisibles.length} séance(s) à la date illisible n'ont pas pu être évaluées.`
+      : '');
 
   if (seancesActives.length > 0) {
     const n = seancesActives.length;
     return {
       niveau: 'seance',
       seancesActives,
+      seancesExaminees: seances.length,
+      seancesIllisibles,
       minutesDerniereValidation,
       titre: `${n} séance${n > 1 ? 's' : ''} en cours`,
       consigne: 'Ne pas déployer les règles Firestore et ne pas modifier les données '
@@ -96,6 +190,8 @@ export const evaluerActiviteSalle = (
     return {
       niveau: 'activite',
       seancesActives,
+      seancesExaminees: seances.length,
+      seancesIllisibles,
       minutesDerniereValidation,
       titre: `Quelqu'un grimpe — dernière validation il y a ${minutesDerniereValidation} min`,
       consigne: 'Aucune séance encadrée, mais la salle est utilisée : repousser un '
@@ -107,6 +203,8 @@ export const evaluerActiviteSalle = (
   return {
     niveau: 'calme',
     seancesActives,
+    seancesExaminees: seances.length,
+    seancesIllisibles,
     minutesDerniereValidation,
     titre: minutesDerniereValidation === null
       ? 'Aucune activité détectée'

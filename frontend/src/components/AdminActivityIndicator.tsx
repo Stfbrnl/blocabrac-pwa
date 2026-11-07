@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, AlertTitle, Box, Button, Typography } from '@mui/material';
 import { Refresh as RefreshIcon } from '@mui/icons-material';
-import { collection, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
+import { collection, getDocs, limit, orderBy, query } from 'firebase/firestore';
 import { db } from '../services/firebaseConfig';
 import { evaluerActiviteSalle, type SeanceVoyant, type VoyantSalle } from '../utils/salleEnActivite';
 
@@ -19,11 +19,24 @@ import { evaluerActiviteSalle, type SeanceVoyant, type VoyantSalle } from '../ut
  * montage, avec un bouton pour rafraîchir à la demande : c'est un voyant qu'on consulte avant
  * d'agir, pas une surveillance continue.
  *
- * ⚠️ **Et les séances sont filtrées PAR LA DATE DU JOUR, pas chargées en entier.** Une séance
- * active a nécessairement la date du jour : `getSessionStatus` archive automatiquement à
- * minuit du lendemain. La lecture est donc bornée au nombre de séances d'aujourd'hui (une
- * poignée) et ne grandit pas avec l'âge de la salle — contrairement à un `getDocs` sur toute
- * la collection, qui aurait marché aujourd'hui et coûté de plus en plus cher chaque saison.
+ * 🔴 **LA PREMIÈRE VERSION FILTRAIT PAR `where('date','==','YYYY-MM-DD')`, ET NE POUVAIT RIEN
+ * TROUVER** : en production `courses.date` est un **Timestamp**, pas une chaîne (mesuré le
+ * 07/11/2026 sur les 3 documents de prod, tous Timestamp). Le voyant affichait donc « aucune
+ * activité détectée » quoi qu'il arrive — **une erreur dans le sens rassurant**, c'est-à-dire
+ * la pire, puisque c'est sur sa foi qu'on déploie les règles.
+ *
+ * ⚠️ **On lit donc la collection entière et on filtre côté client**, et c'est un arbitrage
+ * assumé contre l'argument de coût du commentaire d'origine. Une requête par intervalle de
+ * Timestamps serait bornée, mais elle **exclurait silencieusement** toute séance stockée sous
+ * une autre forme (Firestore ordonne par type : une chaîne et un Timestamp ne se comparent
+ * pas). Devant un instrument dont l'erreur est rassurante, **la robustesse de forme passe
+ * avant la borne de coût**. La collection compte 3 documents en production ; le jour où elle
+ * en comptera quelques centaines, le voyant lira toujours juste, et c'est à ce moment-là qu'on
+ * décidera d'une borne — avec une forme de champ, elle, enfin unifiée.
+ *
+ * ⚠️ Et le nombre de séances examinées est **affiché** : c'est le dénominateur du voyant. Le
+ * premier annonçait « mesuré sur les séances du jour » alors qu'il n'en voyait aucune — une
+ * portée qui décrivait l'intention et non la mesure.
  */
 const AdminActivityIndicator: React.FC = () => {
   const [voyant, setVoyant] = useState<VoyantSalle | null>(null);
@@ -38,18 +51,11 @@ const AdminActivityIndicator: React.FC = () => {
       setChargement(true);
       setErreur(null);
       try {
-        // ① Les séances du jour. `date` est une chaîne "YYYY-MM-DD" (voir
-        // utils/courseSessionStatus.ts), donc une égalité stricte suffit et n'exige
-        // aucun index composite.
-        const maintenant = new Date();
-        const aujourdHui = [
-          maintenant.getFullYear(),
-          String(maintenant.getMonth() + 1).padStart(2, '0'),
-          String(maintenant.getDate()).padStart(2, '0'),
-        ].join('-');
-        const seancesSnap = await getDocs(
-          query(collection(db, 'courses'), where('date', '==', aujourdHui))
-        );
+        // ① Les séances, SANS filtre de date — voir l'en-tête pour pourquoi le filtre a été
+        // retiré. La date brute est transmise telle quelle : c'est `normaliserDateSeance`
+        // (pur, testé sur les deux formes réellement présentes en prod) qui la ramène au
+        // format que `getSessionStatus` consomme.
+        const seancesSnap = await getDocs(collection(db, 'courses'));
         const seances: SeanceVoyant[] = seancesSnap.docs.map((d) => {
           const data = d.data();
           return {
