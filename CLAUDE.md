@@ -181,7 +181,55 @@ hors ligne.
 - ⚠️ **C'est le mode d'enregistrement de la version DÉPLOYÉE qui gouverne sa propre succession**, pas celui de la version qui arrive : un changement de mode ne prend effet qu'à la transition *suivante*. Ne pas conclure « le correctif ne marche pas » en testant la mauvaise transition.
 - **Deux déclencheurs de `registration.update()` à conserver** : `visibilitychange` (après ≥ 3 min en arrière-plan) et un `setInterval` horaire. Quelques centaines d'octets réseau, **zéro lecture Firestore**.
 - **Jamais rendu sur l'écran live TV.** Le garde `vite:preloadError` de `main.tsx` reste : il compte **plus** sous `prompt`, puisqu'une vieille version peut persister bien plus longtemps.
+- 🔴 **Et ce garde était DÉSARMÉ POUR DE BON jusqu'au 07/11/2026.** Il posait un drapeau
+  `sessionStorage` qu'il ne retirait jamais : il rechargeait une fois par onglet **et pour
+  toute la vie de l'onglet**. Un onglet ayant connu l'incident le matin était sans défense au
+  déploiement du soir. ⚠️ **La décision est une FENÊTRE DE TEMPS, pas un drapeau**
+  (`utils/preloadErrorGuard.ts`, pur et testé, 60 s) : une boucle recharge en deux secondes,
+  un nouvel incident survient des heures plus tard — **un booléen n'a pas la dimension où les
+  deux diffèrent**. ⚠️ Et le rechargement **laisse un mot** (`components/ReloadNotice.tsx`) :
+  *un rechargement muet est indiscernable d'un plantage*, et c'est sous cette forme que le
+  défaut a été rapporté (« les validations sautaient »), jamais sous celle d'une erreur.
+- ⚠️ **Les trois sortes de modification n'ont pas le même rayon, et c'est la conséquence
+  pratique à retenir** : un déploiement `--only hosting` est presque inoffensif (l'onglet garde
+  son bundle ; seule une navigation vers un écran chargé à la demande peut échouer) ; un
+  déploiement `--only firestore:rules` est **immédiat sur TOUS les clients, ancien bundle
+  compris**, donc c'est **la modification silencieuse** ; un changement de données en admin est
+  vu tout de suite par la séance en cours. **Donc : séparer systématiquement les déploiements**,
+  et garder les règles hors des heures d'ouverture. Le voyant de `Admin.tsx`
+  (`utils/salleEnActivite.ts`, libellé **par sa conséquence** et annonçant **sa portée**) sert
+  exactement à décider ça.
 - **Vérifier le bandeau demande un essai manuel sur deux déploiements successifs** — un e2e ne peut pas simuler un déploiement intermédiaire, ne pas en écrire un.
+
+### Un relevé n'est pas un classement (mini-compétitions, V2.81)
+
+⚠️ **Deux objets différents, dont aucun ne se déduit de l'autre.** Le **classement**
+(`utils/miniCompetitionRanking.ts`) est un résumé compétitif : il dit qui a gagné. Le
+**relevé** (`utils/miniCompetitionReleve.ts`, pur et testé) est un état des lieux
+pédagogique : élèves en lignes, blocs en colonnes, qui a buté sur quoi.
+
+- 🔴 **Les LIGNES viennent des participants de la séance, jamais des résultats.**
+  `userResults` de `StatsList.tsx` est construit **depuis** `client_course_results` : un élève
+  qui n'a rien validé n'y existe pas, et un `map` dessus le ferait disparaître **sans bruit**.
+  Or son absence est l'information pédagogique.
+- 🔴 **La couleur affichée est celle FIGÉE à la validation** (`result.boulderColor`). Le module
+  **ne reçoit pas** la couleur courante du bloc — garantie structurelle, pas une assertion :
+  `ReleveBlocInput` n'a aucun champ de couleur. C'est le défaut du 18/10/2026 (80 points chez
+  la monitrice contre 900 chez l'élève), et un écran neuf qui relirait la couleur courante le
+  ferait revenir **dans l'écran même où il avait été corrigé**.
+- ⚠️ **Un taux de réussite annonce son dénominateur** : réussis, tentés, **et** l'effectif —
+  jamais un pourcentage nu. « 50 % » confond « un seul a essayé et il a échoué » (ne dit rien
+  du bloc) et « la moitié du groupe a échoué » (dit qu'il était trop dur).
+- ⚠️ **Les essais moyens ne portent que sur les RÉUSSITES** : moyenner les échecs mélangerait
+  « réussi en 4 essais » et « essayé 4 fois en vain », deux faits opposés sur la difficulté.
+- ⚠️ **Un résultat qui n'entre dans aucune case est COMPTÉ et affiché, jamais ignoré**
+  (`resultatsHorsTableau`) : sinon une validation se perd entre la liste et la grille sans que
+  rien ne le dise.
+- ⚠️ **Les séances se lisent avec `where('createdBy','==',uid)`, la seule requête que les
+  règles autorisent à un moniteur** (le `moniteurId` du groupe n'ouvre que l'écriture). Le
+  filtre par mini-compétition est **côté client**, pour ne pas exiger un index composite.
+  Quand aucune séance du moniteur n'utilise la mini-compétition, l'écran **dit pourquoi** —
+  un écran muet ferait croire à un bug.
 
 ### Mini-compétitions (moniteur) — a third, unrelated system
 
@@ -569,6 +617,11 @@ Le barème récompense le petit nombre d'essais parce qu'il signale la difficult
 `ProtectedRoute` répondait à un rôle manquant par un `<Navigate to="/">`. Mais `/` pousse vers `/client/screen`, lui-même gardé par le rôle `client` : un compte sans ce rôle tournait en **boucle de redirection infinie** — application **totalement inutilisable**, pas seulement dégradée. La production n'était protégée que par la *convention* que tout compte porte `client`.
 
 - **Corrigé par la terminalité, pas par `replace`** : `components/AccessDenied.tsx` est rendu sur place et ne navigue nulle part. `replace` n'aurait rien changé — le ping-pong serait resté. La terminalité supprime **toute la classe**, pour n'importe quelle combinaison de rôles présente ou future.
+- ✔️ **La terminalité couvre aussi les PLANTAGES depuis V2.81** : `components/RouteErrorBoundary.tsx`
+  enveloppe `AppRoutes` dans `main.tsx` et rend une page terminale au lieu d'un écran blanc.
+  ⚠️ Il n'attrape **que** les exceptions de rendu React des composants qu'il enveloppe — ni un
+  gestionnaire d'événement, ni une promesse non rattrapée. Ce n'est pas un filet général, c'est
+  la suppression de l'écran blanc de route. La route `*`, elle, reste reportée.
 - ⚠️ **Seconde moitié de l'invariant : une page terminale doit TOUJOURS offrir une sortie, et cette sortie ne doit pas être elle-même une redirection.** Sinon on a troqué une boucle contre un cul-de-sac. D'où le bouton de **déconnexion**, seule sortie qui marche pour toute combinaison de rôles. Une page terminale ne doit pas dépendre de ce qui l'entoure pour avoir une porte.
 - 🟠 **Point ouvert : `Navbar` et `ProtectedRoute` lisent chacun `users/{uid}` de leur côté** — deux composants qui décident indépendamment des rôles d'un utilisateur. C'est cette dispersion que la boucle manifestait. Le correctif est un contexte partagé, pour qu'**un seul endroit réponde à « qui est cet utilisateur »**. ⚠️ **Ne jamais justifier ce chantier par l'économie de lectures** : passer de 2 à 1 est négligeable, et une justification quantitative qui s'effondre à la mesure discrédite un chantier par ailleurs juste. **Quand :** avec le chantier « droits d'accès, rôle ouvreur trop large », qui touche les rôles de toute façon.
 - ⚠️ **`seed-daily-users.mjs` garde son ouvreur avec `roles: ['ouvreur']`, sans `client`, exprès — ne pas « corriger ».** Cette violation est la seule chose qui ait jamais exercé ce chemin ; y ajouter `client` supprimerait la preuve au lieu du défaut.

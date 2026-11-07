@@ -12,6 +12,23 @@ export interface ChangelogEntry {
 // à chaque nouvelle fonctionnalité visible côté client — l'historique complet vit dans
 // les commits git.
 export const changelog: ChangelogEntry[] = [
+  // ⚠️ Cette entrée décrit UNIQUEMENT la 2.81 (voir l'en-tête du fichier). Ce qui est visible
+  // d'un grimpeur ordinaire, et donc ce qu'elle dit : les informations de la salle apparaissent
+  // désormais partout, et un écran qui plantait en blanc propose maintenant une sortie. Les
+  // deux autres livrables du jour (l'espace Documents, le relevé du moniteur) sont réservés au
+  // staff — mentionnés en une ligne parce que tout compte porte aussi le rôle client, donc les
+  // moniteurs et ouvreurs lisent ce panneau.
+  {
+    version: '2.81',
+    date: '2026-11-07',
+    title: 'Les informations de la salle partout, et plus d’écran blanc',
+    items: [
+      'Les informations de la salle (horaires, vacances, prochaine compétition, préavis) s’affichaient seulement sur « Mon espace personnel ». Elles apparaissent désormais sur tous les écrans — y compris pendant que vous validez des blocs ou une séance, c’est-à-dire là où vous êtes réellement quand une information compte.',
+      'Un message urgent (« mise à jour dans 10 minutes, terminez vos validations ») s’affiche maintenant en orange et titré « Préavis », pour qu’il ne se confonde pas avec une information que vous voyez depuis une heure.',
+      'Quand l’application est mise à jour pendant que votre onglet est ouvert, un écran pouvait rester complètement blanc, sans aucun bouton. Il affiche maintenant une page qui explique quoi faire, avec « Recharger » et « Se déconnecter ». Et quand la page se recharge toute seule pour récupérer la nouvelle version, elle vous dit pourquoi au lieu de clignoter en silence.',
+      'Pour le staff : un menu « DOCUMENTS » donne accès au topo de la salle, au topo des roulettes et à l’affiche du barème, chacun avec sa version et sa date. Et les statistiques du moniteur affichent, sous le classement d’une mini-compétition, un relevé élève par élève et bloc par bloc.',
+    ],
+  },
   // ⚠️ Les deux phrases de cette entrée viennent du §A.5 du plan, et sa consigne compte autant
   // que le texte : **ne pas s'appuyer sur « vous l'avez déjà approuvé »**. À 93,7 % de flash au
   // contest, presque personne n'a vu la courbe — à 1 essai les deux barèmes rendent exactement

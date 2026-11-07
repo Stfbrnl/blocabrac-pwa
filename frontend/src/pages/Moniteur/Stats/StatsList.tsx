@@ -41,6 +41,7 @@ import { jsPDF } from 'jspdf';
 import * as html2canvas from 'html2canvas';
 import diplomaBackground from '../../../assets/diploma-background.png';
 import { buildMiniCompetitionRanking, selectableMiniCompetitions } from '../../../utils/miniCompetitionRanking';
+import { buildMiniCompetitionReleve } from '../../../utils/miniCompetitionReleve';
 import { boulderColorChipSx } from '../../../utils/boulderColorDisplay';
 
 // Types pour les données
@@ -67,6 +68,9 @@ interface Exercise {
 interface Boulder {
   id: string;
   wall?: string;
+  /** ✅ Ajouté le 07/11/2026 pour l'ordre des colonnes du relevé : les numéros sont attachés
+   *  au MUR, donc l'ordre est « mur du circuit, puis numéro ». Gratuit — même document. */
+  number?: number;
   difficulty?: string;
   color?: string;
   difficulty_level?: string;
@@ -114,6 +118,29 @@ interface UserResult {
   }[];
 }
 
+/**
+ * Une séance, réduite à ce dont le relevé a besoin.
+ *
+ * ⚠️ POURQUOI SEULEMENT LES SÉANCES QUE CE MONITEUR A CRÉÉES : `firestore.rules` n'autorise la
+ * lecture d'un `courses` qu'à son `createdBy`, à un élève du groupe, ou à un admin — le
+ * `moniteurId` du groupe n'ouvre que l'ÉCRITURE. Une requête sur toute la collection serait
+ * donc refusée en bloc (Firestore refuse une requête qu'il ne peut pas prouver autorisée),
+ * et c'est pourquoi on reprend exactement la requête de `CoursesList.tsx`.
+ *
+ * ⚠️ Et le filtre par mini-compétition se fait CÔTÉ CLIENT plutôt qu'avec un
+ * `array-contains` : combiné à l'égalité sur `createdBy`, il exigerait un index composite,
+ * et `firestore.indexes.json` a déjà dérivé de la production. Une poignée de séances par
+ * moniteur ne justifie pas un index.
+ */
+interface CourseLite {
+  id: string;
+  name: string;
+  date: string;
+  Participants: string[];
+  optedOut: string[];
+  miniCompetitions: string[];
+}
+
 interface MiniCompetition {
   id: string;
   name: string;
@@ -135,6 +162,8 @@ const StatsList: React.FC = () => {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [miniCompetitions, setMiniCompetitions] = useState<MiniCompetition[]>([]);
   const [selectedMiniCompetitionId, setSelectedMiniCompetitionId] = useState<string>('');
+  const [mesSeances, setMesSeances] = useState<CourseLite[]>([]);
+  const [seanceChoisieId, setSeanceChoisieId] = useState<string>('');
 
   // États pour les filtres
   const [filters, setFilters] = useState<{
@@ -235,12 +264,33 @@ const StatsList: React.FC = () => {
         }));
         setGroups(groupsList);
 
+        // ✅ Les séances que CE moniteur a créées — même requête que CoursesList.tsx, la
+        // seule que les règles autorisent (voir l'interface CourseLite). Elles servent à
+        // connaître les PARTICIPANTS d'une séance, c'est-à-dire les lignes du relevé : un
+        // élève qui n'a rien validé n'existe pas dans `client_course_results`, donc il ne
+        // peut pas venir de là.
+        const seancesSnapshot = await getDocs(
+          query(collection(db, 'courses'), where('createdBy', '==', user.uid))
+        );
+        setMesSeances(seancesSnapshot.docs.map((d) => {
+          const data = d.data();
+          return {
+            id: d.id,
+            name: data.name || '',
+            date: data.date || '',
+            Participants: data.Participants || [],
+            optedOut: data.optedOut || [],
+            miniCompetitions: data.miniCompetitions || [],
+          };
+        }));
+
         // Récupérer les blocs
         const bouldersQuery = query(collection(db, 'boulders'));
         const bouldersSnapshot = await getDocs(bouldersQuery);
         const bouldersList: Boulder[] = bouldersSnapshot.docs.map((boulderDoc) => ({
           id: boulderDoc.id,
           wall: boulderDoc.data().wall,
+          number: boulderDoc.data().number,
           difficulty: boulderDoc.data().difficulty,
           color: boulderDoc.data().color,
           difficulty_level: boulderDoc.data().difficulty_level,
@@ -435,6 +485,61 @@ const StatsList: React.FC = () => {
   // monde est à zéro.
   const getMiniCompetitionRanking = (miniCompetitionId: string) =>
     buildMiniCompetitionRanking(userResults, miniCompetitionId);
+
+  // ─── LE RELEVÉ ────────────────────────────────────────────────────────────────────────
+  //
+  // ⚠️ UN RELEVÉ N'EST PAS UN CLASSEMENT (voir utils/miniCompetitionReleve.ts) : le classement
+  // dit qui a gagné, le relevé dit qui a buté sur quoi. Aucun des deux ne se déduit de l'autre.
+  //
+  // ⚠️ TOUT EST DÉRIVÉ, aucun setState dans un effet : la séance courante se calcule depuis
+  // l'état, avec un repli sur la plus récente. Un effet qui « choisirait » la séance par
+  // défaut déclencherait une cascade de rendus (et ESLint le refuse).
+  const seancesDeLaMiniCompetition = selectedMiniCompetitionId
+    ? mesSeances
+      .filter((c) => c.miniCompetitions.includes(selectedMiniCompetitionId))
+      // Plus récente d'abord : c'est celle qu'on vient de faire tourner.
+      .sort((a, b) => b.date.localeCompare(a.date))
+    : [];
+  const seanceCourante = seancesDeLaMiniCompetition.find((c) => c.id === seanceChoisieId)
+    ?? seancesDeLaMiniCompetition[0]
+    ?? null;
+
+  const releve = (() => {
+    if (!selectedMiniCompetitionId || !seanceCourante) return null;
+    const definition = miniCompetitions.find((m) => m.id === selectedMiniCompetitionId);
+    if (!definition) return null;
+
+    // Les LIGNES viennent des participants de la séance, jamais des résultats.
+    const participants = seanceCourante.Participants.map((uid) => ({
+      id: uid,
+      displayName: getFullName(users.find((u) => u.id === uid), uid),
+      desiste: seanceCourante.optedOut.includes(uid),
+    }));
+
+    // Les COLONNES viennent de la définition de la mini-compétition, donc un bloc que
+    // personne n'a touché garde sa colonne — une colonne vide dit « personne n'a essayé ».
+    // ⚠️ On ne transmet QUE mur et numéro : la couleur courante n'a rien à faire ici (voir
+    // le piège ② du module), et l'interface d'entrée n'a d'ailleurs pas de champ pour elle.
+    const blocsDeLEpreuve = definition.boulderIds.map((id) => {
+      const b = boulders.find((x) => x.id === id);
+      return { id, wall: b?.wall, number: b?.number };
+    });
+
+    // Les RÉSULTATS de cette mini-compétition, tous élèves confondus : le module écarte
+    // lui-même ceux qui ne sont pas de la séance, et les COMPTE au lieu de les ignorer.
+    const resultats = userResults.flatMap((ur) => ur.results
+      .filter((r) => r.miniCompetitionId === selectedMiniCompetitionId)
+      .map((r) => ({
+        userId: ur.id,
+        boulderId: r.boulderId,
+        // ⚠️ La couleur FIGÉE à la validation, jamais celle du bloc aujourd'hui.
+        boulderColor: r.boulderColor,
+        attempts: r.attempts,
+        success: r.success,
+      })));
+
+    return buildMiniCompetitionReleve(participants, blocsDeLEpreuve, resultats);
+  })();
 
   // ⚠️ Les mini-compétitions proposées ne sont plus seulement celles dont ce moniteur est
   // l'auteur : voir selectableMiniCompetitions. Faire jouer celle d'un collègue dans sa
@@ -1047,6 +1152,206 @@ const StatsList: React.FC = () => {
               </TableContainer>
             );
           })()}
+        </Paper>
+      )}
+
+      {/* ══════════════ RELEVÉ DES VALIDATIONS ══════════════
+          ⚠️ UN RELEVÉ N'EST PAS UN CLASSEMENT. Le classement ci-dessus dit qui a gagné ; ce
+          tableau dit QUI A FAIT QUOI, et aucun des deux ne se déduit de l'autre. Un classement
+          ne dira jamais que Léa a buté trois fois sur le bleu de la dalle pendant que le reste
+          du groupe le flashait — c'est pourtant la seule information de la séance qui ait une
+          valeur pédagogique.
+
+          ⚠️ RÉSERVE D'USAGE, à dire plutôt qu'à coder : ce tableau expose les échecs de chaque
+          élève à qui regarde l'écran. Sur le téléphone de la monitrice, c'est son métier ;
+          projeté ou tendu à un groupe, c'est autre chose. L'encadré gris le rappelle.
+
+          Tout le calcul vit dans utils/miniCompetitionReleve.ts (pur, testé). */}
+      {selectedMiniCompetitionId && seancesDeLaMiniCompetition.length === 0 && (
+        <Paper sx={{ p: { xs: 2, sm: 3 }, mt: 3 }}>
+          <Typography variant="h5" gutterBottom sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }}>
+            📋 Relevé des validations
+          </Typography>
+          {/* ⚠️ Dit POURQUOI il n'y a rien, au lieu de ne rien afficher : cette
+              mini-compétition a bien été jouée (sinon elle ne serait pas proposée), mais dans
+              la séance d'un collègue — et les règles ne laissent lire que ses propres séances.
+              Un écran muet ici ferait croire à un bug. */}
+          <Alert severity="info">
+            Aucune de vos séances n’utilise cette mini-compétition. Le relevé par élève a besoin
+            de la liste des participants d’une séance, et seules les séances que vous avez
+            créées sont lisibles. Le classement ci-dessus, lui, reste complet.
+          </Alert>
+        </Paper>
+      )}
+
+      {releve && seanceCourante && (
+        <Paper sx={{ p: { xs: 2, sm: 3 }, mt: 3 }}>
+          <Typography variant="h5" gutterBottom sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }}>
+            📋 Relevé des validations
+          </Typography>
+
+          {/* Sélecteur de séance, seulement s'il y a un choix à faire. */}
+          {seancesDeLaMiniCompetition.length > 1 ? (
+            <FormControl sx={{ minWidth: 250, mb: 2 }}>
+              <InputLabel id="releve-seance-label">Séance</InputLabel>
+              <Select
+                labelId="releve-seance-label"
+                value={seanceCourante.id}
+                onChange={(e: SelectChangeEvent<string>) => setSeanceChoisieId(e.target.value)}
+                label="Séance"
+              >
+                {seancesDeLaMiniCompetition.map((c) => (
+                  <MenuItem key={c.id} value={c.id}>
+                    {c.date} — {c.name || 'séance sans nom'}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          ) : (
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Séance du {seanceCourante.date}
+              {seanceCourante.name ? ` — ${seanceCourante.name}` : ''} ·{' '}
+              {releve.effectif} élève{releve.effectif > 1 ? 's' : ''}
+            </Typography>
+          )}
+
+          {releve.effectif === 0 ? (
+            <Alert severity="info">Cette séance n’a aucun participant inscrit.</Alert>
+          ) : (
+            <>
+              <TableContainer sx={{ overflowX: 'auto' }}>
+                <Table size="small" sx={{ minWidth: 360 }}>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ position: 'sticky', left: 0, bgcolor: 'background.paper', zIndex: 1 }}>
+                        Élève
+                      </TableCell>
+                      {releve.colonnes.map((c) => (
+                        <TableCell key={c.boulderId} align="center" sx={{ whiteSpace: 'nowrap' }}>
+                          {c.etiquette}
+                        </TableCell>
+                      ))}
+                      <TableCell align="center" sx={{ whiteSpace: 'nowrap' }}>Réussis</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {/* La clé est l'uid, jamais le nom : deux homonymes existent dans cette
+                        salle, et une collision de clés React est un défaut silencieux. */}
+                    {releve.lignes.map((ligne) => (
+                      <TableRow key={ligne.userId} hover>
+                        <TableCell sx={{ position: 'sticky', left: 0, bgcolor: 'background.paper', whiteSpace: 'nowrap' }}>
+                          {ligne.displayName}
+                          {ligne.desiste && (
+                            <Typography variant="caption" color="text.secondary" sx={{ ml: 0.5 }}>
+                              (désisté)
+                            </Typography>
+                          )}
+                        </TableCell>
+                        {ligne.cellules.map((cellule, i) => (
+                          <TableCell key={releve.colonnes[i].boulderId} align="center">
+                            {cellule === null ? (
+                              // Rien d'enregistré : volontairement VIDE, pas un zéro. Un zéro
+                              // se lirait comme « a essayé et raté ».
+                              <Typography variant="caption" color="text.disabled">—</Typography>
+                            ) : cellule.success ? (
+                              // ⚠️ LA COULEUR EST CELLE FIGÉE À LA VALIDATION, jamais celle du
+                              // bloc aujourd'hui : c'est le défaut du 18/10/2026 (80 points
+                              // chez la monitrice contre 900 chez l'élève). Le module ne reçoit
+                              // même pas la couleur courante, il ne peut donc pas la lire.
+                              <Box
+                                component="span"
+                                title={cellule.couleurFigee
+                                  ? `Réussi · ${cellule.couleurFigee} (couleur enregistrée ce jour-là)`
+                                  : 'Réussi · couleur non enregistrée'}
+                                sx={{
+                                  ...boulderColorChipSx(cellule.couleurFigee),
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  minWidth: 26,
+                                  height: 26,
+                                  px: 0.5,
+                                  borderRadius: '13px',
+                                  border: '1px solid',
+                                  borderColor: 'divider',
+                                  fontSize: '0.8rem',
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {cellule.attempts ?? '✓'}
+                              </Box>
+                            ) : (
+                              <Typography component="span" color="error" title="Tenté et échoué">✘</Typography>
+                            )}
+                          </TableCell>
+                        ))}
+                        <TableCell align="center" sx={{ whiteSpace: 'nowrap' }}>
+                          {ligne.blocsReussis}/{releve.colonnes.length}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+
+                    {/* ⚠️ LES MARGES ANNONCENT LEUR DÉNOMINATEUR. Un « 50 % » nu confond
+                        « un seul a essayé et il a échoué » (ne dit rien du bloc) et « la
+                        moitié du groupe a échoué » (dit qu'il était trop dur). */}
+                    <TableRow>
+                      <TableCell sx={{ position: 'sticky', left: 0, bgcolor: 'background.paper', fontWeight: 600 }}>
+                        Réussi / tenté
+                      </TableCell>
+                      {releve.colonnes.map((c) => (
+                        <TableCell key={c.boulderId} align="center" sx={{ whiteSpace: 'nowrap' }}>
+                          <strong>{c.reussis}</strong>/{c.tentes}
+                        </TableCell>
+                      ))}
+                      <TableCell align="center">—</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell sx={{ position: 'sticky', left: 0, bgcolor: 'background.paper', fontWeight: 600 }}>
+                        Essais moyens
+                      </TableCell>
+                      {releve.colonnes.map((c) => (
+                        <TableCell key={c.boulderId} align="center" sx={{ whiteSpace: 'nowrap' }}>
+                          {c.essaisMoyensReussites ?? '—'}
+                        </TableCell>
+                      ))}
+                      <TableCell align="center">—</TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </TableContainer>
+
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1.5 }}>
+                Dans une case&nbsp;: le nombre d’essais, sur la couleur <strong>enregistrée le
+                jour de la validation</strong> (une recotation ultérieure du bloc ne la change
+                pas). ✘&nbsp;= tenté et échoué, —&nbsp;= rien d’enregistré. «&nbsp;Réussi /
+                tenté&nbsp;» se lit sur {releve.effectif} élève{releve.effectif > 1 ? 's' : ''}&nbsp;:
+                un bloc à 1/1 n’a été essayé que par une personne. Croisé avec les essais
+                moyens, il distingue un bloc <em>sélectif</em> (peu de réussites, peu d’essais)
+                d’un bloc <em>trop dur</em> (peu de réussites, beaucoup d’essais).
+              </Typography>
+
+              {/* ⚠️ Un résultat qui n'entre dans aucune case est SIGNALÉ, jamais ignoré :
+                  sinon une validation se perdrait entre la liste des résultats et la grille
+                  sans que rien ne le dise. */}
+              {releve.resultatsHorsTableau.length > 0 && (
+                <Alert severity="warning" sx={{ mt: 2 }}>
+                  {releve.resultatsHorsTableau.length} validation
+                  {releve.resultatsHorsTableau.length > 1 ? 's' : ''} n’apparaî
+                  {releve.resultatsHorsTableau.length > 1 ? 'ssent' : 't'} pas dans ce tableau&nbsp;:{' '}
+                  {releve.resultatsHorsTableau.filter((x) => x.raison === 'eleve-hors-seance').length} d’un
+                  élève qui n’est pas inscrit à cette séance,{' '}
+                  {releve.resultatsHorsTableau.filter((x) => x.raison === 'bloc-hors-epreuve').length} sur
+                  un bloc qui n’est plus dans la mini-compétition. Elles comptent dans le
+                  classement ci-dessus.
+                </Alert>
+              )}
+
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1.5 }}>
+                ⚠️ Ce tableau montre les échecs de chaque élève, nommément. À garder pour vous
+                plutôt qu’à projeter ou à tendre au groupe.
+              </Typography>
+            </>
+          )}
         </Paper>
       )}
     </Container>
