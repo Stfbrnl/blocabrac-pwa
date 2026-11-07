@@ -196,3 +196,73 @@ l'ai pas prise.
   le module), mais il est maintenant déclenchable depuis deux écrans.
 - ⏭️ **Geste non technique** : imprimer `affiche-bareme-competition.pdf` et `topo-blocabrac.pdf`,
   régénérés et estampillés **V2.82**.
+
+---
+
+# ⑨ 🟠 UN CONSTAT TROUVÉ APRÈS LE DÉPLOIEMENT, non corrigé — les blocs mystères
+
+Question de Stéphane, posée une fois V2.82 en ligne : *« un bloc mystère a vocation à prendre un
+jour une côte. Imaginons qu'un client le valide et propose sa cotation. Le jour où il devient
+vraiment une couleur, lui rapporte-t-il les points qu'il a obtenu par le passé sans le savoir ? »*
+
+⚠️ **Et cette question a corrigé mon cadrage.** Je traitais `mystere` comme un cas de **clôture de
+compétition** — c'est le garde posé en V2.82. Or c'est un **flux quotidien légitime** : ouvrir un
+bloc sans cotation, laisser les grimpeurs proposer, coter ensuite. `mysteryGrade` est bien
+sélectionnable dans `DailyBoulderForm.tsx`, et `proposedDifficulty` est bien stocké sur
+`client_boulder_results`. **Le garde de V2.82 ne couvre pas ce chemin-là.**
+
+## Ce qui est MESURÉ (fonctions pures, 07/11)
+
+| | mystère | rouge |
+|---|---|---|
+| `calculateDailyPoints(…, 1, true)` | **0** | 400 |
+| `calculateDailyPoints(…, 4, true)` | — | 284 |
+| `scoreDeltaForValidation(…, null, 1)` | **0** | 400 |
+
+🔴 **Et pire que les points : `summaryFromColorCounts({mystere: 3})` rend
+`{bouldersValidated: 0, bestColorRank: -1}`.** Le résumé ne parcourt que `levelOrder`, donc le
+seau `mystere` est **écrit dans `colorCounts` et lu par personne** — trois blocs mystères validés
+ne comptent même pas comme « blocs validés ». `{mystere:3, rouge:1}` rend exactement le même
+résultat que `{rouge:1}` seul.
+
+`colorById` vaut `b.color || b.difficulty || 'Inconnu'` : `'mystere'` est **truthy**, donc le
+delta EST appliqué (score 0, seau pollué). Ce n'est pas un saut, c'est un crédit nul.
+
+Prod **dormante** : 1 seul bloc `color: "mystere"`, désactivé, **0 validation**, aucun seau hors
+échelle dans les 82 profils.
+
+## La réponse à la question
+
+**La recotation ne crédite rien** — rien ne relit l'historique. C'est la **réconciliation
+mensuelle** qui rattrape, et sa ligne 224 le dit : `if (!color || !LEVEL_ORDER.includes(color))
+return;`. Tant que le bloc est mystère la validation est ignorée ; dès qu'il a une couleur elle
+compte, **avec le nombre d'essais d'origine** (`attempts` stocké, `createdAt` immuable).
+Conforme à « ce qui mesure se recalcule » : **l'intention est bonne.**
+
+⚠️ **Lu, pas exécuté** : le chemin de code est sans ambiguïté, mais il n'a pas été joué sur un
+scénario semé. L'instrument juste serait un e2e émulateur (semer une validation sur un bloc
+mystère, coter, réconcilier en simulation, lire l'écart). Il n'existe pas.
+
+## 🔴 Les trois problèmes, dans l'ordre de gravité
+
+1. **La garde de dérive peut ANNULER le rattrapage, et d'autant plus que le bloc a été
+   populaire.** `--fix` s'interrompt sans rien écrire si la dérive touche plus de 30 % des
+   profils **et** au moins 3. Avec 82 comptes, un bloc mystère validé par plus de 24 grimpeurs
+   bloquerait la réconciliation **entière** à sa recotation, jusqu'à un `--force` délibéré.
+   ⚠️ **Une garde conçue contre un bug de recalcul se déclenche ici sur une dérive parfaitement
+   légitime** — et plus le bloc a plu, plus elle se déclenche.
+2. **Si la saison s'est clôturée entre-temps, les points de SAISON ne viendront jamais** :
+   `cloturee: true` fait sauter `season.*`. Le général rattrape, la saison non.
+3. **Le délai est d'un mois et personne n'est prévenu** : le grimpeur voit 0 sans explication,
+   l'ouvreur qui cote ne sait pas qu'il crée des crédits en attente.
+
+## Les trois remèdes proposés, et la décision
+
+1. **Rattrapage immédiat à la recotation** (recommandé) — même motif que la clôture de V2.82 :
+   une opération de donnée déclenchée par un changement d'état, **oui explicite**, nombres
+   **mesurés**, le geste annonce son effet. Supprime le délai, la garde et le silence d'un coup.
+2. **D'abord l'e2e** qui mesure le rattrapage réel avant de toucher au code.
+3. **Seulement prévenir** : avertir l'ouvreur (« N grimpeurs seront recrédités à la prochaine
+   réconciliation ») et le grimpeur (« ce bloc n'est pas encore coté, vos points viendront »).
+
+**Décision de Stéphane le 07/11 au soir : rien ce soir, on en reparle.** Le cas est dormant.
