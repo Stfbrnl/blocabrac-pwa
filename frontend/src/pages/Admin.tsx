@@ -1,5 +1,6 @@
 import React from 'react';
 import { Typography, Container, Paper, Box } from '@mui/material';
+import AdminActivityIndicator from '../components/AdminActivityIndicator';
 
 const Admin: React.FC = () => {
   return (
@@ -15,6 +16,12 @@ const Admin: React.FC = () => {
           <Typography variant="body1" sx={{ mt: 1 }}>
             Utilisez le menu en haut pour accéder aux différentes fonctionnalités.
           </Typography>
+          {/* ✅ 07/11/2026 — le voyant « la salle est-elle en train de s'en servir ? »,
+              libellé par sa CONSÉQUENCE (« ne pas déployer les règles ») et non par son
+              état. Il répond à la seule question qui compte avant de toucher à quelque
+              chose pendant les heures d'ouverture. Voir utils/salleEnActivite.ts, y compris
+              pour ce qu'il NE voit pas. */}
+          <AdminActivityIndicator />
         </Box>
       </Paper>
     </Container>

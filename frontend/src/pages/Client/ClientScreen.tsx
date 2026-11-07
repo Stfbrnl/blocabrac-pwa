@@ -37,7 +37,6 @@ import {
 import { doc, getDoc, setDoc, deleteField, collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
 import { getLudicState, updateLudicState } from '../../services/ludicState';
 import * as html2canvas from 'html2canvas';
-import AnnouncementBanner from '../../components/AnnouncementBanner';
 import WhatsNewPanel from '../../components/WhatsNewPanel';
 import { computeStreakDays, getStartOfWeek } from '../../utils/streak';
 import { getDocsCacheFirst } from '../../utils/firestoreCacheFirst';
@@ -473,7 +472,9 @@ const ClientScreen: React.FC = () => {
         </Box>
 
         <WhatsNewPanel />
-        <AnnouncementBanner />
+        {/* ✅ 07/11/2026 — le bandeau d'annonces est monté dans la coquille (main.tsx) :
+            il apparaît désormais sur TOUS les écrans, donc plus ici. Le remettre en
+            doublerait l'affichage sur cet écran-là. */}
 
         {(userData?.level || lastBadge || nextCompetition) && (
           <Box sx={{ mt: 3 }}>

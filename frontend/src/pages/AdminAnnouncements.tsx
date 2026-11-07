@@ -14,6 +14,10 @@ interface Announcement {
   text: string;
   order: number;
   active: boolean;
+  /** Un PRÉAVIS : rendu en avertissement titré, pas en information bleue. Voir
+   *  components/AnnouncementBanner.tsx — « un bandeau n'interrompt pas », donc un préavis
+   *  réel doit au moins être visuellement distinct d'une annonce qu'on voit depuis une heure. */
+  urgent: boolean;
   createdAt: string;
   updatedAt?: string;
 }
@@ -32,15 +36,17 @@ const AdminAnnouncements: React.FC = () => {
   const [openSnackbar, setOpenSnackbar] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
 
-  const [createForm, setCreateForm] = useState<{ text: string; order: number; active: boolean }>({
+  const [createForm, setCreateForm] = useState<{ text: string; order: number; active: boolean; urgent: boolean }>({
     text: '',
     order: 0,
     active: true,
+    urgent: false,
   });
-  const [editForm, setEditForm] = useState<{ text: string; order: number; active: boolean }>({
+  const [editForm, setEditForm] = useState<{ text: string; order: number; active: boolean; urgent: boolean }>({
     text: '',
     order: 0,
     active: true,
+    urgent: false,
   });
 
   const fetchAnnouncements = async () => {
@@ -53,6 +59,9 @@ const AdminAnnouncements: React.FC = () => {
         text: docSnap.data().text || '',
         order: docSnap.data().order ?? 0,
         active: docSnap.data().active ?? true,
+        // Absent sur tous les documents antérieurs au 07/11/2026 : `false` est le repli
+        // juste, une information ancienne n'étant pas un préavis.
+        urgent: docSnap.data().urgent === true,
         createdAt: docSnap.data().createdAt || '',
         updatedAt: docSnap.data().updatedAt,
       }));
@@ -84,11 +93,12 @@ const AdminAnnouncements: React.FC = () => {
         text: createForm.text.trim(),
         order: createForm.order,
         active: createForm.active,
+        urgent: createForm.urgent,
         createdAt: new Date().toISOString(),
       });
       await fetchAnnouncements();
       setOpenCreateDialog(false);
-      setCreateForm({ text: '', order: 0, active: true });
+      setCreateForm({ text: '', order: 0, active: true, urgent: false });
       setSnackbarMessage("Information créée avec succès !");
       setOpenSnackbar(true);
     } catch (error) {
@@ -104,6 +114,7 @@ const AdminAnnouncements: React.FC = () => {
       text: announcement.text,
       order: announcement.order,
       active: announcement.active,
+      urgent: announcement.urgent,
     });
     setOpenEditDialog(true);
   };
@@ -120,6 +131,7 @@ const AdminAnnouncements: React.FC = () => {
         text: editForm.text.trim(),
         order: editForm.order,
         active: editForm.active,
+        urgent: editForm.urgent,
         updatedAt: new Date().toISOString(),
       });
       await fetchAnnouncements();
@@ -309,6 +321,25 @@ const AdminAnnouncements: React.FC = () => {
                 />
                 <Typography>Afficher immédiatement aux clients</Typography>
               </Box>
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                <Switch
+                  checked={createForm.urgent}
+                  onChange={(e) => setCreateForm({ ...createForm, urgent: e.target.checked })}
+                  color="warning"
+                />
+                <Box>
+                  <Typography>Préavis (avertissement, pas information)</Typography>
+                  {/* ⚠️ Un bandeau N'INTERROMPT PAS : il informe celui qui regarde. Ce
+                      réglage ne corrige pas cette limite, il évite seulement qu'un préavis
+                      réel se fonde dans le décor de quelqu'un qui voit les mêmes annonces
+                      bleues depuis une heure. À réserver aux messages à échéance. */}
+                  <Typography variant="caption" color="text.secondary">
+                    Pour un message à échéance (« mise à jour dans 10 minutes, terminez vos
+                    validations »). Affiché en orange, titré « Préavis », sur tous les écrans.
+                    À n'utiliser que pour ça : tout en préavis, plus rien n'est un préavis.
+                  </Typography>
+                </Box>
+              </Box>
             </Box>
           </DialogContent>
           <DialogActions>
@@ -353,6 +384,25 @@ const AdminAnnouncements: React.FC = () => {
                   color="primary"
                 />
                 <Typography>Visible par les clients</Typography>
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                <Switch
+                  checked={editForm.urgent}
+                  onChange={(e) => setEditForm({ ...editForm, urgent: e.target.checked })}
+                  color="warning"
+                />
+                <Box>
+                  <Typography>Préavis (avertissement, pas information)</Typography>
+                  {/* ⚠️ Un bandeau N'INTERROMPT PAS : il informe celui qui regarde. Ce
+                      réglage ne corrige pas cette limite, il évite seulement qu'un préavis
+                      réel se fonde dans le décor de quelqu'un qui voit les mêmes annonces
+                      bleues depuis une heure. À réserver aux messages à échéance. */}
+                  <Typography variant="caption" color="text.secondary">
+                    Pour un message à échéance (« mise à jour dans 10 minutes, terminez vos
+                    validations »). Affiché en orange, titré « Préavis », sur tous les écrans.
+                    À n'utiliser que pour ça : tout en préavis, plus rien n'est un préavis.
+                  </Typography>
+                </Box>
               </Box>
             </Box>
           </DialogContent>
