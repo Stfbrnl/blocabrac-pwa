@@ -439,3 +439,53 @@ l'écran** — ils sont dans des sections refermées, ou masqués par le filtre.
    de l'application est passé à la nouvelle. À savoir si elle compare des nombres entre son
    contest et le quotidien.
 
+---
+
+# ⑩ LA CLÔTURE MANQUÉE DU « CONTEST COURS », ET LA PISTE QU'ELLE OUVRE
+
+Deux questions de Stéphane en fin de séance, et les deux ont trouvé quelque chose.
+
+## Le classement par niveau n'a jamais pu figurer dans l'annonce
+
+`utils/competitionAnnouncement.ts` ne compose que **général (open) / par âge / par genre** —
+aucune section niveau, et `AdminCompetitionStats.tsx` n'en affiche pas non plus. Le classement
+par niveau max n'existe que dans le **palmarès gelé**, et **elle l'a bien publié** :
+`competition_rankings/Ua1eJIlPxEIv8oHEOHTH`, `published_at` 19:39 locale (deux minutes avant
+l'annonce), avec `client_level_max` : 4 groupes.
+
+> 🟠 **Donc le classement le plus pédagogique de l'épreuve est publié là où personne ne
+> regarde.** Les grimpeurs y ont accès sur l'écran du palmarès ; le bandeau, qu'ils lisent
+> vraiment, ne le porte pas. Ce n'est pas un défaut — c'est une décision à prendre.
+
+## 🔴 La compétition n'avait jamais été clôturée côté ouvreur
+
+**92 blocs** gardaient `competition_active: true`, tous `type: 'daily'` (donc tous des blocs
+du jour réutilisés), tous avec une couleur publique, aucun `points_value`, aucun multiplicateur.
+
+> 🔴 **ET LA GRAVITÉ DIFFÈRE DU CAS DU 06/11, pour une raison qui n'est pas dans le script.**
+> `fix-competition-active-apres-cloture.js` décrit son dommage comme **latent**, parce qu'il
+> visait un bloc **désactivé**. Ici les 92 étaient `is_active: true` — **au mur**. Or
+> `firestore.rules` refuse `firstAscents` ET `methodCounts`/`methodVotes` sur tout bloc
+> `competition_active` : **92 des 230 blocs de la salle, 40 %**, avec deux fonctionnalités
+> muettes *en ce moment*, et l'échec d'une première ascension n'étant que **journalisé**.
+> ⚠️ **Le même état de donnée n'a donc pas la même gravité selon `is_active` — l'en-tête du
+> script le dit pour un bloc au placard, pas pour un bloc au mur.**
+
+✔️ **Et c'est la première fois que le filet de V2.79 servait : il a rougi du premier coup sur
+de vraies données**, avec le bon diagnostic et le remède nommé dans son propre message.
+Rebasculé par l'utilisateur via « Terminer la compétition » (92 blocs, un seul lot atomique) ;
+audit repassé à **0 erreur, 0 avertissement**.
+
+⚠️ Détail de lecture : l'audit annonce « 11 erreur(s) » pour 92 blocs concernés — il plafonne
+la liste à 10 et ajoute « et 82 autre(s) ». **Le compte porte sur les lignes, pas sur les blocs.**
+
+## 🔜 La piste demandée pour la prochaine séance
+
+Stéphane : *« activer automatiquement ce clic côté Ouvreur par le passage de la compétition en
+mode terminée côté admin, si c'est possible »*. **C'est possible, côté client uniquement** (ce
+projet n'a aucune Cloud Function). Les quatre contraintes qui décideront de la forme — dont
+🔴 **la migration est IRRÉVERSIBLE alors que le statut ne l'est pas**, et ⚠️ **la logique vit
+dans l'écran ouvreur et doit être EXTRAITE avant d'être appelée d'ailleurs, sous peine de
+fabriquer un second rédacteur du même geste** — sont consignées en mémoire
+(`project_coupler_cloture_admin_et_ouvreur`). ⚠️ Et le couplage **ne remplacera pas l'audit** :
+un admin sur un ancien bundle ne l'aura pas reçu.
