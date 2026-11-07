@@ -284,11 +284,12 @@ tableau de **1 ligne × 35 colonnes, entièrement vide**. Le jour où elle crée
 l'**active**, y rattache la mini-compétition et laisse ses élèves valider depuis l'écran de
 séance, le relevé se remplit — et restera consultable pour toujours.
 
-> 🟠 **ET UNE OBSERVATION À NE PAS SURINTERPRÉTER, mais à ne pas taire.** Le 06/11, **un seul
-> grimpeur** a laissé une trace, 7 saisies en cinq minutes. Si un groupe d'élèves validait ce
-> soir-là, on en attendrait plusieurs. Je **ne peux pas** distinguer « les validations ont été
-> perdues » de « les élèves n'ont pas utilisé l'application » — mais c'est cohérent avec le
-> rapport « les validations des jeunes sautaient », et ça renforce le besoin de l'e2e du §⑤.1.
+> 🔴 **CE PARAGRAPHE PORTAIT UNE OBSERVATION FAUSSE. ELLE EST RETIRÉE — voir §⑨.** J'avais
+> écrit : « le 06/11, un seul grimpeur a laissé une trace, ce qui est cohérent avec le rapport
+> *les validations des jeunes sautaient* ». C'était faux, et pour une raison instructive :
+> **j'avais cherché dans la mauvaise collection.** La séance de la monitrice a écrit dans
+> `competition_results`, pas dans `client_boulder_results` — **264 documents, 11 participants
+> sur 11, et 75 % des écritures APRÈS le déploiement.** Rien n'a été perdu.
 
 ---
 
@@ -334,4 +335,107 @@ que je puisse défendre, et conformément à la règle du dépôt (*une valeur s
 EXPLIQUÉE avant d'être publiée*), je la publie **comme non expliquée** plutôt que de l'habiller.
 L'instrument manquant : un balayage des horodatages `createdAt`/`updatedAt` par collection sur
 cette journée.
+
+---
+
+# ⑨ 🔴 CE QUI S'EST RÉELLEMENT PASSÉ LE 6 NOVEMBRE — et ce que j'avais conclu à tort
+
+Stéphane a proposé l'hypothèse qui a tout débloqué : *« peut-être a-t-elle créé une compétition
+et non une mini ? »* **Elle est exacte**, et la mesure qu'elle a déclenchée corrige deux
+affirmations de ce document.
+
+## La donnée
+
+| | |
+|---|---|
+| compétition | **« Contest cours »** (`Ua1eJIlPxEIv8oHEOHTH`), status `terminée`, datée du 06/11 |
+| `scoring_mode` | **`blocabrac`** — l'ANCIEN barème (voir la mise en garde plus bas) |
+| inscrits | **11** |
+| inscrits ayant validé | **11 sur 11** — aucun absent |
+| `competition_results` | **264 documents**, 227 blocs réussis |
+| fenêtre | **18:31 → 19:37 heure locale** |
+| verrou | `submitted: false` partout — personne n'a soumis (facultatif) |
+
+Le nom du document le disait : « Contest **cours** ». Et « le nombre de blocs grimpés par un de
+ses élèves » est exactement ce que l'écran de statistiques d'une compétition affiche, par
+participant. ⚠️ Les noms et les scores individuels ne sont PAS recopiés ici : ce sont des
+mineurs, et un document versionné n'a pas besoin de les porter pour que le dossier technique
+soit complet (même doctrine que le palmarès gelé, « tronquer à l'écriture protège la donnée »).
+La distribution suffit : de 11 à 39 blocs réussis, médiane 19.
+
+## 🔴 Correction n°1 : « un seul grimpeur » était faux, j'avais cherché dans la mauvaise collection
+
+J'ai mesuré `client_boulder_results` (les blocs du jour) et trouvé 7 saisies par un seul
+grimpeur. J'en ai tiré une observation « cohérente avec le rapport ». **Mais sa séance n'écrit
+pas là** : une compétition écrit dans `competition_results`, où tout a atterri.
+
+> ⚠️ **La leçon, et elle est plus grave qu'une étourderie** : j'avais énuméré les **quatre**
+> chemins par lesquels un écran peut afficher « le nombre de blocs grimpés » — et je n'en avais
+> interrogé qu'un, celui que je soupçonnais. **Chercher dans la collection qu'on soupçonne,
+> c'est se condamner à confirmer ou à ne rien trouver.** Le second script
+> (`scripts/mesure-ce-qu-elle-a-vu.js`) les imprime tous les quatre et laisse la donnée désigner
+> le chemin ; c'est lui qui a trouvé en une passe ce que j'avais manqué.
+>
+> ⚠️ **Et un second défaut d'instrument, du même genre que ceux du §②** : ce script a d'abord
+> groupé les 264 résultats sous **un seul** grimpeur « (sans userId) », parce qu'il cherchait
+> `userId` / `uid` alors que la collection porte **`user_id`**. **Un script qui ne trouve pas
+> son champ ne rend pas une erreur, il rend un CHIFFRE FAUX** — « 1 grimpeur » au lieu de 11, et
+> il avait l'air plausible. D'où la règle appliquée ensuite : **imprimer les clés réellement
+> présentes avant de les lire**, et affirmer la taille (264 = 264 ✔).
+
+## 🔴 Correction n°2 : les 802 écritures sont ATTRIBUÉES, et c'était sa soirée
+
+Je les avais publiées comme non expliquées. Elles le sont : **11 grimpeurs en compétition**, à
+23–43 écritures par grimpeur (chiffre du dépôt, `measure-competition-writes`) plus les
+réécritures de nombre d'essais, soit ~550–700 ; plus **29** profils par la réconciliation et
+**7** blocs orphelins. **Le compte tombe sur 802.** ✔️ La règle « une valeur surprenante doit
+être expliquée avant d'être publiée » a tenu : elle a été publiée *comme non expliquée*, puis
+expliquée, plutôt qu'habillée d'une hypothèse.
+
+## ✔️ Et ce que « les validations sautaient » veut dire : l'ÉCRAN, pas la base
+
+La chronologie est sans ambiguïté. L'étiquette `deploy/v2.80` est posée à **18:54 locale** —
+**23 minutes après le début de son contest**, et 43 minutes avant sa fin.
+
+| tranche (UTC) | écritures |
+|---|---|
+| 17:30 · 17:40 · 17:50 | 16 · 23 · 27 |
+| **← déploiement de V2.80 à 17:54 UTC** | |
+| 18:00 · 18:10 · 18:20 · 18:30 | 45 · 40 · **70** · 43 |
+
+> 🔴 **198 des 264 écritures — 75 % — ont eu lieu APRÈS le déploiement, et la tranche la plus
+> chargée de la soirée est postérieure. Il n'y a aucun creux. Rien n'a été perdu.**
+
+Alors qu'a-t-elle vu ? **V2.80 a réorganisé l'écran de validation d'une compétition**, et c'est
+la partie B livrée ce soir-là : les blocs sont passés d'une liste unique à des **sections par
+mur repliables, une seule dépliée**, avec un filtre « masquer les blocs déjà réussis ». Un
+grimpeur qui met à jour en pleine épreuve voit donc ses blocs validés **disparaître de
+l'écran** — ils sont dans des sections refermées, ou masqués par le filtre.
+
+> ⚠️ **« Mes validations ont sauté » décrit exactement cela**, et la donnée prouve que ce n'était
+> qu'un affichage. **C'est le coût d'un changement d'interface déployé en pleine utilisation, et
+> il n'est pas dans la perte de données — il est dans la confiance.** Un grimpeur qui croit
+> avoir perdu ses validations revalide, ou appelle la monitrice ; aucun bandeau ne l'a prévenu
+> que son écran allait changer de forme.
+>
+> ✔️ **Et c'est précisément ce que la partie B d'aujourd'hui adresse** : le préavis visible
+> partout (avec son mode « Préavis » orange) et le voyant « 1 séance en cours — ne pas
+> déployer » existent pour cette minute-là. La conclusion du §① tient toujours — le code seul
+> est presque inoffensif *pour les données* — mais elle doit être complétée : **un déploiement
+> de code qui change la FORME d'un écran n'est pas inoffensif pour l'utilisateur**, même quand
+> pas un octet n'est perdu.
+
+## 🟠 Et deux faits à connaître, sans urgence
+
+1. **La réconciliation `--fix --force` a tourné à 18:59 locale**, cinq minutes après le
+   déploiement et **en plein contest** (journal : `fixedAt: 17:59:36Z`). Elle a réécrit 29
+   `classement_profiles`. ✔️ **Son contest n'en a pas souffert** : un classement de compétition
+   se calcule depuis `competition_results`, que la réconciliation ne touche pas. Mais c'est
+   exactement le geste que le §① dit d'éviter, et ça valide le voyant mieux qu'un argument.
+2. ⚠️ **« Contest cours » est en `scoring_mode: 'blocabrac'`, l'ancien barème** — créée avant
+   que le mode cesse d'être sélectionnable, et le mode est verrouillé dès qu'une compétition
+   quitte « à venir ». C'est le comportement voulu (une épreuve passée garde son mode et reste
+   lisible juste), mais **ses 11 grimpeurs sont notés sur l'ancienne courbe** alors que le reste
+   de l'application est passé à la nouvelle. À savoir si elle compare des nombres entre son
+   contest et le quotidien.
 
