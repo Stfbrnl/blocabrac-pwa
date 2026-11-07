@@ -3,7 +3,11 @@
 **7 novembre 2026.** Plan appliqué : `docs/plans/2026-11-07-CN-plan-documents-preavis-et-suivi-moniteur.md`.
 **En prod :** V2.81, étiquette `deploy/v2.81` sur `05ca0a3`, **vérifiée servie** (service worker
 actif). Déploiement `--only hosting` : ni les règles ni les index n'ont été touchés.
-**619 tests verts** (553 hier).
+**630 tests verts** (553 hier).
+
+> 🔴 **V2.81.1 SUIT, et elle corrige un défaut de V2.81 livré ce matin** — trouvé en mesurant la
+> production pour répondre à une tout autre question. Voir §⑥ en fin de document : c'est le
+> passage le plus utile de cette séance.
 
 Les trois parties sont livrées, en quatre commits. Ce document ne répète pas le plan : il dit
 **ce que la réalité a démenti**, et ce qui reste.
@@ -182,3 +186,152 @@ sortir vert et parfait en ayant perdu un bloc entier (19/10/2026).
    classe de l'écran blanc **de plantage**, pas celle de l'URL inconnue : ⚠️ il n'attrape que
    les exceptions de **rendu React** des composants qu'il enveloppe — ni un gestionnaire
    d'événement, ni une promesse non rattrapée.
+
+---
+
+# ⑥ 🔴 LE VOYANT D'ACTIVITÉ NE VOYAIT RIEN (V2.81.1, corrigé le même jour)
+
+Trouvé **par accident**, en mesurant la production pour répondre à la question de Stéphane sur
+la rétroactivité du relevé : la sortie du script imprimait `date : [object Object]` pour une
+séance.
+
+## Le défaut
+
+`courses.date` **est un `Timestamp` Firestore en production** — les 3 documents le sont, sans
+exception. Mon voyant interrogeait `where('date', '==', '2026-11-07')`, une **égalité de
+chaîne**. Elle ne peut, par construction, rien trouver : Firestore ordonne par type, une chaîne
+et un `Timestamp` ne se comparent pas. Le voyant affichait donc « aucune activité détectée »
+**quoi qu'il arrive**.
+
+> ⚠️ **ET C'EST LA PIRE FORME D'ERREUR POSSIBLE POUR CET INSTRUMENT : il se trompait dans le
+> sens RASSURANT.** Un voyant dont le rôle est de dire quand on peut déployer les règles, et qui
+> répond « calme » pendant qu'une séance tourne, est **pire que pas de voyant** — on n'y gagne
+> pas une approximation, on y perd la prudence qu'on avait sans lui.
+
+## 🔴 La cause n'était pas une inattention, c'était une méthode fausse
+
+J'ai lu le **type** `SessionLike.date: string` — et `CLAUDE.md`, qui l'énonçait comme la forme
+du champ — **au lieu de mesurer la base**. Or la chaîne est une forme **dérivée** : chaque écran
+la produit avant l'appel (`CoursesList.tsx`'s `convertFirestoreDate` + `toDateStr`,
+`CourseDetail.tsx`, `ClientCourseSession.tsx`).
+
+> ⚠️ **Un type d'interface dit ce qu'une fonction CONSOMME, jamais ce qu'une collection STOCKE.**
+> Devant un champ de date, **mesurer la production**. `CLAUDE.md` portait l'affirmation fausse
+> et est corrigé.
+
+Et le détail qui aggrave : `getSessionStatus` fait `date.split('-')`. Lui passer un
+`Timestamp` **lève**, donc plante le tableau de bord d'administration entier. Le filtre par
+date me protégeait de ce plantage **par accident** — en ne lui passant jamais rien.
+
+## 🔴 Et le filet du module était ENTIÈREMENT VERT
+
+Onze propriétés exercées séparément la veille, toutes rouges au bon moment… sur un jeu de
+données **qui n'utilisait que des dates en chaîne**, c'est-à-dire une forme **qui n'existe pas
+en production**.
+
+> C'est la question de méthode du dépôt, appliquée à la lettre : *quels défauts ce jeu de données
+> est-il physiquement incapable d'exprimer ?* **Celui-là. Et il était déjà là pendant que je
+> vérifiais les onze autres.** Ajout à la liste des trois endroits (*l'entrée, le décor,
+> l'assertion*) : **l'entrée peut être du bon TYPE TypeScript et de la mauvaise FORME STOCKÉE.**
+> Le compilateur ne voit pas la différence, et le test non plus.
+
+## Le correctif, et l'arbitrage qu'il renverse
+
+`normaliserDateSeance` (pur, testé sur les formes **réellement** présentes en prod : `Timestamp`,
+`{seconds}`, `Date`, chaîne courte, chaîne ISO) ramène la date au format consommé, et rend
+`null` plutôt que de lever. La conversion **suit celle des autres écrans**
+(`toISOString().slice(0,10)`, donc le jour **UTC**) : une seconde convention de date serait une
+divergence, visible un soir sur deux écrans côte à côte.
+
+> ⚠️ **Et le filtre par date est RETIRÉ, contre l'argument de coût de mon propre commentaire
+> d'origine.** Une requête par intervalle de `Timestamp` serait bornée, mais elle **exclurait
+> silencieusement** toute séance stockée sous une autre forme. **Devant un instrument dont
+> l'erreur est rassurante, la robustesse de FORME passe avant la borne de coût.** 3 documents en
+> prod ; la borne se décidera quand il y en aura des centaines, avec une forme de champ enfin
+> unifiée.
+
+Les séances à la date illisible sont **comptées et annoncées**, jamais écartées en silence — une
+séance qu'on ne sait pas dater est précisément celle qui pourrait être active sans qu'on le
+voie. Et la portée annonce désormais son **dénominateur** (« mesuré sur N séances examinées ») :
+la première version annonçait « les séances du jour » alors qu'elle n'en voyait aucune — **une
+portée qui décrivait l'intention et non la mesure.**
+
+---
+
+# ⑦ LA RÉTROACTIVITÉ DU RELEVÉ : oui par construction, mais il n'y a rien à montrer
+
+Question de Stéphane : *sa collègue monitrice peut-elle voir le relevé sur sa mini-compétition
+d'hier ?* La réponse est mesurée, pas déduite (`scripts/mesure-releve-mini-competitions.js`,
+lecture seule).
+
+| mesure, 07/11/2026 | valeur |
+|---|---|
+| `client_course_results` | **3 documents au total**, le plus récent du **20 juin 2026** |
+| …dont portant un `miniCompetitionId` | **0** |
+| `mini_competitions` | 1 — « Adulte Toussaint », 35 blocs, créée par Alice Morel |
+| `courses` | 3 séances, dont 1 rattache cette mini-compétition |
+| séances jamais activées | **3 sur 3** (`activatedAt` absent partout) |
+| validations du 06/11 | **7**, par **un seul grimpeur**, 20:13–20:18 locale, toutes dans `client_boulder_results` |
+
+**Donc :** le relevé est rétroactif **par nature** — il lit un historique et ne stocke rien de
+neuf, si bien qu'il montrera toujours tout ce qui existe. Mais **rien n'existe** : aucune séance
+n'a jamais été activée, et aucun résultat ne porte de `miniCompetitionId`. Ce qui s'est passé
+hier soir est passé par les **blocs du jour**, pas par une séance.
+
+Pour sa collègue précisément : elle **a** accès au relevé (elle a créé la mini-compétition, donc
+le sélecteur la propose ; elle est admin, donc elle lit toutes les séances) — il affichera un
+tableau de **1 ligne × 35 colonnes, entièrement vide**. Le jour où elle crée une séance,
+l'**active**, y rattache la mini-compétition et laisse ses élèves valider depuis l'écran de
+séance, le relevé se remplit — et restera consultable pour toujours.
+
+> 🟠 **ET UNE OBSERVATION À NE PAS SURINTERPRÉTER, mais à ne pas taire.** Le 06/11, **un seul
+> grimpeur** a laissé une trace, 7 saisies en cinq minutes. Si un groupe d'élèves validait ce
+> soir-là, on en attendrait plusieurs. Je **ne peux pas** distinguer « les validations ont été
+> perdues » de « les élèves n'ont pas utilisé l'application » — mais c'est cohérent avec le
+> rapport « les validations des jeunes sautaient », et ça renforce le besoin de l'e2e du §⑤.1.
+
+---
+
+# ⑧ LA SONDE SUR LE JOUR QUI MANQUAIT : le 6 novembre a coûté 44 219 lectures
+
+Mesuré ce jour sur une **journée close** (`SONDE_JOURS=6`, cf. la règle d'usage de la sonde).
+
+| jour (UTC) | lectures | écritures | suppressions |
+|---|---|---|---|
+| 01/11 | 3 587 | 4 | — |
+| 02/11 | 268 | 2 | — |
+| 03/11 | 1 501 | 88 | 1 |
+| 04/11 | 238 | — | — |
+| **05/11 — le contest** | **3 731** | 696 | — |
+| **06/11 — la bascule du barème** | **44 219** | 802 | 6 |
+| 07/11 (encore ouverte, non interprétable) | 350 | 18 | — |
+
+## L'attribution, parce qu'un nombre nu n'est pas interprétable
+
+La base **entière** compte **2 048 documents** (mesuré : `users` 82, `boulders` 230,
+`client_boulder_results` 1 052, `competition_results` 450, `classement_profiles` 82, le reste
+marginal).
+
+> 🔴 **Le contest du 5 novembre — l'usage réel le plus lourd jamais mesuré — a coûté 3 731
+> lectures. Les 44 219 du 6 ne peuvent donc PAS être des grimpeurs.** 44 219 ÷ 2 048 ≈ **20 à 30
+> balayages complets de la base**, ce qui correspond exactement à un après-midi de cycles
+> simulation / `--fix` / vérification / audit / mesure pour la bascule du barème. ⚠️ **Le poste
+> de coût de ce projet, ce sont les SCRIPTS, pas les grimpeurs.**
+
+Et le chiffre qui rend ça opérationnel : la franchise Firestore est de **50 000 lectures par
+jour**. Le 6 novembre en a consommé **88 %** — sans dépassement, mais c'est la marge réelle d'une
+journée de maintenance intensive. **Un cycle de plus et on payait.**
+
+## ⚠️ Ce que je ne sais PAS expliquer, et que je signale au lieu d'inventer
+
+**802 écritures** le 06/11, pour **7 validations** de blocs. Les écritures de scripts
+documentées sont **36** : 29 profils par la réconciliation (compté dans son propre journal,
+`cleanup-state/classement-profiles-reconcile-log.json`, tous horodatés 17:59) et 7 blocs par
+`retirer-blocs-competition-orphelins.js`. **Les ~766 restantes ne sont pas attribuées.** À
+titre de comparaison, la soirée du contest en a coûté 696 — donc l'ordre de grandeur du 6
+ressemble à une soirée d'usage, ce qui ne colle pas avec 7 validations. Je n'ai pas d'hypothèse
+que je puisse défendre, et conformément à la règle du dépôt (*une valeur surprenante doit être
+EXPLIQUÉE avant d'être publiée*), je la publie **comme non expliquée** plutôt que de l'habiller.
+L'instrument manquant : un balayage des horodatages `createdAt`/`updatedAt` par collection sur
+cette journée.
+
