@@ -359,3 +359,91 @@ describe('drawDeathProposal', () => {
     expect(result?.proposal.extreme).toBe(true);
   });
 });
+
+// ════════════════════════════════════════════════════════════════════════════════════════
+// LA SALLE QUI NE RÉPOND PAS À LA DEMANDE — la question restée ouverte depuis le 06/11/2026.
+//
+// ⚠️ DEUX QUESTIONS DIFFÉRENTES, qu'il ne faut pas confondre. ① « le grimpeur est à une BORNE
+// de niveau » (jaune : pas de max-1 ; rose : pas de max+1) — vérifié à la main par l'utilisateur
+// le 10/11, plus de cinquante tirages aux deux extrêmes, aucun écran blanc. ② « AUCUN BLOC
+// OUVERT ne correspond » — un état de la SALLE, pas un niveau. Une salle garnie de toutes les
+// couleurs est **physiquement incapable** d'exprimer ②, quel que soit le nombre de reclics :
+// la cascade d'élargissement trouve un candidat au premier palier et les trois autres ne sont
+// jamais atteints. C'est ② que ces tests ferment.
+// ════════════════════════════════════════════════════════════════════════════════════════
+describe('la salle ne propose rien qui corresponde', () => {
+  const entree = (boulders: DrawBoulder[], level = 'bleu') => ({
+    boulders,
+    userLevel: level as never,
+    validatedBoulderIds: new Set<string>(),
+    wallCounts: {},
+    recentProposalIds: [] as string[],
+    rng: constantRng(0.42),
+  });
+
+  it('ne lève pas quand la salle est entièrement vide, et ne désigne aucun bloc', () => {
+    // Le repli ultime de `drawProposal` ne peut plus élargir : il n'y a rien à élargir.
+    const r = drawProposal(entree([]));
+    expect(r.resolvedBoulder).toBeUndefined();
+    expect(r.widened).toBe(false);
+    expect(r.proposal).toBeDefined();
+  });
+
+  it('⚠️ laisse alors les placeholders VISIBLES dans le libellé — défaut connu, pas un plantage', () => {
+    // C'est la vraie conséquence de la salle vide, et elle est cosmétique : `resolveDrawLabel`
+    // ne substitue `{numéro}`/`{mur}` que s'il a un bloc. Le grimpeur lirait le gabarit.
+    // ⚠️ Ce test DÉCRIT le comportement actuel, il ne le bénit pas : si l'écran apprend un jour
+    // à dire « aucun bloc ouvert ne correspond », c'est ici qu'il faudra le changer.
+    const avecNumero = CATALOG.find((p) => p.label.includes('{numéro}'));
+    expect(avecNumero, 'le catalogue doit contenir au moins une proposition à numéro').toBeDefined();
+    const texte = resolveDrawLabel({
+      proposal: avecNumero as never,
+      resolvedColor: 'bleu' as never,
+      resolvedBoulder: undefined,
+      widened: false,
+      levelExcludedE: false,
+    } as DrawResult);
+    expect(texte).toContain('{numéro}');
+  });
+
+  it('rend TOUJOURS un bloc quand il en existe un seul, de n’importe quelle couleur', () => {
+    // ⚠️ Balayage des huit couleurs plutôt que deux cas choisis à la main : une première
+    // version de ce test prenait un bloc « vert » pour un grimpeur « bleu » en croyant forcer
+    // un élargissement — or vert EST la cible max-1 d'un bleu, donc il n'y avait rien à
+    // élargir et le test affirmait le contraire de ce qu'il observait. Un cas choisi à la
+    // main suppose connue la couleur visée ; un balayage n'a pas besoin de la connaître.
+    for (const couleur of levelOrder) {
+      const r = drawProposal(entree([{ id: 'seul', color: couleur, wall: walls[0], number: 1 }]));
+      expect(r.resolvedBoulder?.id, `couleur ${couleur}`).toBe('seul');
+    }
+  });
+
+  it('🔴 DIT qu’il a élargi dès que le bloc rendu n’est pas de la couleur visée', () => {
+    // La propriété qui compte, et la seule qui protège le grimpeur : `widened` est ce qui
+    // permet à l'écran de ne pas présenter un bloc de repli comme s'il avait été visé. Sans
+    // elle, une salle dégarnie proposerait du rose à un débutant sans rien en dire.
+    for (const couleur of levelOrder) {
+      const r = drawProposal(entree([{ id: 'seul', color: couleur, wall: walls[0], number: 1 }]));
+      if (r.resolvedBoulder!.color !== r.resolvedColor) {
+        expect(r.widened, `bloc ${couleur} rendu pour une cible ${r.resolvedColor}`).toBe(true);
+      }
+    }
+  });
+
+  it('🔴 le catalogue peuple les TROIS niveaux visés — sinon le tirage lèverait', () => {
+    // ⚠️ `pickUniform` sur un tableau vide rend `undefined`, et la ligne suivante de
+    // `drawProposal` lit `proposal.levelOffset` : un niveau visé sans aucune entrée ferait
+    // planter l'écran. Ce n'est garanti par rien d'autre que le contenu du catalogue, et
+    // c'est donc ici que ça se garde — la seule voie de plantage trouvée dans ce module.
+    for (const cible of ['max-1', 'max', 'max+1']) {
+      expect(CATALOG.filter((p) => p.levelTarget === cible).length,
+        `aucune entrée de catalogue pour « ${cible} »`).toBeGreaterThan(0);
+    }
+  });
+
+  it('la roulette de la mort rend null plutôt que de rabattre, salle vide comprise', () => {
+    expect(drawDeathProposal({ ...entree([]), userLevel: 'rose' as never })).toBeNull();
+    expect(drawDeathProposal({ ...entree([{ id: 'x', color: 'jaune', wall: walls[0], number: 1 }], 'rose') }))
+      .toBeNull();
+  });
+});
