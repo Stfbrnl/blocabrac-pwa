@@ -82,6 +82,14 @@ export const DOCUMENTS_SALLE: DocumentSalle[] = [
     variantHtml: 'affiche-bareme-competition.html',
   },
   {
+    fichier: 'diplome-vierge.pdf',
+    titre: 'Diplôme vierge',
+    aQuoiCaSert:
+      "Le diplôme de la salle sans aucun champ rempli, à imprimer pour une remise sans passer "
+      + "par l'application : titulaire, type, date et signataire restent à écrire à la main. "
+      + 'Fond sombre — prévoir un stylo clair.',
+  },
+  {
     fichier: 'aide-connexion-installation.pdf',
     titre: "Guide de connexion et d'installation",
     aQuoiCaSert:

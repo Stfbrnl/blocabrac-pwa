@@ -12,6 +12,21 @@ export interface ChangelogEntry {
 // à chaque nouvelle fonctionnalité visible côté client — l'historique complet vit dans
 // les commits git.
 export const changelog: ChangelogEntry[] = [
+  // ⚠️ Cette entrée décrit UNIQUEMENT la 2.83 (voir l'en-tête du fichier). Les trois points
+  // sont ce qu'un grimpeur CONSTATE : son âge affiché était faux une partie de l'année, son
+  // diplôme téléchargé sortait sans son fond, et son profil ne lui disait pas d'où venait sa
+  // catégorie. Le gabarit partagé et le diplôme vierge imprimable sont des moyens, pas des
+  // nouveautés visibles — ils ne sont donc pas annoncés ici.
+  {
+    version: '2.83',
+    date: '2026-11-10',
+    title: 'L’âge affiché, et le diplôme qui manquait son fond',
+    items: [
+      'L’application annonçait l’âge que vous atteignez dans l’année, pas celui que vous avez : né le 29 novembre, vous étiez vieilli d’un an dès le 1er janvier. L’âge affiché est désormais votre âge réel, et votre catégorie est indiquée à côté — c’est elle, et elle seule, qui se calcule sur l’année de naissance, comme le veut la règle FFME.',
+      'Sous votre date de naissance, dans « Mon profil », vous lisez maintenant l’âge et la catégorie que l’application en déduit. Si la date manque, elle vous invite à la renseigner : sans elle, vous n’apparaissez dans aucun classement par catégorie d’âge.',
+      'Le diplôme que vous téléchargiez sortait sans son fond : du doré pâle sur du blanc, presque illisible, alors que celui remis par le moniteur était complet. Les deux sont désormais le même document — retéléchargez-le, il sera correct.',
+    ],
+  },
   // ⚠️ Cette entrée décrit UNIQUEMENT la 2.82 (voir l'en-tête du fichier). Le chantier est côté
   // administration, mais son EFFET est celui que vivaient les grimpeurs : le 06/11, 92 des 230
   // blocs de la salle sont restés rattachés à une compétition terminée, et sur un bloc rattaché

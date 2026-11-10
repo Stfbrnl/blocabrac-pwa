@@ -52,6 +52,7 @@ Aucun de ces fichiers ne se modifie à la main : ils sont **générés**, et leu
 | `topo-blocabrac.pdf` | `npm run topo` |
 | `topo-roulettes-defis.pdf` | `npm run topo:roulettes` |
 | `affiche-bareme-competition.pdf` / `.html` | `npm run affiche:bareme` |
+| `diplome-vierge.pdf` | `npm run diplome:vierge` |
 | `aide-connexion-installation.pdf` / `.html` | **aucun générateur** — fabriqué à la main en septembre 2026, donc sans estampille dérivable |
 
 ⚠️ Les **sources** (`*-source.html`) restent à la racine du dépôt : ce sont des gabarits, pas

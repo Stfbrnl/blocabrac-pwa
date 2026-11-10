@@ -40,6 +40,11 @@ import {
 import { jsPDF } from 'jspdf';
 import * as html2canvas from 'html2canvas';
 import diplomaBackground from '../../../assets/diploma-background.png';
+import {
+  POLICE_CSS_URL,
+  composerContenuDiplome,
+  stylesFondDiplome,
+} from '../../../utils/diplomaTemplate';
 import { buildMiniCompetitionRanking, selectableMiniCompetitions } from '../../../utils/miniCompetitionRanking';
 import { buildMiniCompetitionReleve } from '../../../utils/miniCompetitionReleve';
 import { boulderColorChipSx } from '../../../utils/boulderColorDisplay';
@@ -594,108 +599,27 @@ const StatsList: React.FC = () => {
   // ✅ Générer un PDF pour un diplôme — texte recentré dans la zone bleutée du fond
   const generateDiplomaPDF = async (diploma: Diploma) => {
     // Charger la police EB Garamond (via Google Fonts)
-    const fontUrl = 'https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;700&display=swap';
+    // ⚠️ La police vient de Google Fonts, contrairement à Dosis qui est auto-hébergée : le
+    // diplôme n'est produit QUE sur demande explicite, jamais au premier rendu, donc cette
+    // requête ne retarde aucun affichage. L'attente de `document.fonts.check` plus bas est
+    // ce qui empêche la capture de partir avant que la police soit là.
     const link = document.createElement('link');
-    link.href = fontUrl;
+    link.href = POLICE_CSS_URL;
     link.rel = 'stylesheet';
     document.head.appendChild(link);
 
-    // Conteneur principal : taille fixe correspondant à l'image de fond
+    // ⚠️ Le gabarit vient de `utils/diplomaTemplate.ts` et n'est PAS recomposé ici : il a
+    // trois lecteurs (cet écran, l'autre écran de diplôme, et le générateur du diplôme
+    // vierge de `public/docs/`). Les trois doivent produire le même document — une copie
+    // locale cesserait de lui ressembler à la première retouche, en silence.
     const diplomaElement = document.createElement('div');
-    diplomaElement.style.width = '800px';
-    diplomaElement.style.height = '600px';
-    diplomaElement.style.backgroundImage = `url(${diplomaBackground})`;
-    diplomaElement.style.backgroundSize = 'cover';
-    diplomaElement.style.backgroundPosition = 'center';
-    diplomaElement.style.position = 'relative';
-    diplomaElement.style.fontFamily = "'EB Garamond', serif";
-    diplomaElement.style.boxSizing = 'border-box';
-
-    // ✅ Zone de texte contrainte à la partie bleutée du fond (sous le logo,
-    // à l'intérieur des diagonales dorées) : verticalement de 38% à 92%,
-    // largeur limitée à 68% centrée pour ne jamais toucher les diagonales latérales.
-    const textZone = document.createElement('div');
-    textZone.style.position = 'absolute';
-    textZone.style.top = '38%';
-    textZone.style.bottom = '8%';
-    textZone.style.left = '16%';
-    textZone.style.right = '16%';
-    textZone.style.display = 'flex';
-    textZone.style.flexDirection = 'column';
-    textZone.style.alignItems = 'center';
-    textZone.style.justifyContent = 'space-between';
-    textZone.style.textAlign = 'center';
-    textZone.style.color = '#D4AF37';
-    diplomaElement.appendChild(textZone);
-
-    // Titre principal
-    const title = document.createElement('h1');
-    title.textContent = 'DIPLÔME OFFICIEL';
-    title.style.fontSize = '34px';
-    title.style.fontWeight = '700';
-    title.style.margin = '0';
-    title.style.color = '#D4AF37';
-    title.style.textShadow = '2px 2px 4px rgba(0, 0, 0, 0.6)';
-    textZone.appendChild(title);
-
-    // Contenu principal (nom, diplôme, date, moniteur)
-    const content = document.createElement('div');
-    content.style.display = 'flex';
-    content.style.flexDirection = 'column';
-    content.style.alignItems = 'center';
-    content.style.gap = '12px';
-
-    // Nom du titulaire
-    const userName = document.createElement('p');
-    userName.textContent = `Ce diplôme est décerné à : ${diploma.userName}`;
-    userName.style.fontSize = '20px';
-    userName.style.fontWeight = '400';
-    userName.style.margin = '0';
-    userName.style.color = '#D4AF37';
-    userName.style.textShadow = '1px 1px 3px rgba(0, 0, 0, 0.6)';
-    content.appendChild(userName);
-
-    // Type de diplôme
-    const diplomaType = document.createElement('p');
-    diplomaType.textContent = `Type : ${diploma.type}`;
-    diplomaType.style.fontSize = '18px';
-    diplomaType.style.fontWeight = '400';
-    diplomaType.style.margin = '0';
-    diplomaType.style.color = '#D4AF37';
-    diplomaType.style.textShadow = '1px 1px 3px rgba(0, 0, 0, 0.6)';
-    content.appendChild(diplomaType);
-
-    // Date
-    const diplomaDate = document.createElement('p');
-    diplomaDate.textContent = `Le ${formatDate(diploma.awardedAt)}`;
-    diplomaDate.style.fontSize = '16px';
-    diplomaDate.style.fontWeight = '400';
-    diplomaDate.style.margin = '0';
-    diplomaDate.style.color = '#D4AF37';
-    diplomaDate.style.textShadow = '1px 1px 3px rgba(0, 0, 0, 0.6)';
-    content.appendChild(diplomaDate);
-
-    // Nom du moniteur
-    const moniteurName = document.createElement('p');
-    moniteurName.textContent = `Décerné par : ${diploma.awardedByName}`;
-    moniteurName.style.fontSize = '16px';
-    moniteurName.style.fontWeight = '400';
-    moniteurName.style.margin = '0';
-    moniteurName.style.color = '#D4AF37';
-    moniteurName.style.textShadow = '1px 1px 3px rgba(0, 0, 0, 0.6)';
-    content.appendChild(moniteurName);
-
-    textZone.appendChild(content);
-
-    // Pied de page
-    const footer = document.createElement('p');
-    footer.textContent = 'Félicitations pour votre progression !';
-    footer.style.fontSize = '15px';
-    footer.style.fontStyle = 'italic';
-    footer.style.margin = '0';
-    footer.style.color = '#D4AF37';
-    footer.style.textShadow = '1px 1px 3px rgba(0, 0, 0, 0.6)';
-    textZone.appendChild(footer);
+    Object.assign(diplomaElement.style, stylesFondDiplome(diplomaBackground));
+    diplomaElement.innerHTML = composerContenuDiplome({
+      titulaire: diploma.userName,
+      type: diploma.type,
+      date: formatDate(diploma.awardedAt),
+      decernePar: diploma.awardedByName,
+    });
 
     // Ajouter temporairement au DOM
     document.body.appendChild(diplomaElement);

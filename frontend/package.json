@@ -1,7 +1,7 @@
 {
   "name": "frontend",
   "private": true,
-  "version": "2.82",
+  "version": "2.83",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -14,6 +14,7 @@
     "topo": "node scripts/regen-topo.cjs",
     "topo:roulettes": "node scripts/regen-topo-roulettes.cjs",
     "affiche:bareme": "node scripts/regen-affiche-bareme.cjs",
+    "diplome:vierge": "node scripts/regen-diplome-vierge.cjs",
     "prepare": "git config core.hooksPath .githooks"
   },
   "dependencies": {
