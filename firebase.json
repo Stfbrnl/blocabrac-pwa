@@ -13,6 +13,7 @@
   "hosting": {
     "predeploy": [
       "node scripts/assert-deploy-published.cjs",
+      "node scripts/assert-docs-a-jour.cjs",
       "node scripts/list-commits-since-last-deploy.cjs"
     ],
     "postdeploy": ["node scripts/tag-deploy.cjs"],

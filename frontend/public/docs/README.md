@@ -53,7 +53,16 @@ Aucun de ces fichiers ne se modifie à la main : ils sont **générés**, et leu
 | `topo-roulettes-defis.pdf` | `npm run topo:roulettes` |
 | `affiche-bareme-competition.pdf` / `.html` | `npm run affiche:bareme` |
 | `diplome-vierge.pdf` | `npm run diplome:vierge` |
+| `diplome-vierge.pdf` | `npm run diplome:vierge` |
 | `aide-connexion-installation.pdf` / `.html` | **aucun générateur** — fabriqué à la main en septembre 2026, donc sans estampille dérivable |
+
+⚠️ **`npm run docs` les régénère TOUS en une commande**, et c'est la marche n° 4 de la procédure
+de bump : depuis le 10/11/2026, **tout document généré porte la version courante,
+systématiquement**. Sans cela, un document non régénéré annonce honnêtement la version qui l'a
+produit — et le lecteur ne peut pas distinguer « encore juste, pas besoin d'être refait » de
+« décrit une application qui a changé depuis ». Les deux se présentent pareil : un numéro en
+retard. `scripts/assert-docs-a-jour.cjs` (predeploy hosting) **refuse le déploiement** si l'un
+d'eux est en retard, ou si un fichier du registre a disparu du dossier.
 
 ⚠️ Les **sources** (`*-source.html`) restent à la racine du dépôt : ce sont des gabarits, pas
 des documents. Seules les **sorties** entrent ici. Déplacer une sortie hors de ce dossier la
