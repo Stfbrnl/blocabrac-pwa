@@ -20,7 +20,7 @@ import {
 } from '@mui/material';
 import { doc, getDoc, writeBatch } from 'firebase/firestore';
 import { colorGrades } from '../../../config/gymConfig';
-import { getSeasonAge, getFfmeCategory } from '../../../utils/ageCategory';
+import { getSeasonAge, getFfmeCategory, formatAgeHelper } from '../../../utils/ageCategory';
 import { getLudicState, updateLudicState } from '../../../services/ludicState';
 
 // Tableau de correspondance code-couleur/cotations internationales
@@ -212,6 +212,11 @@ const ClientProfile: React.FC = () => {
               dateOfBirth: e.target.value || undefined
             })}
             slotProps={{ inputLabel: { shrink: true } }}
+            // ⚠️ Âge CIVIL + catégorie, et la règle qui produit la catégorie. C'est le seul
+            // endroit de l'application où cette règle peut être expliquée au grimpeur plutôt
+            // que subie par lui. Texte composé dans une fonction pure (formatAgeHelper), pas
+            // en ligne : la couverture de tests s'arrête au bord des .tsx.
+            helperText={formatAgeHelper(userData.dateOfBirth)}
           />
 
           <FormControl fullWidth margin="normal">

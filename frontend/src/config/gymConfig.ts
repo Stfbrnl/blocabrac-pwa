@@ -141,6 +141,13 @@ export const storageKeyPrefix = 'blocabrac';
 export interface AgeBand {
   key: string;
   label: string;
+  // Libellé court, pour un affichage où le libellé complet ferait doublon : « 50 ans ·
+  // Vétérans 2 (50 ans et +) » répète le nombre qui vient d'être écrit.
+  // ⚠️ "label" ne doit JAMAIS changer : il est STOCKÉ tel quel dans
+  // classement_profiles.ffmeCategory et dans les palmarès gelés (immuables par les règles),
+  // et ClientClassement.tsx recompare la chaîne stockée à band.label pour retrouver le rang
+  // de la bande. "shortLabel" est purement un libellé d'affichage, jamais écrit nulle part.
+  shortLabel: string;
   minAge: number;
   maxAge?: number; // undefined = pas de borne supérieure
 }
@@ -153,14 +160,14 @@ export const unknownCategoryLabel = 'Inconnu';
 // (peu importe le mois de naissance dans l'année). Système fédéral français —
 // une salle d'un autre pays/fédération devra remplacer ce tableau.
 export const ageBands: AgeBand[] = [
-  { key: 'U8', label: 'U8 (6-7 ans)', minAge: 6, maxAge: 7 },
-  { key: 'U10', label: 'U10 (8-9 ans)', minAge: 8, maxAge: 9 },
-  { key: 'U12', label: 'U12 (10-11 ans)', minAge: 10, maxAge: 11 },
-  { key: 'U14', label: 'U14 (12-13 ans)', minAge: 12, maxAge: 13 },
-  { key: 'U16', label: 'U16 (14-15 ans)', minAge: 14, maxAge: 15 },
-  { key: 'U18', label: 'U18 (16-17 ans)', minAge: 16, maxAge: 17 },
-  { key: 'U20', label: 'U20 (18-19 ans)', minAge: 18, maxAge: 19 },
-  { key: 'seniors', label: 'Séniors (20-39 ans)', minAge: 20, maxAge: 39 },
-  { key: 'veterans1', label: 'Vétérans 1 (40-49 ans)', minAge: 40, maxAge: 49 },
-  { key: 'veterans2', label: 'Vétérans 2 (50 ans et +)', minAge: 50 },
+  { key: 'U8', label: 'U8 (6-7 ans)', shortLabel: 'U8', minAge: 6, maxAge: 7 },
+  { key: 'U10', label: 'U10 (8-9 ans)', shortLabel: 'U10', minAge: 8, maxAge: 9 },
+  { key: 'U12', label: 'U12 (10-11 ans)', shortLabel: 'U12', minAge: 10, maxAge: 11 },
+  { key: 'U14', label: 'U14 (12-13 ans)', shortLabel: 'U14', minAge: 12, maxAge: 13 },
+  { key: 'U16', label: 'U16 (14-15 ans)', shortLabel: 'U16', minAge: 14, maxAge: 15 },
+  { key: 'U18', label: 'U18 (16-17 ans)', shortLabel: 'U18', minAge: 16, maxAge: 17 },
+  { key: 'U20', label: 'U20 (18-19 ans)', shortLabel: 'U20', minAge: 18, maxAge: 19 },
+  { key: 'seniors', label: 'Séniors (20-39 ans)', shortLabel: 'Séniors', minAge: 20, maxAge: 39 },
+  { key: 'veterans1', label: 'Vétérans 1 (40-49 ans)', shortLabel: 'Vétérans 1', minAge: 40, maxAge: 49 },
+  { key: 'veterans2', label: 'Vétérans 2 (50 ans et +)', shortLabel: 'Vétérans 2', minAge: 50 },
 ];

@@ -10,7 +10,7 @@ import { collection, getDocs, doc, setDoc, deleteDoc, query, where, updateDoc, i
 import { useLocation, useNavigate } from 'react-router-dom';
 import { buildCompetitionParticipant, competitionParticipantId } from '../utils/competitionParticipant';
 import { type Level, canUserRegister } from '../utils/competitionEligibility';
-import { getSeasonAge } from '../utils/ageCategory';
+import { formatAgeDisplay } from '../utils/ageCategory';
 
 type UserRole = 'admin' | 'ouvreur' | 'moniteur' | 'client';
 type CompetitionStatus = 'à venir' | 'en cours' | 'terminée' | 'annulée';
@@ -403,7 +403,7 @@ const AdminCompetitionRegistration: React.FC = () => {
                         )}
 
                         <Typography variant="body2" sx={{ mb: 1 }}>
-                          Âge : {getSeasonAge(participant.dateOfBirth, participant.legacyAge) ?? 'N/A'} · Genre : {participant.gender || 'N/A'}
+                          Âge : {formatAgeDisplay(participant.dateOfBirth, participant.legacyAge)} · Genre : {participant.gender || 'N/A'}
                         </Typography>
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                           Inscrit le {new Date(participant.registered_at).toLocaleString()}
@@ -467,7 +467,10 @@ const AdminCompetitionRegistration: React.FC = () => {
                               />
                             ) : 'N/A'}
                           </TableCell>
-                          <TableCell>{getSeasonAge(participant.dateOfBirth, participant.legacyAge) ?? 'N/A'}</TableCell>
+                          {/* ⚠️ Âge CIVIL + catégorie (formatAgeDisplay) : sur cet écran
+                              c'est la CATÉGORIE qui décide, et un nombre d'âge de saison nu
+                              y était à la fois inutile et faux comme âge. */}
+                          <TableCell>{formatAgeDisplay(participant.dateOfBirth, participant.legacyAge)}</TableCell>
                           <TableCell>{participant.gender || 'N/A'}</TableCell>
                           <TableCell>
                             <Switch

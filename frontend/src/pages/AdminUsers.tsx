@@ -14,7 +14,7 @@ import {
 } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, sendPasswordResetEmail, getAuth, signOut, connectAuthEmulator } from 'firebase/auth';
 import { initializeApp, deleteApp, FirebaseError } from 'firebase/app';
-import { getSeasonAge, getFfmeCategory } from '../utils/ageCategory';
+import { getSeasonAge, getCivilAge, getFfmeCategory, formatAgeDisplay } from '../utils/ageCategory';
 import { colorGrades } from '../config/gymConfig';
 
 // ✅ Rôles "staff" mirorés dans "staff_directory" (annuaire public lu par
@@ -168,8 +168,12 @@ const AdminUsers: React.FC = () => {
       // le seul champ hérité "legacyAge" — souvent absent pour un compte récent, ce qui
       // faussait l'ordre alors que l'affichage lui-même était correct.
       if (sortConfig.key === 'age') {
-        const aAge = getSeasonAge(a.dateOfBirth, a.legacyAge) ?? -1;
-        const bAge = getSeasonAge(b.dateOfBirth, b.legacyAge) ?? -1;
+        // ⚠️ La clé de tri doit rester celle du nombre AFFICHÉ, qui est désormais l'âge
+        // civil (formatAgeDisplay) et non l'âge de saison : sinon deux grimpeurs nés la même
+        // année mais affichant des âges différents se rangeraient dans un ordre arbitraire.
+        // Repli sur le champ hérité, seul âge connu des comptes sans date de naissance.
+        const aAge = getCivilAge(a.dateOfBirth) ?? a.legacyAge ?? -1;
+        const bAge = getCivilAge(b.dateOfBirth) ?? b.legacyAge ?? -1;
         return sortConfig.direction === 'asc' ? aAge - bAge : bAge - aAge;
       }
 
@@ -753,7 +757,7 @@ const AdminUsers: React.FC = () => {
                     )}
 
                     <Typography variant="body2" sx={{ mb: 1 }}>
-                      Âge : {getSeasonAge(user.dateOfBirth, user.legacyAge) ?? 'N/A'} · Genre : {user.gender || 'N/A'}
+                      Âge : {formatAgeDisplay(user.dateOfBirth, user.legacyAge)} · Genre : {user.gender || 'N/A'}
                     </Typography>
 
                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
@@ -899,7 +903,10 @@ const AdminUsers: React.FC = () => {
                       </Box>
                     ) : 'N/A'}
                   </TableCell>
-                  <TableCell>{getSeasonAge(user.dateOfBirth, user.legacyAge) ?? 'N/A'}</TableCell>
+                  {/* ⚠️ Âge CIVIL + catégorie, jamais l'âge de saison : cette colonne
+                      affichait « 51 » à quelqu'un qui n'a 51 ans qu'au 29 novembre. Le
+                      format et sa raison vivent dans formatAgeDisplay. */}
+                  <TableCell>{formatAgeDisplay(user.dateOfBirth, user.legacyAge)}</TableCell>
                   <TableCell>{user.gender || 'N/A'}</TableCell>
                   <TableCell>
                     {user.inscritAuxCours ? <Chip label="Oui" color="success" /> : <Chip label="Non" color="error" />}
@@ -972,7 +979,7 @@ const AdminUsers: React.FC = () => {
                 }
                 label="Verrouiller ce niveau (empêche la mise à jour automatique par les badges du client)"
               />
-              <TextField label="Date de naissance" type="date" value={editForm.dateOfBirth || ''} onChange={(e) => setEditForm({...editForm, dateOfBirth: e.target.value || undefined})} fullWidth slotProps={{ inputLabel: { shrink: true } }} helperText={getSeasonAge(editForm.dateOfBirth, editForm.legacyAge) === undefined ? AVERTISSEMENT_SANS_AGE : undefined} />
+              <TextField label="Date de naissance" type="date" value={editForm.dateOfBirth || ''} onChange={(e) => setEditForm({...editForm, dateOfBirth: e.target.value || undefined})} fullWidth slotProps={{ inputLabel: { shrink: true } }} helperText={getSeasonAge(editForm.dateOfBirth, editForm.legacyAge) === undefined ? AVERTISSEMENT_SANS_AGE : formatAgeDisplay(editForm.dateOfBirth, editForm.legacyAge)} />
               <FormControl fullWidth>
                 <InputLabel id="genre-select-label">Genre</InputLabel>
                 <Select
@@ -1057,7 +1064,7 @@ const AdminUsers: React.FC = () => {
                 }
                 label="Verrouiller ce niveau (empêche la mise à jour automatique par les badges du client)"
               />
-              <TextField label="Date de naissance" type="date" value={createForm.dateOfBirth || ''} onChange={(e) => setCreateForm({...createForm, dateOfBirth: e.target.value || undefined})} fullWidth slotProps={{ inputLabel: { shrink: true } }} helperText={getSeasonAge(createForm.dateOfBirth, createForm.legacyAge) === undefined ? AVERTISSEMENT_SANS_AGE : undefined} />
+              <TextField label="Date de naissance" type="date" value={createForm.dateOfBirth || ''} onChange={(e) => setCreateForm({...createForm, dateOfBirth: e.target.value || undefined})} fullWidth slotProps={{ inputLabel: { shrink: true } }} helperText={getSeasonAge(createForm.dateOfBirth, createForm.legacyAge) === undefined ? AVERTISSEMENT_SANS_AGE : formatAgeDisplay(createForm.dateOfBirth, createForm.legacyAge)} />
               <FormControl fullWidth>
                 <InputLabel id="genre-select-label-2">Genre</InputLabel>
                 <Select
